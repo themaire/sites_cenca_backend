@@ -4,7 +4,6 @@ var express = require('express');
 var app     = express();
 var cors = require('cors');
 app.listen(8889);
-
 app.use(cors()); // Pour permettre le cross origin
 
 // Create a new Postgresql client
@@ -37,13 +36,13 @@ async function siteResearch(pool, param, callback){
     } else callback(param["message"], []);
 };
 
-function queryMaker(params){
+function selectSiteQuery(params){
   // Prends en paramètre les parametres de l'url recue
   // Retourne un query objet que la biliotheque pg acceptera 
 
   let query = {
     // text: 'SELECT uuid_site, code, prem_ctr, typ_site, typ_site_txt, milieux_naturels, communes, insee, bassin_agence, responsable, nom, espace, statut, fin, alerte_fin, validite
-    text: 'SELECT uuid_site, code, nom, statut, communes, milieux_naturels, bassin_agence, prem_ctr, fin, responsable, validite, typ_site, typ_site_txt FROM sitcenca.listesitescenca ',
+    text: 'SELECT uuid_site, code, nom, statut, communes, milieux_naturels, bassin_agence, prem_ctr, fin, responsable, validite, typ_site, typ_site_txt FROM sitcenca.listesitescenca',
     // values: ['Brian', 'Carlson'],
     values: [],
     rowMode: 'array',
@@ -51,8 +50,7 @@ function queryMaker(params){
 
   // Temp init.
   let whereFilters = new Array();
-  let reqKeycptField = 1;
-  let where = 'where ';
+  let where = ' where ';
   let andOrEnd = " and ";
 
   if(params.type != "*") whereFilters.push({"typ_site": params.type});
@@ -61,17 +59,22 @@ function queryMaker(params){
   if(params.commune != "*") whereFilters.push({"communes": params.commune});
   if(params.resp != "*") whereFilters.push({"responsable": params.resp});
 
-  // Remplit le query object en fonction des valeurs données en parametre
-  // Si on est au dernier element de la liste, on ne rajoutera pas le "and " dans le for pour le where
-  for (const [key, value] of Object.entries(whereFilters)) {
-    let reqKey = parseInt(key) + 1;
-    if(reqKey == Object.keys(whereFilters).length) andOrEnd = ";";
-    where += Object.keys(value)[0] + " = $" + reqKey + andOrEnd;
-    query.values.push(Object.values(value)[0]);
+  if(Object.keys(whereFilters).length == 0){
+    query.text += ";";
+    return query;
+  }else{
+    // Remplit le query object en fonction des valeurs données en parametre
+    // Si on est au dernier element de la liste, on ne rajoutera pas le "and " dans le for pour le where
+    for (const [key, value] of Object.entries(whereFilters)) {
+      let reqKey = parseInt(key) + 1;
+      if(reqKey == Object.keys(whereFilters).length) andOrEnd = ";";
+      where += Object.keys(value)[0] + " = $" + reqKey + andOrEnd;
+      query.values.push(Object.values(value)[0]);
+    }
+    query.text += where;
+    console.log(query);
+    return query;
   }
-  query.text += where;
-  // console.log(query);
-  return query;
 };
 
 async function run() {
@@ -83,21 +86,20 @@ async function run() {
     //   console.log(res);
     // });
 
-    app.get("/sites/criteria/:type/:code/:nom/:commune/:resp", (req, res) => {
-        const queryObject = queryMaker(req.params);
+    app.get("/sites/criteria/:type/:code/:nom*/:commune/:resp", (req, res) => {
+        const queryObject = selectSiteQuery(req.params);
   
         siteResearch(pool, {message: "/sites/criteria/type/code...", query: queryObject}, 
         (message, resultats) => {
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.setHeader('Content-Type', 'application.json; charset=utf-8');
           if (resultats.length > 0) {
-            var json = JSON.stringify(resultats);
+            const json = JSON.stringify(resultats);
             // console.log(json);
             res.end(json);
           }else{
-            let message = "erreur, la requête s'est mal exécutée. ";
-            res.end(message);
-            console.log(message);
+            const json = JSON.stringify([]);
+            res.end(json);
           }
         });
       });
