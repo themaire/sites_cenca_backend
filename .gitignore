@@ -132,8 +132,7 @@ dist
 
 
 .DS_Store
-._.DS_Store
-._package.json
+._*
 HelloWorld.js
 
 node_pgsql.code-workspace

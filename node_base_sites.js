@@ -26,13 +26,13 @@ pool.connect().then(() => {
 
 // Functions
 async function siteResearch(pool, param, callback){
-    const results = await pool.query(param['query']);
-    if (results.rows.length === 0){
+    const RESULTS = await pool.query(param['query']);
+    if (RESULTS.rows.length === 0){
         callback("Pas de documents trouvés.", [])
-    } else if (results.rows.length > 0 ){
+    } else if (RESULTS.rows.length > 0 ){
         console.log("On a des résultats.");
         console.log("Params : ", param);
-        callback(param["message"], results.rows);
+        callback(param["message"], RESULTS.rows);
     } else callback(param["message"], []);
 };
 
@@ -55,8 +55,9 @@ function selectSiteQuery(params){
 
   if(params.type != "*") whereFilters.push({"typ_site": params.type});
   if(params.code != "*") whereFilters.push({"code": params.code});
-  if(params.nom != "*") whereFilters.push({"nom": params.nom});
+  if(params.nom != "*") whereFilters.push({"nom": decodeURIComponent( params.nom )});
   if(params.commune != "*") whereFilters.push({"communes": params.commune});
+  if(params.milnat != "*") whereFilters.push({"milieux_naturels": decodeURIComponent( params.milnat )});
   if(params.resp != "*") whereFilters.push({"responsable": params.resp});
 
   if(Object.keys(whereFilters).length == 0){
@@ -77,6 +78,32 @@ function selectSiteQuery(params){
   }
 };
 
+async function distinctSiteResearch (pool, selectors, property, callback) {
+
+  const QUERY = {
+    text: 'SELECT DISTINCT ' + property + ' FROM sitcenca.listesitescenca;',
+    values: [],
+    // rowMode: 'array',
+  };
+
+  const ResultValues = await pool.query(QUERY);
+
+  if (ResultValues.length === 0) selectors.push( {"name": property, "values": []} );
+  else{
+    if (ResultValues !== undefined){
+      let values = [];
+      for (let value of ResultValues.rows){
+        if(value[property] !== null) values.push(value[property]);
+      }
+      selectors.push ({ "name" :  property,
+                        // "values": ResultValues.sort()});
+                        "values": values.sort()});
+      callback(selectors);
+
+    }
+  }
+};
+
 async function run() {
   try {
 
@@ -86,23 +113,72 @@ async function run() {
     //   console.log(res);
     // });
 
-    app.get("/sites/criteria/:type/:code/:nom*/:commune/:resp", (req, res) => {
-        const queryObject = selectSiteQuery(req.params);
-  
-        siteResearch(pool, {message: "/sites/criteria/type/code...", query: queryObject}, 
-        (message, resultats) => {
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.setHeader('Content-Type', 'application.json; charset=utf-8');
-          if (resultats.length > 0) {
-            const json = JSON.stringify(resultats);
-            // console.log(json);
-            res.end(json);
-          }else{
-            const json = JSON.stringify([]);
-            res.end(json);
-          }
-        });
+    app.get("/sites/criteria/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
+      const queryObject = selectSiteQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
+
+      siteResearch(pool, {message: "/sites/criteria/type/code...", query: queryObject}, 
+      (message, resultats) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', 'application.json; charset=utf-8');
+        if (resultats.length > 0) {
+          const json = JSON.stringify(resultats);
+          // console.log(json);
+          res.end(json);
+        }else{
+          const json = JSON.stringify([]);
+          res.end(json);
+        }
       });
+    });
+    
+    app.get('/sites/uuid=:uuid', (req, res) => {
+      const ID = req.params.uuid;
+      let json = JSON.stringify({});
+
+      const queryObject = {
+        // text: 'SELECT uuid_site, code, prem_ctr, typ_site, typ_site_txt, milieux_naturels, communes, insee, bassin_agence, responsable, nom, espace, statut, fin, alerte_fin, validite
+        text: 'SELECT uuid_site, code, nom, statut, communes, milieux_naturels, bassin_agence, prem_ctr, fin, responsable, validite, typ_site, typ_site_txt FROM sitcenca.listesitescenca where uuid_site = $1;',
+        values: [ID],
+        rowMode: 'array',
+      };
+
+      siteResearch(pool, {query: queryObject, "message": "sites/uuid"}, 
+      (message, resultats) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', 'application.json; charset=utf-8');
+        if (resultats !== undefined && resultats[0] !== undefined) {
+          var json = JSON.stringify(resultats[0]);
+          res.end(json);
+          console.log("message : " + message);
+        }else{
+          let message = "erreur, la requête s'est mal exécutée. ";
+          res.end(message);
+          console.log(message);
+        }
+      });
+    });
+    
+    app.get('/sites/selectors', (req, res) => {
+      distinctSiteResearch(pool, [], "milieux_naturels",
+        (selectors) => {
+          distinctSiteResearch(pool, selectors, "responsable",
+            (selectors) => {
+              distinctSiteResearch(pool, selectors, "bassin_agence",
+                (selectors) => {
+                  distinctSiteResearch(pool, selectors, "prem_ctr",
+                    (selectors) => {
+                      distinctSiteResearch(pool, selectors, "fin",
+                        (selectors) => {
+                          let json=JSON. stringify (selectors) ;
+                          res.setHeader('Access-Control-Allow-Origin', '*');
+                          res.setHeader("Content-type", "application/json; charset=UTF-8");
+                          res.end(json);
+                      });
+                  });
+              });
+          });
+      });
+    });
 
   } catch (error) {
     console.error("Error try :" + error);
