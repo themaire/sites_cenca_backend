@@ -25,6 +25,14 @@ pool.connect().then(() => {
 // The Pool is ready to serve various query depending
 
 // Functions
+function joinQuery(select, from, where){
+  const query = select + from + where;
+
+  // console.log(query);
+
+  return query;
+}
+
 async function siteResearch(pool, param, callback){
     const RESULTS = await pool.query(param['query']);
     if (RESULTS.rows.length === 0){
@@ -43,11 +51,12 @@ function selectSiteQuery(params){
   let query = {
     // text: 'SELECT uuid_site, code, prem_ctr, typ_site, typ_site_txt, milieux_naturels, communes, insee, bassin_agence, responsable, nom, espace, statut, fin, alerte_fin, validite
     text: 'SELECT uuid_site, code, nom, statut, communes, milieux_naturels, bassin_agence, prem_ctr, fin, responsable, validite, typ_site, typ_site_txt FROM sitcenca.listesitescenca',
-    // values: ['Brian', 'Carlson'],
     values: [],
-    rowMode: 'array',
+    // rowMode: 'array',
   };
 
+
+  
   // Temp init.
   let whereFilters = new Array();
   let where = ' where ';
@@ -59,6 +68,8 @@ function selectSiteQuery(params){
   if(params.commune != "*") whereFilters.push({"communes": params.commune});
   if(params.milnat != "*") whereFilters.push({"milieux_naturels": decodeURIComponent( params.milnat )});
   if(params.resp != "*") whereFilters.push({"responsable": params.resp});
+
+  // if(params.uuid_site != undefined) whereFilters.push({"uuid_site": params.uuid_site});
 
   if(Object.keys(whereFilters).length == 0){
     query.text += ";";
@@ -118,34 +129,51 @@ async function run() {
 
       siteResearch(pool, {message: "/sites/criteria/type/code...", query: queryObject}, 
       (message, resultats) => {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', 'application.json; charset=utf-8');
         if (resultats.length > 0) {
           const json = JSON.stringify(resultats);
           // console.log(json);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
           res.end(json);
         }else{
           const json = JSON.stringify([]);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
           res.end(json);
         }
       });
     });
     
     app.get('/sites/uuid=:uuid', (req, res) => {
-      const ID = req.params.uuid;
-      let json = JSON.stringify({});
+      const UUID = req.params.uuid;
+      // let json = JSON.stringify({});
+
+      let SelectFields = 'SELECT '
+      SelectFields += 'site.uuid_site, site.code, site.prem_ctr, site.ref_fcen, site.pourc_gere, site.surf_actes, site.url_cen, site.validite, site.espace, site.typ_site, '
+      SelectFields += 'site.responsable, site.date_crea as date_crea_site, site.id_mnhn, site.modif_admin, site.actuel, site.url_mnhn, site.parties_gerees, site.typ_ouverture, site.description_site, '
+      SelectFields += 'site.sensibilite, site.remq_sensibilite, site.ref_public,'
+      SelectFields += 'espa.uuid_espace, espa.date_crea as date_crea_espace, espa.id_espace, espa.nom, espa.surface, espa.carto_hab, espa.zh, espa.typ_espace, espa.bassin_agence, espa.rgpt, espa.typ_geologie, '
+      SelectFields += 'espa.id_source, espa.id_crea, espa.url, espa.maj_admin ';
+
+      let FromTable = 'FROM esp.geometries as geo ';
+      FromTable += 'LEFT JOIN esp.typ_geomnatures geona ON geo.typ_nature = geona.cd_type ';
+      FromTable += 'LEFT JOIN esp.espaces as espa ON geo.espace = espa.uuid_espace ';
+      FromTable += 'LEFT JOIN sitcenca.sites as site ON espa.uuid_espace = site.espace ';
+      FromTable += 'LEFT JOIN sitcenca.typ_sites as tsite ON site.typ_site = tsite.cd_type ';
+      FromTable += 'LEFT JOIN esp.typ_espaces as typesp ON espa.typ_espace = typesp.cd_type ';
+      const where = 'where uuid_site = $1';
 
       const queryObject = {
-        // text: 'SELECT uuid_site, code, prem_ctr, typ_site, typ_site_txt, milieux_naturels, communes, insee, bassin_agence, responsable, nom, espace, statut, fin, alerte_fin, validite
-        text: 'SELECT uuid_site, code, nom, statut, communes, milieux_naturels, bassin_agence, prem_ctr, fin, responsable, validite, typ_site, typ_site_txt FROM sitcenca.listesitescenca where uuid_site = $1;',
-        values: [ID],
-        rowMode: 'array',
+        // text: 'SELECT uuid_site, code, nom, statut, communes, milieux_naturels, bassin_agence, prem_ctr, fin, responsable, validite, typ_site, typ_site_txt FROM sitcenca.listesitescenca where uuid_site = $1;',
+        text: joinQuery(SelectFields, FromTable, where),
+        values: [UUID],
+        // rowMode: 'array',
       };
 
       siteResearch(pool, {query: queryObject, "message": "sites/uuid"}, 
       (message, resultats) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', 'application.json; charset=utf-8');
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
         if (resultats !== undefined && resultats[0] !== undefined) {
           var json = JSON.stringify(resultats[0]);
           res.end(json);
