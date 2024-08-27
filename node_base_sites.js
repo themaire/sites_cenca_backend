@@ -293,6 +293,36 @@ async function run() {
       });
     });
 
+
+    // Operations
+    app.get('/sites/operations/uuid=:uuid', (req, res) => {
+      const SelectFields = 'SELECT uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut '
+      const FromTable = 'FROM ope.synthesesites ';
+      const where = 'where ope.cd_localisation = $1 order by pourcentage desc';
+
+      const UUID = req.params.uuid;
+      const queryObject = {
+        text: joinQuery(SelectFields, FromTable, where),
+        values: [UUID]
+      };
+
+      siteResearch(pool, {query: queryObject, "message": "sites/operations/uuid"}, 
+      (message, resultats) => {
+        if (resultats.length > 0) {
+          const json = JSON.stringify(resultats);
+          // console.log(json);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(json);
+        }else{
+          const json = JSON.stringify([]);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(json);
+        }
+      });
+    });
+
     // Selectors de la barre de recherche de sites par critères
     app.get('/sites/selectors', (req, res) => {
       distinctSiteResearch(pool, [], "milieux_naturels",
