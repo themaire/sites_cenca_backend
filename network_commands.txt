@@ -1,0 +1,6 @@
+
+tcpdump -i ens18 port 80
+docker network  ls
+
+sudo docker exec -it my-apache /usr/bin/bash
+
