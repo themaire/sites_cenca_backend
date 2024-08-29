@@ -214,7 +214,7 @@ async function run() {
         values: [UUID]
       };
 
-      siteResearch(pool, {query: queryObject, "message": "sites/pgestion/uuid"}, 
+      siteResearch(pool, {query: queryObject, "message": "sites/commune/uuid"}, 
       (message, resultats) => {
         if (resultats.length > 0) {
           const json = JSON.stringify(resultats);
@@ -293,12 +293,40 @@ async function run() {
       });
     });
 
+    // MFU
+    app.get('/sites/mfu/uuid=:uuid', (req, res) => {
+      const SelectFields = 'SELECT site, uuid_acte, debut, fin, tacit_rec, typ_mfu, actuel, url, types_prop, surface '
+      const FromTable = 'FROM sitcenca.listeactes ';
+      const where = 'where site = $1 order by debut';
+
+      const UUID = req.params.uuid;
+      const queryObject = {
+        text: joinQuery(SelectFields, FromTable, where),
+        values: [UUID]
+      };
+
+      siteResearch(pool, {query: queryObject, "message": "sites/mfu/uuid"}, 
+      (message, resultats) => {
+        if (resultats.length > 0) {
+          const json = JSON.stringify(resultats);
+          // console.log(json);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(json);
+        }else{
+          const json = JSON.stringify([]);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(json);
+        }
+      });
+    });
 
     // Operations
     app.get('/sites/operations/uuid=:uuid', (req, res) => {
       const SelectFields = 'SELECT uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut '
       const FromTable = 'FROM ope.synthesesites ';
-      const where = 'where ope.cd_localisation = $1 order by pourcentage desc';
+      const where = 'where cd_localisation = $1';
 
       const UUID = req.params.uuid;
       const queryObject = {
