@@ -351,6 +351,48 @@ async function run() {
       });
     });
 
+    // Menu
+    app.get('/menu/parent=:parent', (req, res) => {
+      const SelectFields = 'SELECT men_id as id, men_name as name, men_class_color as class_color, men_parent as parent, men_route as route '
+      const FromTable = 'FROM gestint.menu_header ';
+      let where;
+      let queryObject;
+
+      const parent = req.params.parent;
+
+      if (req.params.parent == 'null'){
+        where = 'where men_parent is null';
+        queryObject = {
+          text: joinQuery(SelectFields, FromTable, where),
+          values: [] // Pas de valeurs à passer pour une condition "is null"
+        };
+      }else{
+        where = 'where men_parent = $1';
+        queryObject = {
+          text: joinQuery(SelectFields, FromTable, where),
+          values: [parent]
+        };
+      }
+
+      // console.log("queryObject : ", queryObject);
+
+      siteResearch(pool, {query: queryObject, "message": "menu/parent"}, 
+      (message, resultats) => {
+        if (resultats.length > 0) {
+          const json = JSON.stringify(resultats);
+          // console.log(json);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(json);
+        }else{
+          const json = JSON.stringify([]);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(json);
+        }
+      });
+    });
+
     // Selectors de la barre de recherche de sites par critères
     app.get('/sites/selectors', (req, res) => {
       distinctSiteResearch(pool, [], "milieux_naturels",
