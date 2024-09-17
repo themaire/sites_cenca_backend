@@ -1,0 +1,16 @@
+[Unit]
+Description=Backend service Angular
+After=network-online.target
+ 
+[Service]
+Type=simple
+ 
+User=nico
+Group=nico
+ 
+ExecStart=node /home/nico/Documents/sites_cenca/node_pgsql/node_base_sites.js
+ 
+Restart=on-failure
+ 
+[Install]
+WantedBy=multi-user.target

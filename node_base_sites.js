@@ -1,6 +1,7 @@
 "use strict";
 
 var express = require('express');
+var axios   = require('axios'); // Utiliser axios pour les requêtes HTTP
 var app     = express();
 var cors = require('cors');
 app.listen(8889);
@@ -96,7 +97,7 @@ function selectSiteQuery(params){
   }
 };
 
-async function distinctSiteResearch (pool, selectors, property, callback) {
+async function distinctSiteResearch (pool, selectors, property, title, callback) {
 
   const QUERY = {
     text: 'SELECT DISTINCT ' + property + ' FROM sitcenca.listesitescenca;',
@@ -114,6 +115,7 @@ async function distinctSiteResearch (pool, selectors, property, callback) {
         if(value[property] !== null) values.push(value[property]);
       }
       selectors.push ({ "name" :  property,
+	      		"title" : title,
                         // "values": ResultValues.sort()});
                         "values": values.sort()});
       callback(selectors);
@@ -353,7 +355,7 @@ async function run() {
 
     // Menu
     app.get('/menu/parent=:parent', (req, res) => {
-      const SelectFields = 'SELECT men_id as id, men_name as name, men_class_color as class_color, men_parent as parent, men_route as route '
+      const SelectFields = 'SELECT men_id as id, men_name as name, men_class_color as class_color, men_parent as parent, men_route as route, men_accueil as accueil, men_url as url , men_description as description, men_picture as picture, men_date_added as date_added, men_opened as opended '
       const FromTable = 'FROM gestint.menu_header ';
       let where;
       let queryObject;
@@ -363,7 +365,7 @@ async function run() {
       if (req.params.parent == 'null'){
         where = 'where men_parent is null';
         queryObject = {
-          text: joinQuery(SelectFields, FromTable, where),
+          text: joinQuery(SelectFields, FromTable, where + ' order by men_order'),
           values: [] // Pas de valeurs à passer pour une condition "is null"
         };
       }else{
@@ -393,17 +395,34 @@ async function run() {
       });
     });
 
+    // Récuperation de l'IP publique
+    app.get('/getip', async (req, res) => {
+      try {
+        const response = await axios.get('https://api.ipify.org?format=json');
+        const ipData = response.data;
+    
+        console.log("Votre IP : " + ipData.ip); // Récupère l'IP publique du client
+    
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.json(ipData); // Envoie la réponse en JSON
+      } catch (error) {
+        console.error("Erreur lors de la récupération de l'IP publique :", error);
+        res.status(500).send('Erreur lors de la récupération de l\'IP publique');
+      }
+    });
+  
     // Selectors de la barre de recherche de sites par critères
     app.get('/sites/selectors', (req, res) => {
-      distinctSiteResearch(pool, [], "milieux_naturels",
+      distinctSiteResearch(pool, [], "milieux_naturels", "Milieux naturels",
         (selectors) => {
-          distinctSiteResearch(pool, selectors, "responsable",
+          distinctSiteResearch(pool, selectors, "responsable", "Responsable",
             (selectors) => {
-              distinctSiteResearch(pool, selectors, "bassin_agence",
+              distinctSiteResearch(pool, selectors, "bassin_agence", "Bassin agence",
                 (selectors) => {
-                  distinctSiteResearch(pool, selectors, "prem_ctr",
+                  distinctSiteResearch(pool, selectors, "prem_ctr", "Premier contrat",
                     (selectors) => {
-                      distinctSiteResearch(pool, selectors, "fin",
+                      distinctSiteResearch(pool, selectors, "fin", "Fin acte",
                         (selectors) => {
                           let json=JSON. stringify (selectors) ;
                           res.setHeader('Access-Control-Allow-Origin', '*');
