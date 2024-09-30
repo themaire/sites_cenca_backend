@@ -1,5 +1,22 @@
 "use strict";
 
+const express = require('express');
+const router = express.Router();
+
+// Route pour la création d'un utilisateur
+router.post('/register', (req, res) => {
+  // Logique pour créer un utilisateur
+  res.send('Utilisateur créé');
+});
+
+// Route pour le login
+router.post('/login', (req, res) => {
+  // Logique pour le login
+  res.send('Utilisateur connecté');
+});
+
+module.exports = router;
+
 var express = require("express");
 var axios = require("axios"); // Utiliser axios pour les requêtes HTTP
 var app = express();
@@ -372,37 +389,62 @@ async function run() {
       );
     });
 
-    // Operations
-    app.get("/sites/projetslite/uuid=:uuid", (req, res) => {
-      const SelectFields =
-        "SELECT uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut ";
-      const FromTable = "FROM ope.synthesesites ";
-      const where = "where cd_localisation = $1";
+    // Projets lite
+    app.get('/sites/projetslite/uuid=:uuid', (req, res) => {
+      const SelectFields = 'SELECT uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut, webapp '
+      const FromTable = 'FROM ope.synthesesites ';
+      const where = 'where cd_localisation = $1';
 
       const UUID = req.params.uuid;
       const queryObject = {
         text: joinQuery(SelectFields, FromTable, where),
-        values: [UUID],
+        values: [UUID]
       };
 
-      siteResearch(
-        pool,
-        { query: queryObject, message: "sites/operations/uuid" },
-        (message, resultats) => {
-          if (resultats.length > 0) {
-            const json = JSON.stringify(resultats);
-            // console.log(json);
-            res.setHeader("Access-Control-Allow-Origin", "*");
-            res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(json);
-          } else {
-            const json = JSON.stringify([]);
-            res.setHeader("Access-Control-Allow-Origin", "*");
-            res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(json);
-          }
+      siteResearch(pool, {query: queryObject, "message": "sites/operations/uuid"},
+      (message, resultats) => {
+        if (resultats.length > 0) {
+          const json = JSON.stringify(resultats);
+          // console.log(json);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(json);
+        }else{
+          const json = JSON.stringify([]);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(json);
         }
-      );
+      });
+    });
+
+    // Les projets version web
+    app.get('/sites/projets/uuid=:uuid', (req, res) => {
+      const SelectFields = 'SELECT uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_geom, pro_pression_ciblee, pro_typ_objectif, pro_enjeux_eco, pro_nv_enjeux, pro_obj_ope, pro_obj_projet, pro_surf_totale ';
+      const FromTable = 'FROM opegerer.projets ';
+      const where = 'where uuid_proj = $1';
+
+      const UUID = req.params.uuid;
+      const queryObject = {
+        text: joinQuery(SelectFields, FromTable, where),
+        values: [UUID]
+      };
+
+      siteResearch(pool, {query: queryObject, "message": "sites/projetsv/uuid"},
+      (message, resultats) => {
+        if (resultats.length > 0) {
+          const json = JSON.stringify(resultats);
+          // console.log(json);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(json);
+        }else{
+          const json = JSON.stringify([]);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(json);
+        }
+      });
     });
 
     // Menu
