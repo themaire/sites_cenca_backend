@@ -9,7 +9,7 @@ function joinQuery(select, from, where = "") {
 async function siteResearch(pool, param, callback) {
     const RESULTS = await pool.query(param["query"]);
     if (RESULTS.rows.length === 0) {
-        callback("Pas de documents trouvés.", []);
+        callback("Rien à retourner.", []);
     } else if (RESULTS.rows.length > 0) {
         console.log(" ");
         console.log("Résultats depuis la fonction siteResearch()");
