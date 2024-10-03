@@ -51,7 +51,7 @@ router.post('/login', async (req, res) => {
   try {
     // Rechercher l'utilisateur par son nom d'utilisateur et si il existe
     const query = {
-      text: 'SELECT identifiant, sal_hash FROM admin.salaries WHERE identifiant = $1',
+      text: 'SELECT identifiant, sal_hash FROM admin.salaries WHERE identifiant = $1;',
       values: [username],
     };
     
@@ -93,8 +93,11 @@ router.post('/login', async (req, res) => {
 // Route pour verifier un token
 router.get("/me", authenticateToken, (req, res) => {
 
-  console.log("req.user : ");
-  console.log(req.user);
+  console.log("req.token : ");
+  console.log(req.token);
+
+  console.log("req.tokenInfos : ");
+  console.log(req.tokenInfos);
 
   const SelectFields = "SELECT nom, prenom, identifiant ";
   const FromTable = "FROM admin.salaries ";
@@ -106,7 +109,7 @@ router.get("/me", authenticateToken, (req, res) => {
       FromTable,
       where
     ),
-    values: [req.user["identifiant"]],
+    values: [req.tokenInfos["identifiant"]],
   }
 
   // console.log("queryObject : ", queryObject);
@@ -133,16 +136,24 @@ router.get("/me", authenticateToken, (req, res) => {
 
 // Route pour se déconnecter
 router.get("/logout", authenticateToken, (req, res) => {
-  const insertReq ="INSERT INTO admin.blacklist_token (bla_token) VALUES ($1)";
+  const insertReq ="INSERT INTO admin.blacklist_token (bla_token, bla_identifiant) VALUES ($1, $2);";
   
   queryObject = {
       text: insertReq,
-      values: [req.user["sal_hash"]], // Le token est déjà dans req.user
+      values: [req.token, req.tokenInfos["identifiant"]],
   };
 
   siteResearch(
       pool,
-      { query: queryObject, message: "auth/logout" }
+      { query: queryObject, message: "auth/logout" },
+      (message, resultats) => {
+        if (message !== "") {
+          const json = JSON.stringify([]);
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          res.setHeader("Content-Type", "application/json; charset=utf-8");
+          res.end(json);
+        }
+      }
   );
 });
 
