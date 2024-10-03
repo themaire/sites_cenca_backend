@@ -19,9 +19,9 @@ async function siteResearch(pool, param, callback) {
     } else callback(param["message"], []);
 }
 
-function selectSiteQuery(params) {
+function selectQuery(params) {
     // Prends en paramètre les parametres de l'url recue
-    // Retourne un query objet que la biliotheque pg acceptera
+    // Retourne un query objet que la bibliotheque pg acceptera
 
     let SelectFields = "SELECT ";
     SelectFields +=
@@ -103,4 +103,4 @@ async function distinctSiteResearch(
     }
 }
 
-module.exports = { joinQuery, siteResearch, selectSiteQuery, distinctSiteResearch };
+module.exports = { joinQuery, siteResearch, selectQuery, distinctSiteResearch };

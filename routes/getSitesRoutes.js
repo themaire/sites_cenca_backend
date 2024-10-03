@@ -3,7 +3,7 @@ const router = express.Router();
 
 
 // Fonctions et connexion à PostgreSQL
-const { joinQuery, siteResearch, selectSiteQuery, distinctSiteResearch } = require('../fonctions/fonctionsSites.js'); 
+const { joinQuery, siteResearch, selectQuery, distinctSiteResearch } = require('../fonctions/fonctionsSites.js'); 
 const pool = require('../dbPool/poolConnect.js');
 
 
@@ -16,7 +16,7 @@ const pool = require('../dbPool/poolConnect.js');
 router.get(
     "/criteria/:type/:code/:nom/:commune/:milnat/:resp",
     (req, res) => {
-        const queryObject = selectSiteQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
+        const queryObject = selectQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
 
         siteResearch(
             pool,
