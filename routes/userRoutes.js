@@ -50,12 +50,15 @@ router.post('/login', async (req, res) => {
 
   try {
     // Rechercher l'utilisateur par son nom d'utilisateur et si il existe
-    const query = {
-      text: 'SELECT identifiant, sal_hash, ref_gro_id FROM admin.salaries WHERE identifiant = $1;',
+    let querySQL = 'SELECT sal.identifiant, sal.sal_hash, salgro.gro_id FROM admin.salaries sal ';
+    querySQL +=    'LEFT JOIN admin.salarie_groupes salgro ON sal.cd_salarie = salgro.cd_salarie ';
+    querySQL +=    'LEFT JOIN admin.groupes gro ON salgro.gro_id = gro.gro_id WHERE sal.identifiant = $1 order by salgro.gro_id desc limit 1;';
+    const queryObject = {
+      text: querySQL,
       values: [username],
     };
     
-    const result = await pool.query(query);
+    const result = await pool.query(queryObject);
     
     if (result.rows.length === 0) {
       return res.status(400).json({ message: 'Utilisateur non trouvé' });
@@ -80,7 +83,7 @@ router.post('/login', async (req, res) => {
         const token = jwt.sign(payload, 'Cenc4W1ldLif3!$', { expiresIn: '1h' });
         res.status(200).json({ message: 'Connexion réussie', 
                                 identifiant: result.rows[0]["identifiant"],
-				groupe: result.rows[0]["ref_gro_id"],
+				groupe: result.rows[0]["gro_id"],
                                 token: token}
         );
       }
