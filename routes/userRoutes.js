@@ -46,12 +46,12 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
   const hashedPassword = await bcrypt.hash(password, saltRounds);
-  console.log("---------> hashedPassword : " + hashedPassword);
+  // console.log("---------> hashedPassword : " + hashedPassword);
 
   try {
     // Rechercher l'utilisateur par son nom d'utilisateur et si il existe
     const query = {
-      text: 'SELECT identifiant, sal_hash FROM admin.salaries WHERE identifiant = $1;',
+      text: 'SELECT identifiant, sal_hash, ref_gro_id FROM admin.salaries WHERE identifiant = $1;',
       values: [username],
     };
     
@@ -80,6 +80,7 @@ router.post('/login', async (req, res) => {
         const token = jwt.sign(payload, 'Cenc4W1ldLif3!$', { expiresIn: '1h' });
         res.status(200).json({ message: 'Connexion réussie', 
                                 identifiant: result.rows[0]["identifiant"],
+				groupe: result.rows[0]["ref_gro_id"],
                                 token: token}
         );
       }
