@@ -92,6 +92,7 @@ router.post('/login', async (req, res) => {
 
 // Route pour verifier un token
 router.get("/me", authenticateToken, (req, res) => {
+  console.log("------------------------------ me! ------------------------------");
 
   console.log("req.token : ");
   console.log(req.token);
@@ -119,7 +120,7 @@ router.get("/me", authenticateToken, (req, res) => {
       { query: queryObject, message: "auth/me" },
       (message, resultats) => {
         if (resultats.length > 0) {
-          const json = JSON.stringify(resultats);
+          const json = JSON.stringify(resultats[0]);
           // console.log(json);
           res.setHeader("Access-Control-Allow-Origin", "*");
           res.setHeader("Content-Type", "application/json; charset=utf-8");
