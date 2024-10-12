@@ -1,8 +1,13 @@
 // Description: Routes pour l'authentification des utilisateurs
 
+// Charger les variables d'environnement
+require('dotenv').config();
+
+// Utiliser la clé secrète depuis le fichier .env
+const secretKey = process.env.SECRET_KEY;
 
 // Fonctions et connexion à PostgreSQL
-const { joinQuery, siteResearch } = require('../fonctions/fonctionsSites.js'); 
+const { joinQuery, ExecuteQuerySite } = require('../fonctions/fonctionsSites.js'); 
 
 const express = require('express'); // Pour utiliser le routeur express
 const router = express.Router();
@@ -44,8 +49,22 @@ router.post('/register', async (req, res) => {
 
 // Route pour authentifier un utilisateur
 router.post('/login', async (req, res) => {
+  // Route pour authentifier un utilisateur
+  // Reçoit un objet avec les propriétés username et password dans le corps de la requête
+
+  // Compare le mot de passe saisi avec le mot de passe haché stocké
+  // Si les mots de passe correspondent, crée un token d'authentification
+  // et le renvoie au client
+  // Si les mots de passe ne correspondent pas, renvoie un message d'erreur
+  // Si l'utilisateur n'existe pas, renvoie un message d'erreur
+  
+  // Si une erreur se produit, renvoie un message d'erreur
+
+  // Sinon une réponse 200 OK est renvoyée avec :
+  // le token d'authentification et un tableau contenant les infos de l'utilisateur et le message "Connexion réussie"
+  
   const { username, password } = req.body;
-  const hashedPassword = await bcrypt.hash(password, saltRounds);
+  // const hashedPassword = await bcrypt.hash(password, saltRounds);
   // console.log("---------> hashedPassword : " + hashedPassword);
 
   try {
@@ -77,10 +96,16 @@ router.post('/login', async (req, res) => {
         return res.status(400).json({ message: 'Mot de passe incorrect' });
       }else{
         // Création du token
-        console.log("---------> payload : ");
-        console.log(payload);
+        // console.log("---------> payload : ");
+        // console.log(payload);
 
-        const token = jwt.sign(payload, 'Cenc4W1ldLif3!$', { expiresIn: '1h' });
+        // Pas necessaire puisque la bibliothèque jsonwebtoken gère cela pour vous automatiquement
+        // mais au cs où nous voudrier changer d'algorithme ou de type de token plus tard
+        const header = {
+          alg: 'HS256',
+          typ: 'JWT'
+        };
+        const token = jwt.sign(payload, secretKey, { expiresIn: '1h' });
         res.status(200).json({ message: 'Connexion réussie', 
                                 identifiant: result.rows[0]["identifiant"],
 				groupe: result.rows[0]["gro_id"],
@@ -119,11 +144,12 @@ router.get("/me", authenticateToken, (req, res) => {
 
   // console.log("queryObject : ", queryObject);
 
-  siteResearch(
+  ExecuteQuerySite(
       pool,
       { query: queryObject, message: "auth/me" },
+      "select",
       (message, resultats) => {
-        if (resultats.length > 0) {
+        if (resultats.length > 0 || message == "ok") {
           const json = JSON.stringify(resultats[0]);
           // console.log(json);
           res.setHeader("Access-Control-Allow-Origin", "*");
@@ -148,11 +174,12 @@ router.get("/logout", authenticateToken, (req, res) => {
       values: [req.token, req.tokenInfos["identifiant"]],
   };
 
-  siteResearch(
+  ExecuteQuerySite(
       pool,
       { query: queryObject, message: "auth/logout" },
+      "select",
       (message, resultats) => {
-        if (message !== "") {
+        if (resultats.length > 0 || message == "ok") {
           const json = JSON.stringify([]);
           res.setHeader("Access-Control-Allow-Origin", "*");
           res.setHeader("Content-Type", "application/json; charset=utf-8");

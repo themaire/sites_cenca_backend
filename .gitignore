@@ -136,3 +136,4 @@ dist
 HelloWorld.js
 
 node_pgsql.code-workspace
+.env

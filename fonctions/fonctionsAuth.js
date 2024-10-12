@@ -3,7 +3,7 @@ const pool = require('../dbPool/poolConnect.js');
 
 const jwt = require('jsonwebtoken'); // Pour créer des tokens d'authentification
 
-const { siteResearch } = require('../fonctions/fonctionsSites.js'); 
+const { ExecuteQuerySite } = require('../fonctions/fonctionsSites.js'); 
 
 // Middleware pour vérifier le token JWT
 const authenticateToken = (req, res, next) => {
@@ -22,9 +22,10 @@ const authenticateToken = (req, res, next) => {
     // console.log("queryObject : ");
     // console.log(queryObject);
 
-    siteResearch(
+    ExecuteQuerySite(
         pool,
         { query: queryObject, message: "test if token is NOT blacklisted." },
+        "select",
         (message, resultats) => {
 
           // console.log("resultats : ");

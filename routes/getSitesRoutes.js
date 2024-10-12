@@ -3,13 +3,13 @@ const router = express.Router();
 
 
 // Fonctions et connexion à PostgreSQL
-const { joinQuery, siteResearch, selectQuery, distinctSiteResearch } = require('../fonctions/fonctionsSites.js'); 
+const { joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch } = require('../fonctions/fonctionsSites.js'); 
 const pool = require('../dbPool/poolConnect.js');
 
 
 // FONCTIONNE !
     // const paramTest = { query : 'SELECT * from esp.geometries limit 2;', message: 'Simple query test'};
-    // siteResearch(pool, paramTest, (message, res) => {
+    // selectSite(pool, paramTest, (message, res) => {
     //   console.log(res);
     // });
 
@@ -18,11 +18,12 @@ router.get(
     (req, res) => {
         const queryObject = selectQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
 
-        siteResearch(
+        ExecuteQuerySite(
             pool,
             { message: "/sites/criteria/type/code...", query: queryObject },
+            "select",
             (message, resultats) => {
-                if (resultats.length > 0) {
+                if (resultats.length > 0 || message == "ok") {
                 const json = JSON.stringify(resultats);
                 // console.log(json);
                 res.setHeader("Access-Control-Allow-Origin", "*");
@@ -46,11 +47,11 @@ router.get("/uuid=:uuid", (req, res) => {
 
     let SelectFields = "SELECT ";
     SelectFields +=
-        "site.uuid_site, site.code, site.prem_ctr, site.ref_fcen, site.pourc_gere, site.surf_actes, site.url_cen, site.validite, site.espace, site.typ_site, ";
+        "site.uuid_site, site.code, site.prem_ctr, site.ref_fcen, site.pourc_gere, site.surf_actes, site.url_cen, site.validite::boolean, site.espace, site.typ_site, ";
     SelectFields +=
         "site.responsable, site.date_crea as date_crea_site, site.id_mnhn, site.modif_admin, site.actuel, site.url_mnhn, site.parties_gerees, site.typ_ouverture, site.description_site, ";
     SelectFields +=
-        "site.sensibilite, site.remq_sensibilite, site.ref_public,";
+        "site.sensibilite, site.remq_sensibilite, site.ref_public::boolean,";
     SelectFields +=
         "espa.uuid_espace, espa.date_crea as date_crea_espace, espa.id_espace, espa.nom, espa.surface, espa.carto_hab, espa.zh, espa.typ_espace, espa.bassin_agence, espa.rgpt, espa.typ_geologie, ";
     SelectFields +=
@@ -76,13 +77,14 @@ router.get("/uuid=:uuid", (req, res) => {
         // rowMode: 'array',
     };
 
-    siteResearch(
+    ExecuteQuerySite(
         pool,
         { query: queryObject, message: "sites/uuid" },
+        "select",
         (message, resultats) => {
         res.setHeader("Access-Control-Allow-Origin", "*");
         res.setHeader("Content-Type", "application/json; charset=utf-8");
-        if (resultats !== undefined && resultats[0] !== undefined) {
+        if (resultats.length > 0 || message == "ok") {
             var json = JSON.stringify(resultats[0]);
             res.end(json);
             console.log("message : " + message);
@@ -118,11 +120,12 @@ router.get("/commune/uuid=:uuid", (req, res) => {
         values: [UUID],
     };
 
-    siteResearch(
+    ExecuteQuerySite(
         pool,
         { query: queryObject, message: "sites/commune/uuid" },
+        "select",
         (message, resultats) => {
-        if (resultats.length > 0) {
+        if (resultats.length > 0 || message == "ok") {
             const json = JSON.stringify(resultats);
             // console.log(json);
             res.setHeader("Access-Control-Allow-Origin", "*");
@@ -152,11 +155,12 @@ router.get("/pgestion/uuid=:uuid", (req, res) => {
         values: [UUID],
     };
 
-    siteResearch(
+    ExecuteQuerySite(
         pool,
         { query: queryObject, message: "sites/pgestion/uuid" },
+        "select",
         (message, resultats) => {
-        if (resultats.length > 0) {
+        if (resultats.length > 0 || message == "ok") {
             const json = JSON.stringify(resultats);
             // console.log(json);
             res.setHeader("Access-Control-Allow-Origin", "*");
@@ -191,11 +195,12 @@ router.get("/milnat/uuid=:uuid", (req, res) => {
         values: [UUID],
     };
 
-    siteResearch(
+    ExecuteQuerySite(
         pool,
         { query: queryObject, message: "sites/milnat/uuid" },
+        "select",
         (message, resultats) => {
-        if (resultats.length > 0) {
+        if (resultats.length > 0 || message == "ok") {
             const json = JSON.stringify(resultats);
             // console.log(json);
             res.setHeader("Access-Control-Allow-Origin", "*");
@@ -224,11 +229,12 @@ router.get("/mfu/uuid=:uuid", (req, res) => {
         values: [UUID],
     };
 
-    siteResearch(
+    ExecuteQuerySite(
         pool,
         { query: queryObject, message: "sites/mfu/uuid" },
+        "select",
         (message, resultats) => {
-        if (resultats.length > 0) {
+        if (resultats.length > 0 || message == "ok") {
             const json = JSON.stringify(resultats);
             // console.log(json);
             res.setHeader("Access-Control-Allow-Origin", "*");
@@ -256,26 +262,26 @@ router.get('/projetslite/uuid=:uuid', (req, res) => {
         values: [UUID]
     };
 
-    siteResearch(pool, {query: queryObject, "message": "sites/operations/uuid"},
+    ExecuteQuerySite(pool, {query: queryObject, "message": "sites/operations/uuid"}, "select",
     (message, resultats) => {
-        if (resultats.length > 0) {
-        const json = JSON.stringify(resultats);
-        // console.log(json);
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(json);
+    if (resultats.length > 0 || message == "ok") {
+            const json = JSON.stringify(resultats);
+            // console.log(json);
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(json);
         }else{
-        const json = JSON.stringify([]);
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(json);
+            const json = JSON.stringify([]);
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(json);
         }
     });
 });
 
 // Les projets version web
 router.get('/projets/uuid=:uuid', (req, res) => {
-    const SelectFields = 'SELECT uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_geom, pro_pression_ciblee, pro_typ_objectif, pro_enjeux_eco, pro_nv_enjeux, pro_obj_ope, pro_obj_projet, pro_surf_totale ';
+    const SelectFields = 'SELECT uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_geom, pro_pression_ciblee, pro_typ_objectif, pro_enjeux_eco, pro_nv_enjeux, pro_obj_ope, pro_obj_projet, pro_surf_totale, pro_maitre_ouvrage ';
     const FromTable = 'FROM opegerer.projets ';
     const where = 'where uuid_proj = $1';
 
@@ -285,19 +291,19 @@ router.get('/projets/uuid=:uuid', (req, res) => {
         values: [UUID]
     };
 
-    siteResearch(pool, {query: queryObject, "message": "sites/projetsv/uuid"},
+    ExecuteQuerySite(pool, {query: queryObject, "message": "sites/projetsv/uuid"}, "select",
     (message, resultats) => {
-        if (resultats.length > 0) {
-        const json = JSON.stringify(resultats);
-        // console.log(json);
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(json);
+        if (resultats.length > 0 || message == "ok") {
+            const json = JSON.stringify(resultats);
+            // console.log(json);
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(json);
         }else{
-        const json = JSON.stringify([]);
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(json);
+            const json = JSON.stringify([]);
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(json);
         }
     });
 });
@@ -316,21 +322,22 @@ router.get("/uuid_acte=:uuid_acte", (req, res) => {
 
     // console.log("queryObject : ", queryObject);
 
-    siteResearch(
+    ExecuteQuerySite(
     pool,
     { query: queryObject, message: "/sites/uuid_acte" },
+    "select",
     (message, resultats) => {
-        if (resultats.length > 0) {
-        const json = JSON.stringify(resultats);
-        // console.log(json);
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        res.end(json);
+        if (resultats.length > 0 || resultats !== false) {
+            const json = JSON.stringify(resultats);
+            // console.log(json);
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(json);
         } else {
-        const json = JSON.stringify([]);
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        res.end(json);
+            const json = JSON.stringify([]);
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(json);
         }
     }
     );

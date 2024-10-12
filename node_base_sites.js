@@ -11,13 +11,15 @@ app.use(express.urlencoded({ extended: true })); // Pour traiter les requêtes e
 
 // Importation des routes
 const userRoutes = require('./routes/userRoutes');
-const siteRoutes = require('./routes/getSitesRoutes');
+const siteRoutesGet = require('./routes/getSitesRoutes');
+const siteRoutesPut = require('./routes/putSitesRoutes');
 const menuRoutes = require('./routes/menuRoutes');
 
 async function run() {
   try {
     app.use('/auth', userRoutes);
-    app.use('/sites', siteRoutes);
+    app.use('/sites', siteRoutesGet);
+    app.use('/sites', siteRoutesPut);
     app.use('/menu', menuRoutes);
   } catch (error) {
     console.error("Error try :" + error);

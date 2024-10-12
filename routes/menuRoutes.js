@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 // Fonctions et connexion à PostgreSQL
-const { joinQuery, siteResearch } = require('../fonctions/fonctionsSites.js'); 
+const { joinQuery, ExecuteQuerySite } = require('../fonctions/fonctionsSites.js'); 
 
 const { authenticateToken } = require('../fonctions/fonctionsAuth.js'); 
 
@@ -39,11 +39,12 @@ router.get("/parent=:parent", (req, res) => {
 
     // console.log("queryObject : ", queryObject);
 
-    siteResearch(
+    ExecuteQuerySite(
         pool,
         { query: queryObject, message: "menu/parent" },
+        "select",
         (message, resultats) => {
-            if (resultats.length > 0) {
+            if (resultats.length > 0 || message == "ok") {
                 const json = JSON.stringify(resultats);
                 // console.log(json);
                 res.setHeader("Access-Control-Allow-Origin", "*");
@@ -90,11 +91,12 @@ router.get("/tokenparent=:parent", authenticateToken, (req, res) => {
 
     // console.log("queryObject : ", queryObject);
 
-    siteResearch(
+    ExecuteQuerySite(
         pool,
         { query: queryObject, message: "menu/parent" },
+        "select",
         (message, resultats) => {
-            if (resultats.length > 0) {
+            if (resultats.length > 0 || message == "ok") {
                 const json = JSON.stringify(resultats);
                 // console.log(json);
                 res.setHeader("Access-Control-Allow-Origin", "*");

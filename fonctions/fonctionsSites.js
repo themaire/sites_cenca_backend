@@ -5,18 +5,45 @@ function joinQuery(select, from, where = "") {
 
     return query;
 }
-  
-async function siteResearch(pool, param, callback) {
-    const RESULTS = await pool.query(param["query"]);
-    if (RESULTS.rows.length === 0) {
-        callback("Rien à retourner.", []);
-    } else if (RESULTS.rows.length > 0) {
-        console.log(" ");
-        console.log("Résultats depuis la fonction siteResearch()");
-        console.log("Params : ", param);
-        console.log(RESULTS.rows.length + " résultats.");
-        callback(param["message"], RESULTS.rows);
-    } else callback(param["message"], []);
+
+// Pour les requetes SELECT et UPDATE
+/**
+ * Exécute une requête SQL sur la base de données et traite les résultats.
+ * 
+ * @param {Object} pool - Le pool de connexions à la base de données.
+ * @param {Object} param - Les paramètres de la requête, incluant la requête SQL et un message.
+ * @param {string} [type="select"] - Le type de requête (par défaut "select").
+ * @param {Function} callback - La fonction de rappel à exécuter avec les résultats de la requête.
+ */
+async function ExecuteQuerySite(pool, param, type = "select", callback) {
+    try {
+        // Exécute la requête SQL avec les paramètres fournis
+        const RESULTS = await pool.query(param["query"]);
+        const nbLignes = RESULTS.rowCount;
+
+        // Si aucune ligne n'est retournée ou si le type est "update"
+        if (nbLignes === 0 || type === "update") {
+            callback("ok", RESULTS.rows);
+        } else if (nbLignes > 0) {
+            // Si des lignes sont retournées, affiche les résultats et appelle le callback avec les données
+            console.log(" ");
+            console.log("Résultats depuis la fonction ExecuteQuerySite()");
+            console.log("Params : ", param);
+            console.log(nbLignes + " résultats.");
+            callback(param["message"], RESULTS.rows);
+        } else {
+            // Si aucune condition n'est remplie, appelle le callback avec un message et une liste vide
+            callback(param["message"], []);
+        }
+    } catch (error) {
+        // En cas d'erreur, affiche l'erreur et appelle le callback avec un message d'erreur et une liste vide
+        console.error("Erreur lors de l'exécution de la requête : ", error);
+        if (typeof callback === 'function') {
+            callback("Erreur lors de l'exécution de la requête :", []);
+        } else {
+            console.error("Callback is not a function");
+        }
+    }
 }
 
 function selectQuery(params) {
@@ -31,7 +58,7 @@ function selectQuery(params) {
     let query = {
         // text: 'SELECT uuid_site, code, prem_ctr, typ_site, typ_site_txt, milieux_naturels, communes, insee, bassin_agence, responsable, nom, espace, statut, fin, alerte_fin, validite
         //text: 'SELECT uuid_site, code, nom, statut, communes, milieux_naturels, bassin_agence, prem_ctr, fin, responsable, validite, typ_site, typ_site_txt FROM sitcenca.listesitescenca',
-        text: joinQuery(SelectFields, FromTable, ""),
+        text: joinQuery(SelectFields, FromTable),
         values: [],
         // rowMode: 'array',
     };
@@ -59,10 +86,14 @@ function selectQuery(params) {
         // Remplit le query object en fonction des valeurs données en parametre
         // Si on est au dernier element de la liste, on ne rajoutera pas le "and " dans le for pour le where
         for (const [key, value] of Object.entries(whereFilters)) {
-        let reqKey = parseInt(key) + 1;
-        if (reqKey == Object.keys(whereFilters).length) andOrEnd = ";";
-        where += Object.keys(value)[0] + " = $" + reqKey + andOrEnd;
-        query.values.push(Object.values(value)[0]);
+            let reqKey = parseInt(key) + 1;
+            if (reqKey == Object.keys(whereFilters).length) andOrEnd = ";";
+
+            // Completer la variable where (l'allonger)
+            where += Object.keys(value)[0] + " = $" + reqKey + andOrEnd;
+
+            // Ajouter les valeurs de la liste des valeurs
+            query.values.push(Object.values(value)[0]);
         }
         query.text += where;
         console.log(query);
@@ -103,4 +134,4 @@ async function distinctSiteResearch(
     }
 }
 
-module.exports = { joinQuery, siteResearch, selectQuery, distinctSiteResearch };
+module.exports = { joinQuery, ExecuteQuerySite, selectQuery, distinctSiteResearch };
