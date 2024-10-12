@@ -5,6 +5,7 @@ require('dotenv').config();
 
 // Utiliser la clé secrète depuis le fichier .env
 const secretKey = process.env.SECRET_KEY;
+const saltRounds = process.env.SALT_ROUNDS;
 
 // Fonctions et connexion à PostgreSQL
 const { joinQuery, ExecuteQuerySite } = require('../fonctions/fonctionsSites.js'); 
@@ -13,7 +14,6 @@ const express = require('express'); // Pour utiliser le routeur express
 const router = express.Router();
 
 const bcrypt = require('bcrypt'); // Pour hacher les mots de passe
-const saltRounds = 10; // Nombre de rounds de sel pour bcrypt
 
 const jwt = require('jsonwebtoken'); // Pour créer des tokens d'authentification
 
