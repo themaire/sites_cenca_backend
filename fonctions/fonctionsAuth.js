@@ -1,3 +1,11 @@
+// Toutes les fonctions d'authentification sont ici
+
+// Charger les variables d'environnement
+require('dotenv').config();
+
+// Utiliser la clé secrète depuis le fichier .env
+const secretKey = process.env.SECRET_KEY;
+
 // Connexion à PostgreSQL
 const pool = require('../dbPool/poolConnect.js');
 
@@ -19,8 +27,8 @@ const authenticateToken = (req, res, next) => {
         values: [req.token],
     };
 
-    // console.log("queryObject : ");
-    // console.log(queryObject);
+    console.log("queryObject : ");
+    console.log(queryObject);
 
     ExecuteQuerySite(
         pool,
@@ -32,7 +40,7 @@ const authenticateToken = (req, res, next) => {
           // console.log(resultats);
 
           if (resultats[0]["exists"] === false) { // Vérifie le token si on le trouve pas dans la blacklist
-            jwt.verify(req.token, 'Cenc4W1ldLif3!$', (err, decodedToken) => {
+            jwt.verify(req.token, secretKey, (err, decodedToken) => {
               if (err) return res.status(403).json({ message: 'Token probablement expiré ou incorrect ( ' + err + ' )' });
               req.tokenInfos = decodedToken;  // Stocke les infos du token décodé dans req.user
               next();  // Passe à la prochaine étape (route ou autre middleware)

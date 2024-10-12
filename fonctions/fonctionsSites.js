@@ -37,7 +37,8 @@ async function ExecuteQuerySite(pool, param, type = "select", callback) {
         }
     } catch (error) {
         // En cas d'erreur, affiche l'erreur et appelle le callback avec un message d'erreur et une liste vide
-        console.error("Erreur lors de l'exécution de la requête : ", error);
+        console.error("Erreur lors de l'exécution de la requête : ", param["query"]);
+        console.error("Erreur de PostgreSQL : ", error);
         if (typeof callback === 'function') {
             callback("Erreur lors de l'exécution de la requête :", []);
         } else {
