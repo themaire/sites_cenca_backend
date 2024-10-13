@@ -7,22 +7,25 @@ function joinQuery(select, from, where = "") {
 }
 
 // Pour les requetes SELECT et UPDATE
-/**
- * Exécute une requête SQL sur la base de données et traite les résultats.
- * 
- * @param {Object} pool - Le pool de connexions à la base de données.
- * @param {Object} param - Les paramètres de la requête, incluant la requête SQL et un message.
- * @param {string} [type="select"] - Le type de requête (par défaut "select").
- * @param {Function} callback - La fonction de rappel à exécuter avec les résultats de la requête.
- */
 async function ExecuteQuerySite(pool, param, type = "select", callback) {
+    /**
+     * Exécute une requête SQL sur la base de données et traite les résultats.
+     * 
+     * @param {Object} pool - Le pool de connexions à la base de données.
+     * @param {Object} param - Les paramètres de la requête, incluant la requête SQL et un message.
+     * @param {string} [type="select"] - Le type de requête (par défaut "select").
+     * @param {Function} callback - La fonction de rappel à exécuter avec les résultats de la requête.
+     */
+
+    type = type.toLowerCase();
+
     try {
         // Exécute la requête SQL avec les paramètres fournis
         const RESULTS = await pool.query(param["query"]);
         const nbLignes = RESULTS.rowCount;
 
         // Si aucune ligne n'est retournée ou si le type est "update"
-        if (nbLignes === 0 || type === "update") {
+        if (nbLignes === 0 || ["update", "insert", "delete"].includes(type)) {
             callback("ok", RESULTS.rows);
         } else if (nbLignes > 0) {
             // Si des lignes sont retournées, affiche les résultats et appelle le callback avec les données

@@ -177,7 +177,7 @@ router.get("/me", authenticateToken, (req, res) => {
 });
 
 // Route pour se déconnecter
-router.get("/logout", authenticateToken, (req, res) => {
+router.get("/logout", authenticateToken, async (req, res) => {
   const insertReq ="INSERT INTO admin.blacklist_token (bla_token, bla_identifiant) VALUES ($1, $2);";
   
   queryObject = {
@@ -185,12 +185,12 @@ router.get("/logout", authenticateToken, (req, res) => {
       values: [req.token, req.tokenInfos["identifiant"]],
   };
 
-  ExecuteQuerySite(
+   ExecuteQuerySite(
       pool,
       { query: queryObject, message: "auth/logout" },
-      "select",
-      (message, resultats) => {
-        if (resultats.length > 0 || message == "ok") {
+      "insert",
+      async (message, resultats) => {
+        if (message == "ok") {
           const json = JSON.stringify([]);
           res.setHeader("Access-Control-Allow-Origin", "*");
           res.setHeader("Content-Type", "application/json; charset=utf-8");
