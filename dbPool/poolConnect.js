@@ -8,6 +8,9 @@ const PG_DB = process.env.DB_NAME;
 const PG_PASSWORD = process.env.DB_PASSWORD;
 const PG_PORT = process.env.DB_PORT;
 
+console.log("PG_USER : " + PG_USER);
+console.log("Current directory: " + process.cwd());
+
 // Create a new Postgresql client
 const { Client, Pool } = require("pg");
 

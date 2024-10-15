@@ -61,7 +61,8 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                 "update",
                 (message, resultats) => {
                     console.log("resultats suite à la requete table espaces : " + resultats);
-                    if (resultats !== false) {
+                    // if (resultats !== false) {
+                    if ('message' === 'ok') {
                         ExecuteQuerySite(
                             pool,
                             { query: siteQuery, message: "site/put/table=espace_site/uuid" },

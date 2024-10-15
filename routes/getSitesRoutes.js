@@ -221,7 +221,7 @@ router.get("/mfu/uuid=:uuid", (req, res) => {
     const SelectFields =
         "SELECT site, uuid_acte, debut, fin, tacit_rec, typ_mfu, actuel, url, types_prop, surface ";
     const FromTable = "FROM sitcenca.listeactes ";
-    const where = "where site = $1 order by debut";
+    const where = "where site = $1 order by debut;";
 
     const UUID = req.params.uuid;
     const queryObject = {
@@ -234,7 +234,41 @@ router.get("/mfu/uuid=:uuid", (req, res) => {
         { query: queryObject, message: "sites/mfu/uuid" },
         "select",
         (message, resultats) => {
-        if (resultats.length > 0 || message == "ok") {
+        if (resultats.length > 0 ) {
+            const json = JSON.stringify(resultats);
+            // console.log(json);
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(json);
+        } else {
+            const json = JSON.stringify([]);
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(json);
+        }
+        }
+    );
+});
+
+// MFU fiche de la vraie table MFU
+router.get("/fullmfu/uuid=:uuid", (req, res) => {
+    const SelectFields =
+        "uuid_acte, debut, fin, tacit_rec, detail_rec, notaire, cout, remarque, validite, date_crea, date_modif, typ_mfu, site, url, actuel ";
+    const FromTable = "FROM sitcenca.actes_mfu ";
+    const where = "where uuid_acte = $1;";
+
+    const UUID = req.params.uuid;
+    const queryObject = {
+        text: joinQuery(SelectFields, FromTable, where),
+        values: [UUID],
+    };
+
+    ExecuteQuerySite(
+        pool,
+        { query: queryObject, message: "sites/fullmfu/uuid" },
+        "select",
+        (message, resultats) => {
+        if (resultats.length > 0 ) {
             const json = JSON.stringify(resultats);
             // console.log(json);
             res.setHeader("Access-Control-Allow-Origin", "*");
@@ -264,7 +298,7 @@ router.get('/projetslite/uuid=:uuid', (req, res) => {
 
     ExecuteQuerySite(pool, {query: queryObject, "message": "sites/operations/uuid"}, "select",
     (message, resultats) => {
-    if (resultats.length > 0 || message == "ok") {
+    if (resultats.length > 0) {
             const json = JSON.stringify(resultats);
             // console.log(json);
             res.setHeader('Access-Control-Allow-Origin', '*');
@@ -283,7 +317,7 @@ router.get('/projetslite/uuid=:uuid', (req, res) => {
 router.get('/projets/uuid=:uuid', (req, res) => {
     const SelectFields = 'SELECT uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_geom, pro_pression_ciblee, pro_typ_objectif, pro_enjeux_eco, pro_nv_enjeux, pro_obj_ope, pro_obj_projet, pro_surf_totale, pro_maitre_ouvrage ';
     const FromTable = 'FROM opegerer.projets ';
-    const where = 'where uuid_proj = $1';
+    const where = 'where uuid_proj = $1;';
 
     const UUID = req.params.uuid;
     const queryObject = {
@@ -292,20 +326,20 @@ router.get('/projets/uuid=:uuid', (req, res) => {
     };
 
     ExecuteQuerySite(pool, {query: queryObject, "message": "sites/projetsv/uuid"}, "select",
-    (message, resultats) => {
-        if (resultats.length > 0 || message == "ok") {
-            const json = JSON.stringify(resultats);
-            // console.log(json);
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            res.end(json);
-        }else{
-            const json = JSON.stringify([]);
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            res.end(json);
-        }
-    });
+        (message, resultats) => {
+            if (resultats.length == 1) {
+                const json = JSON.stringify(resultats);
+                // console.log(json);
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                res.end(json);
+            }else{
+                const json = JSON.stringify({message : "Aucun résultat"});
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                res.end(json);
+            }
+        });
 });
 
 
