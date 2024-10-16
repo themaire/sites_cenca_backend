@@ -217,7 +217,7 @@ router.get("/milnat/uuid=:uuid", (req, res) => {
 });
 
 // MFU
-router.get("/mfu/uuid=:uuid", (req, res) => {
+router.get("/miniacte/uuid=:uuid", (req, res) => {
     const SelectFields =
         "SELECT site, uuid_acte, debut, fin, tacit_rec, typ_mfu, actuel, url, types_prop, surface ";
     const FromTable = "FROM sitcenca.listeactes ";
@@ -250,12 +250,14 @@ router.get("/mfu/uuid=:uuid", (req, res) => {
     );
 });
 
-// MFU fiche de la vraie table MFU
+// MFU fiche de la vraie table MFU ATTETION renvoit UN SEUL élement et pas une liste d'element comme d'habitude
 router.get("/fullmfu/uuid=:uuid", (req, res) => {
     const SelectFields =
-        "uuid_acte, debut, fin, tacit_rec, detail_rec, notaire, cout, remarque, validite, date_crea, date_modif, typ_mfu, site, url, actuel ";
-    const FromTable = "FROM sitcenca.actes_mfu ";
-    const where = "where uuid_acte = $1;";
+        "select amfu.uuid_acte, amfu.debut, amfu.fin, amfu.tacit_rec, amfu.detail_rec, amfu.notaire, amfu.cout, amfu.remarque, amfu.validite, amfu.date_crea, amfu.date_modif, amfu.typ_mfu, amfu.site, amfu.url, amfu.actuel, e.nom as nom_site ";
+    let FromTable = "FROM sitcenca.actes_mfu AS amfu ";
+    FromTable += "LEFT JOIN sitcenca.sites s ON amfu.site = s.uuid_site ";
+    FromTable += "LEFT JOIN esp.espaces e ON s.espace = e.uuid_espace ";
+    const where = "where amfu.uuid_acte = $1;";
 
     const UUID = req.params.uuid;
     const queryObject = {
@@ -269,7 +271,7 @@ router.get("/fullmfu/uuid=:uuid", (req, res) => {
         "select",
         (message, resultats) => {
         if (resultats.length > 0 ) {
-            const json = JSON.stringify(resultats);
+            const json = JSON.stringify(resultats[0]);
             // console.log(json);
             res.setHeader("Access-Control-Allow-Origin", "*");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
