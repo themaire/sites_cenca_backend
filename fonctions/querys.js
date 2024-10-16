@@ -28,4 +28,27 @@ function generateUpdateQuery(table, uuid, updateData) {
     };
 }
 
-module.exports = { generateUpdateQuery };
+function generateInsertQuery(table, uuid, insertData) {
+    let insertQuery = `INSERT INTO ${table} (`;
+    const columns = [];
+    const values = [];
+    const placeholders = [];
+
+    Object.keys(insertData).forEach((key, index) => {
+        columns.push(key);
+        placeholders.push(`$${index + 2}`); // +2 pour compenser l'UUID
+        values.push(insertData[key]); // Ajouter la valeur
+    });
+
+    insertQuery += columns.join(", ") + ", uuid) VALUES (";
+    insertQuery += placeholders.join(", ") + ", $1)"; // $1 pour l'UUID
+
+    values.unshift(uuid); // Ajouter l'UUID comme première valeur
+
+    return {
+        text: insertQuery,
+        values: values
+    };
+}
+
+module.exports = { generateUpdateQuery, generateInsertQuery };

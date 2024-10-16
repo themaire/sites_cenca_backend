@@ -142,4 +142,62 @@ async function distinctSiteResearch(
     }
 }
 
-module.exports = { joinQuery, ExecuteQuerySite, selectQuery, distinctSiteResearch };
+async function updateEspaceSite(pool, res, espaceQuery, siteQuery) {
+    // console.log(espaceQuery);
+    // console.log(siteQuery);
+
+    // Exécuter les requêtes UPDATE
+    ExecuteQuerySite(
+        pool,
+        { query: espaceQuery, message: "espace/put/table=espace_site/uuid" },
+        "update",
+        (message, resultats) => {
+            console.log("resultats suite à la requete table espaces : " + resultats);
+            // if (resultats !== false) {
+            if (message === 'ok') {
+                ExecuteQuerySite(
+                    pool,
+                    { query: siteQuery, message: "site/put/table=espace_site/uuid" },
+                    "update",
+                    (message, resultats) => {
+                        res.setHeader("Access-Control-Allow-Origin", "*");
+                        res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+                        if (message === 'ok') {
+                            res.status(200).json({
+                                success: true,
+                                message: "Mise à jour réussie.",
+                                code: 0,
+                                data: resultats
+                            });
+                            console.log("message : " + message);
+                            console.log("resultats : " + resultats);
+                        } else {
+                            const currentDateTime = new Date().toISOString();
+                            console.log(`Échec de la requête de la table sites à ${currentDateTime}`);
+                            console.log(siteQuery.text);
+                            console.log(siteQuery.values);
+                            res.status(500).json({
+                                success: false,
+                                message: "Erreur, la requête s'est mal exécutée.",
+                                code: 1
+                            });
+                        }
+                    }
+                );
+            } else {
+                const currentDateTime = new Date().toISOString();
+                console.log(`Échec de la requête de la table espaces à ${currentDateTime}`);
+                console.log(espaceQuery.text);
+                console.log(espaceQuery.values);
+                res.status(500).json({
+                    success: false,
+                    message: "Erreur, la requête s'est mal exécutée."
+                });
+            }
+        }
+    );
+}
+
+
+module.exports = { joinQuery, ExecuteQuerySite, selectQuery, distinctSiteResearch, updateEspaceSite };

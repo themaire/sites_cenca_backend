@@ -327,7 +327,7 @@ router.get('/projets/uuid=:uuid', (req, res) => {
         values: [UUID]
     };
 
-    ExecuteQuerySite(pool, {query: queryObject, "message": "sites/projetsv/uuid"}, "select",
+    ExecuteQuerySite(pool, {query: queryObject, "message": "sites/projets/uuid"}, "select",
         (message, resultats) => {
             if (resultats.length == 1) {
                 const json = JSON.stringify(resultats);
@@ -336,7 +336,35 @@ router.get('/projets/uuid=:uuid', (req, res) => {
                 res.setHeader('Content-Type', 'application/json; charset=utf-8');
                 res.end(json);
             }else{
-                const json = JSON.stringify({message : "Aucun résultat"});
+                const json = JSON.stringify([]);
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                res.end(json);
+            }
+        });
+});
+// Les projets version web
+router.get('/operations/uuid=:uuid', (req, res) => {
+    const SelectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, pro_geom, ref_uuid_proj ';
+    const FromTable = 'FROM opegerer.operations ';
+    const where = 'where ref_uuid_proj = $1;';
+
+    const UUID = req.params.uuid;
+    const queryObject = {
+        text: joinQuery(SelectFields, FromTable, where),
+        values: [UUID]
+    };
+
+    ExecuteQuerySite(pool, {query: queryObject, "message": "sites/operation/uuid"}, "select",
+        (message, resultats) => {
+            if (resultats.length > 0) {
+                const json = JSON.stringify(resultats);
+                // console.log(json);
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                res.end(json);
+            }else{
+                const json = JSON.stringify([]);
                 res.setHeader('Access-Control-Allow-Origin', '*');
                 res.setHeader('Content-Type', 'application/json; charset=utf-8');
                 res.end(json);
