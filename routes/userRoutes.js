@@ -80,7 +80,7 @@ router.post('/login', async (req, res) => {
   ExecuteQuerySite(
     pool,
     { query: userQuery, message: "site/put/table=espace_site/uuid" },
-    "update",
+    "select",
     async (message, resultats) => { // On a le droit de mettre async ici sur la fonction de rappel (callback)
       if (resultats.length !== 1) {
         return res.status(400).json({ message: 'Utilisateur non trouvé' });
@@ -160,7 +160,10 @@ router.get("/me", authenticateToken, (req, res) => {
       { query: queryObject, message: "auth/me" },
       "select",
       (message, resultats) => {
-        if (resultats.length > 0 || message == "ok") {
+        if (resultats.length > 0) {
+          // console.log("resultats : ");
+          // console.log(resultats);
+
           const json = JSON.stringify(resultats[0]);
           // console.log(json);
           res.setHeader("Access-Control-Allow-Origin", "*");
@@ -190,7 +193,9 @@ router.get("/logout", authenticateToken, async (req, res) => {
       { query: queryObject, message: "auth/logout" },
       "insert",
       async (message, resultats) => {
-        if (message == "ok") {
+        console.log("message : ");
+        console.log(message);
+        if (message === 'ok') {
           const json = JSON.stringify([]);
           res.setHeader("Access-Control-Allow-Origin", "*");
           res.setHeader("Content-Type", "application/json; charset=utf-8");

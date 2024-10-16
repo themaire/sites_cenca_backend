@@ -288,7 +288,7 @@ router.get("/fullmfu/uuid=:uuid", (req, res) => {
 
 // Projets lite
 router.get('/projetslite/uuid=:uuid', (req, res) => {
-    const SelectFields = 'SELECT uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut, webapp '
+    const SelectFields = 'SELECT uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut, webapp, uuid_site '
     const FromTable = 'FROM ope.synthesesites ';
     const where = 'where cd_localisation = $1';
 

@@ -25,17 +25,21 @@ async function ExecuteQuerySite(pool, param, type, callback) {
         const nbLignes = RESULTS.rowCount;
 
         // Si aucune ligne n'est retournée ou si le type est "update" ou "insert" ou "delete", appelle le callback avec un message et une liste vide
-        if (nbLignes === 0 && ["update", "insert", "delete"].includes(type)) {
+        if (nbLignes >= 0 && ["update", "insert", "delete"].includes(type)) {
             callback("ok", []);
-        } else if (nbLignes > 0) {
+        } else if (nbLignes >= 0) {
             // Si des lignes sont retournées, affiche les résultats et appelle le callback avec les données
-            console.log(" ");
             console.log("Résultats depuis la fonction ExecuteQuerySite()");
             console.log("Params : ", param);
             console.log(nbLignes + " résultats.");
             callback(param["message"], RESULTS.rows);
         } else {
             // Si aucune condition n'est remplie, appelle le callback avec un message et une liste vide
+            console.log("aucune condition remplie");
+            console.log("nbLignes : ", nbLignes);
+            console.log("type : ", type);
+            console.log('["update", "insert", "delete"].includes(type) : ', ["update", "insert", "delete"].includes(type));
+
             callback(param["message"], []);
         }
     } catch (error) {

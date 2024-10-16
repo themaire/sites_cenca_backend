@@ -62,7 +62,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                 (message, resultats) => {
                     console.log("resultats suite à la requete table espaces : " + resultats);
                     // if (resultats !== false) {
-                    if ('message' === 'ok') {
+                    if (message === 'ok') {
                         ExecuteQuerySite(
                             pool,
                             { query: siteQuery, message: "site/put/table=espace_site/uuid" },
@@ -71,7 +71,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                                 res.setHeader("Access-Control-Allow-Origin", "*");
                                 res.setHeader("Content-Type", "application/json; charset=utf-8");
 
-                                if (resultats !== false) {
+                                if (message === 'ok') {
                                     res.status(200).json({
                                         success: true,
                                         message: "Mise à jour réussie.",
