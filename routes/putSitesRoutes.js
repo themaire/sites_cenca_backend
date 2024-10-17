@@ -66,7 +66,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
             ExecuteQuerySite(
                 pool,
                 { query: queryObject, message: "sites/put/table=" + TABLE + "/uuid" },
-                (message, resultats) => {
+                ( resultats, message ) => {
                     res.setHeader("Access-Control-Allow-Origin", "*");
                     res.setHeader("Content-Type", "application/json; charset=utf-8");
 

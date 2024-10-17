@@ -26,13 +26,13 @@ async function ExecuteQuerySite(pool, param, type, callback) {
 
         // Si aucune ligne n'est retournée ou si le type est "update" ou "insert" ou "delete", appelle le callback avec un message et une liste vide
         if (nbLignes >= 0 && ["update", "insert", "delete"].includes(type)) {
-            callback("ok", []);
+            callback([], "ok");
         } else if (nbLignes >= 0) {
             // Si des lignes sont retournées, affiche les résultats et appelle le callback avec les données
             console.log("Résultats depuis la fonction ExecuteQuerySite()");
             console.log("Params : ", param);
             console.log(nbLignes + " résultats.");
-            callback(param["message"], RESULTS.rows);
+            callback(RESULTS.rows, param["message"]);
         } else {
             // Si aucune condition n'est remplie, appelle le callback avec un message et une liste vide
             console.log("aucune condition remplie");
@@ -40,14 +40,14 @@ async function ExecuteQuerySite(pool, param, type, callback) {
             console.log("type : ", type);
             console.log('["update", "insert", "delete"].includes(type) : ', ["update", "insert", "delete"].includes(type));
 
-            callback(param["message"], []);
+            callback([], param["message"]);
         }
     } catch (error) {
         // En cas d'erreur, affiche l'erreur et appelle le callback avec un message d'erreur et une liste vide
         console.error("Erreur lors de l'exécution de la requête : ", param["query"]);
         console.error("Erreur de PostgreSQL : ", error);
         if (typeof callback === 'function') {
-            callback("Erreur lors de l'exécution de la requête :", []);
+            callback([], "Erreur lors de l'exécution de la requête :");
         } else {
             console.error("Callback is not a function");
         }
@@ -199,5 +199,40 @@ async function updateEspaceSite(pool, res, espaceQuery, siteQuery) {
     );
 }
 
+function executeQueryAndRespond(pool, SelectFields, FromTable, where, uuid, res, message, mode = "lite") {
+    const queryObject = {
+        text: joinQuery(SelectFields, FromTable, where),
+        values: [uuid],
+    };
 
-module.exports = { joinQuery, ExecuteQuerySite, selectQuery, distinctSiteResearch, updateEspaceSite };
+    ExecuteQuerySite(pool, {query: queryObject, "message": message}, "select",
+        (resultats) => {
+            let json;
+            if (resultats.length > 0) {
+                json = JSON.stringify(resultats);
+                if (mode == "full") {
+                    json = json.slice(1, -1);
+                }
+            } else {
+                json = JSON.stringify([]);
+            }
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            console.log("json : " + json);
+            res.end(json);
+        });
+}
+
+function reset() {
+    // Variables vides pour les requêtes
+
+    let SelectFields;
+    let FromTable;
+    let where;
+    let message;
+    let json;
+
+    return { SelectFields, FromTable, where, message, json };
+}
+
+module.exports = { joinQuery, ExecuteQuerySite, selectQuery, distinctSiteResearch, updateEspaceSite, executeQueryAndRespond, reset };
