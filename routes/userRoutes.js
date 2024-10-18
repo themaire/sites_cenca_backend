@@ -81,7 +81,7 @@ router.post('/login', async (req, res) => {
     pool,
     { query: userQuery, message: "site/put/table=espace_site/uuid" },
     "select",
-    async (message, resultats) => { // On a le droit de mettre async ici sur la fonction de rappel (callback)
+    async ( resultats, message ) => { // On a le droit de mettre async ici sur la fonction de rappel (callback)
       if (resultats.length !== 1) {
         return res.status(400).json({ message: 'Utilisateur non trouvé' });
       }else if (resultats.length === 1) {
@@ -145,11 +145,7 @@ router.get("/me", authenticateToken, (req, res) => {
   const where = "WHERE sal.identifiant = $1 ORDER BY salgro.gro_id desc limit 1;";
 
   let queryObject = {
-    text: joinQuery(
-      SelectFields,
-      FromTable,
-      where
-    ),
+    text: joinQuery( SelectFields, FromTable, where ),
     values: [req.tokenInfos["identifiant"]],
   }
 
@@ -159,7 +155,7 @@ router.get("/me", authenticateToken, (req, res) => {
       pool,
       { query: queryObject, message: "auth/me" },
       "select",
-      (message, resultats) => {
+      ( resultats, message ) => {
         if (resultats.length > 0) {
           // console.log("resultats : ");
           // console.log(resultats);
@@ -192,7 +188,7 @@ router.get("/logout", authenticateToken, async (req, res) => {
       pool,
       { query: queryObject, message: "auth/logout" },
       "insert",
-      async (message, resultats) => {
+      async ( resultats, message ) => {
         console.log("message : ");
         console.log(message);
         if (message === 'ok') {

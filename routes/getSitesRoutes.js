@@ -12,31 +12,33 @@ const pool = require('../dbPool/poolConnect.js');
     //   console.log(res);
     // });
 
-router.get(
-    "/criteria/:type/:code/:nom/:commune/:milnat/:resp",
-    (req, res) => {
-        const queryObject = selectQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
+router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp",
+            (req, res) => {
 
-        ExecuteQuerySite(
-            pool,
-            { message: "/sites/criteria/type/code...", query: queryObject },
-            "select",
-            (message, resultats) => {
-                if (resultats.length > 0 || message == "ok") {
-                const json = JSON.stringify(resultats);
-                // console.log(json);
-                res.setHeader("Access-Control-Allow-Origin", "*");
-                res.setHeader("Content-Type", "application/json; charset=utf-8");
-                res.end(json);
-                } else {
-                const json = JSON.stringify([]);
-                res.setHeader("Access-Control-Allow-Origin", "*");
-                res.setHeader("Content-Type", "application/json; charset=utf-8");
-                res.end(json);
-                }
+                // A FAIRE POUR PLUS TARD : adapter la fonction executeQueryAndRespond() (utilisée de partout sur toutes le routes) pour qu'elle puisse prendre en compte les paramètres de la requête
+
+                const queryObject = selectQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
+
+                ExecuteQuerySite(
+                    pool,
+                    { message: "/sites/criteria/type/code...", query: queryObject },
+                    "select",
+                    ( resultats, message ) => {
+                        if (resultats.length > 0 || message == "ok") {
+                        const json = JSON.stringify(resultats);
+                        // console.log(json);
+                        res.setHeader("Access-Control-Allow-Origin", "*");
+                        res.setHeader("Content-Type", "application/json; charset=utf-8");
+                        res.end(json);
+                        } else {
+                        const json = JSON.stringify([]);
+                        res.setHeader("Access-Control-Allow-Origin", "*");
+                        res.setHeader("Content-Type", "application/json; charset=utf-8");
+                        res.end(json);
+                        }
+                    }
+                );
             }
-        );
-    }
 );
   
 // Données d'un site par son uuid
@@ -155,7 +157,7 @@ router.get('/projets/uuid=:uuid/:mode', (req, res) => {
     message = "sites/projets/uuid/" + mode;
 
     if (req.params.mode == 'lite') {
-        SelectFields = 'SELECT uuid_ope uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut, webapp, uuid_site '
+        SelectFields = 'SELECT uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut, webapp, uuid_site '
         FromTable = 'FROM ope.synthesesites ';
         where = 'where cd_localisation = $1';
     } else if (req.params.mode == 'full') {

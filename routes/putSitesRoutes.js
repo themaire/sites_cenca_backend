@@ -159,10 +159,10 @@ router.put("/insert/table=:table/uuid=:uuid", (req, res) => {
             const queryObject = generateInsertQuery(TABLE, UUID, updateData);
             console.log(queryObject);
 
-            siteUpdate(
+            ExecuteQuerySite(
                 pool,
                 { query: queryObject, message: "sites/put/table=" + TABLE + "/uuid" },
-                (message, resultats) => {
+                ( resultats, message ) => {
                     res.setHeader("Access-Control-Allow-Origin", "*");
                     res.setHeader("Content-Type", "application/json; charset=utf-8");
 

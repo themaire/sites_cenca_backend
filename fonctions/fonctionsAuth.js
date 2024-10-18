@@ -34,7 +34,7 @@ const authenticateToken = (req, res, next) => {
         pool,
         { query: queryObject, message: "test if token is NOT blacklisted." },
         "select",
-        (message, resultats) => {
+        ( resultats, message ) => {
 
           // console.log("resultats : ");
           // console.log(resultats);

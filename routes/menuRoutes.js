@@ -43,7 +43,7 @@ router.get("/parent=:parent", (req, res) => {
         pool,
         { query: queryObject, message: "menu/parent" },
         "select",
-        (message, resultats) => {
+        ( resultats, message ) => {
             if (resultats.length > 0 || message == "ok") {
                 const json = JSON.stringify(resultats);
                 // console.log(json);
@@ -95,7 +95,7 @@ router.get("/tokenparent=:parent", authenticateToken, (req, res) => {
         pool,
         { query: queryObject, message: "menu/parent" },
         "select",
-        (message, resultats) => {
+        ( resultats, message ) => {
             if (resultats.length > 0 || message == "ok") {
                 const json = JSON.stringify(resultats);
                 // console.log(json);
