@@ -151,15 +151,16 @@ async function updateEspaceSite(pool, res, espaceQuery, siteQuery) {
         pool,
         { query: espaceQuery, message: "espace/put/table=espace_site/uuid" },
         "update",
-        (message, resultats) => {
+        (resultats, message) => {
             console.log("resultats suite à la requete table espaces : " + resultats);
             // if (resultats !== false) {
             if (message === 'ok') {
+                console.log("DEBUG PUT ESTPACE OK")
                 ExecuteQuerySite(
                     pool,
                     { query: siteQuery, message: "site/put/table=espace_site/uuid" },
                     "update",
-                    (message, resultats) => {
+                    (resultats, message) => {
                         res.setHeader("Access-Control-Allow-Origin", "*");
                         res.setHeader("Content-Type", "application/json; charset=utf-8");
 
@@ -186,6 +187,9 @@ async function updateEspaceSite(pool, res, espaceQuery, siteQuery) {
                     }
                 );
             } else {
+                console.log("DEBUG PUT ESPACE FAIL")
+                console.log("message : " + message);
+
                 const currentDateTime = new Date().toISOString();
                 console.log(`Échec de la requête de la table espaces à ${currentDateTime}`);
                 console.log(espaceQuery.text);
