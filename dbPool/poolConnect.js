@@ -30,6 +30,6 @@ pool.connect().then(() => {
   .catch((err) => {
     console.error("Error connecting to PostgreSQL database", err);
   });
-// The Pool is ready to serve various query depending
+//  The Pool is ready to serve various query depending
 
 module.exports = pool;
