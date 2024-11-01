@@ -138,3 +138,5 @@ HelloWorld.js
 node_pgsql.code-workspace
 .env
 backend*.service
+
+*.sh

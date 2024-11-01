@@ -160,4 +160,47 @@ router.put("/put/table=:table/insert", (req, res) => {
     }
 });
 
+// Supprimer une opération
+router.delete("/delete/operations/uuid=:uuid", (req, res) => {
+    const operationId = req.params.id;
+
+    try {
+        const query = `DELETE FROM opegerer.operations WHERE id = $1`;
+        const values = [operationId];
+
+        ExecuteQuerySite(
+            pool,
+            { query, values, message: "operations/delete" },
+            "delete",
+            (resultats, message) => {
+                res.setHeader("Access-Control-Allow-Origin", "*");
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+                if (message === 'ok') {
+                    res.status(200).json({
+                        success: true,
+                        message: "Suppression réussie.",
+                        code: 0,
+                        data: resultats
+                    });
+                    console.log("message : " + message);
+                } else {
+                    res.status(500).json({
+                        success: false,
+                        message: "Erreur lors de la suppression.",
+                        code: 1
+                    });
+                    console.log("message : " + message);
+                }
+            }
+        );
+    } catch (error) {
+        console.error("Erreur lors de la suppression de l'opération:", error);
+        res.status(500).json({
+            success: false,
+            message: "Erreur interne du serveur."
+        });
+    }
+});
+
 module.exports = router;

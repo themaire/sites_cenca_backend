@@ -151,7 +151,7 @@ async function updateEspaceSite(pool, res, espaceQuery, siteQuery) {
         pool,
         { query: espaceQuery, message: "espace/put/table=espace_site/uuid" },
         "update",
-        (resultats, message) => {
+        ( resultats, message ) => {
             console.log("resultats suite à la requete table espaces : " + resultats);
             // if (resultats !== false) {
             if (message === 'ok') {

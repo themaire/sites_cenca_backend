@@ -28,23 +28,27 @@ function generateUpdateQuery(table, uuid, updateData) {
     };
 }
 
-function generateInsertQuery(table, uuid, insertData) {
-    let insertQuery = `INSERT INTO ${table} (`;
-    const columns = [];
-    const values = [];
-    const placeholders = [];
+function generateInsertQuery(tableName, insertData) {
+    // Convertir l'objet en tableau de paires clé-valeur
+    const entries = Object.entries(insertData);
 
-    Object.keys(insertData).forEach((key, index) => {
-        columns.push(key);
-        placeholders.push(`$${index + 2}`); // +2 pour compenser l'UUID
-        values.push(insertData[key]); // Ajouter la valeur
-    });
+    // Ignorer le premier élément pour les placeholders
+    const [firstEntry, ...filteredEntries] = entries;
 
-    insertQuery += columns.join(", ") + ", uuid) VALUES (";
-    insertQuery += placeholders.join(", ") + ", $1)"; // $1 pour l'UUID
+    // Reconstruire l'objet sans le premier élément
+    const filteredData = Object.fromEntries(filteredEntries);
 
-    values.unshift(uuid); // Ajouter l'UUID comme première valeur
+    // Générer les noms de colonnes et les valeurs
+    const columns = Object.keys(filteredData).join(', ');
+    const values = Object.values(filteredData);
 
+    // Générer les placeholders pour les valeurs
+    const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
+
+    // Construire la requête SQL en utilisant gen_random_uuid() pour le premier élément
+    const insertQuery = `INSERT INTO ${tableName} (${firstEntry[0]}, ${columns}) VALUES (gen_random_uuid(), ${placeholders});`;
+
+    // Retourner l'objet de requête pour pg
     return {
         text: insertQuery,
         values: values
