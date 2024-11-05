@@ -9,7 +9,7 @@ const pool = require('../dbPool/poolConnect.js');
 // Generateur de requetes SQL
 const { generateUpdateQuery, generateInsertQuery } = require('../fonctions/querys.js'); 
 
-// Mettre à jour un site, un acte...
+// Mettre à jour un site, un acte, un projet, une operation ...
 router.put("/put/table=:table/uuid=:uuid", (req, res) => {
     const TABLE = req.params.table;
     const UUID = req.params.uuid; // UUID du site à mettre à jour
@@ -53,11 +53,40 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
             
             updateEspaceSite(pool, res, espaceQuery, siteQuery);
             
+        } else if (['projets', 'operations'].includes(TABLE)) {
+
+            const queryObject = generateUpdateQuery("opegerer." + TABLE, UUID, updateData);
+            console.log(queryObject);
+
+            ExecuteQuerySite(
+                pool,
+                { query: queryObject, message: "sites/put/table=" + TABLE + "/uuid" },
+                'update',
+                ( resultats, message ) => {
+                    res.setHeader("Access-Control-Allow-Origin", "*");
+                    res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+                    if (message === 'ok') {
+                        res.status(200).json({
+                            success: true,
+                            message: "Mise à jour réussie sur la table " + TABLE + ".",
+                            data: resultats
+                        });
+                        console.log("message : " + message);
+                        console.log("resultats : " + resultats);
+                    } else {
+                        const currentDateTime = new Date().toISOString();
+                        console.log(`Échec de la requête à ${currentDateTime}`);
+                        console.log(queryObject.text);
+                        console.log(queryObject.values);
+                        res.status(500).json({
+                            success: false,
+                            message: "Erreur, la requête s'est mal exécutée."
+                        });
+                    }
+                }
+            );
         } else if (TABLE in ['acte']) {
-            let REQ;
-            if (TABLE == 'site') {
-                REQ = reqUpdateSite;
-            }
 
             const queryObject = generateUpdateQuery(TABLE, UUID, updateData);
             console.log(queryObject);

@@ -14,13 +14,23 @@ function generateUpdateQuery(table, uuid, updateData) {
     updateQuery += setClauses.join(", ");
     console.log("table : " + table);
     const tableParts = table.split('.');
-    const secondPart = tableParts[1].slice(0, -1); // Récupérer la deuxième partie (nom de la table)
+    let secondPart = '';
+    if (tableParts[1] === 'projets') {
+        secondPart = 'proj';
+    } else {
+        secondPart = tableParts[1].slice(0, -1); // Récupérer la deuxième partie (nom de la table)
+    }
+    console.log("secondPart : " + secondPart);
+    
     const whereClause = " WHERE uuid_" + secondPart + " = $1";
-    // console.log("whereClause : " + whereClause);
+    console.log("whereClause : " + whereClause);
     
     values.unshift(uuid); // Ajouter l'UUID comme première valeur
 
     const queryText = updateQuery + whereClause;
+
+    console.log('------> queryText : ');
+    console.log(queryText);
 
     return {
         text: queryText,
