@@ -23,10 +23,20 @@ const pool = require('../dbPool/poolConnect.js');
 // Fonctions pour l'authentification
 const { authenticateToken } = require('../fonctions/fonctionsAuth.js'); 
 
+let badPasswordMessage = "Le mot de passe doit contenir au moins 12 caractères, une majuscule, ";
+badPasswordMessage += "une minuscule, un chiffre et un caractère spécial.";
+
+const errorBddCreateUser = "Erreur lors de la création de l'utilisateur au niveau de la base de données.";
 
 // Route pour créer un utilisateur avec un mot de passe haché
 router.post('/register', async (req, res) => {
   const { username, password } = req.body;
+
+  // Vérification de la robustesse du mot de passe
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
+  if (!passwordRegex.test(password)) {
+    return res.status(400).json({ message: badPasswordMessage });
+  }
 
   try {
     // Hachage du mot de passe
@@ -43,7 +53,7 @@ router.post('/register', async (req, res) => {
     res.status(201).json({ message: 'Utilisateur créé avec succès', user: result.rows[0] });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Erreur lors de la création de l\'utilisateur' });
+    res.status(500).json({ message: errorBddCreateUser });
   }
 });
 

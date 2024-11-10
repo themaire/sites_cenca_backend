@@ -55,6 +55,9 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
             
         } else if (['projets', 'operations'].includes(TABLE)) {
 
+            console.log("updateData");
+            console.log(updateData);
+
             const queryObject = generateUpdateQuery("opegerer." + TABLE, UUID, updateData);
             console.log(queryObject);
 

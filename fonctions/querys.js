@@ -15,8 +15,12 @@ function generateUpdateQuery(table, uuid, updateData) {
     console.log("table : " + table);
     const tableParts = table.split('.');
     let secondPart = '';
-    if (tableParts[1] === 'projets') {
-        secondPart = 'proj';
+    if (['projets', 'operations'].includes(tableParts[1])) {
+        if(tableParts[1] == 'projets'){
+            secondPart = 'proj';
+        } else if(tableParts[1] == 'operations'){
+            secondPart = 'ope';
+        }
     } else {
         secondPart = tableParts[1].slice(0, -1); // Récupérer la deuxième partie (nom de la table)
     }
