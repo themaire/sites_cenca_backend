@@ -180,7 +180,7 @@ router.get('/operations/uuid=:uuid/:mode', (req, res) => {
         SelectFields = 'SELECT uuid_ope, code, titre, description, surf, date_debut ';
         where = 'where ref_uuid_proj = $1;';
     } else if (req.params.mode == 'full') {
-        SelectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, pro_geom, ref_uuid_proj ';
+        SelectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, geom, ref_uuid_proj ';
         where = 'where uuid_ope = $1;';
     }
     FromTable = 'FROM opegerer.operations ';
