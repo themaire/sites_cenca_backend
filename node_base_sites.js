@@ -16,16 +16,18 @@ app.use(express.json()); // Pour traiter les requêtes JSON
 app.use(express.urlencoded({ extended: true })); // Pour traiter les requêtes encodées en URL
 
 // Importation des routes
-const userRoutes = require('./routes/userRoutes');
+const menuRoutes = require('./routes/menuRoutes');
 const siteRoutesGet = require('./routes/getSitesRoutes');
 const siteRoutesPut = require('./routes/putSitesRoutes');
-const menuRoutes = require('./routes/menuRoutes');
+const foncierRoutes = require('./routes/foncierRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 async function run() {
   try {
     app.use('/auth', userRoutes);
     app.use('/sites', siteRoutesGet);
     app.use('/sites', siteRoutesPut);
+    app.use('/sites', foncierRoutes);
     app.use('/menu', menuRoutes);
   } catch (error) {
     console.error("Error try :" + error);
