@@ -206,8 +206,12 @@ async function updateEspaceSite(pool, res, espaceQuery, siteQuery) {
 function executeQueryAndRespond(pool, SelectFields, FromTable, where, uuid, res, message, mode = "lite") {
     const queryObject = {
         text: joinQuery(SelectFields, FromTable, where),
-        values: [uuid],
+        // values: [uuid],
     };
+    if (uuid !== "null") queryObject.values = [uuid];  // Ajoutes les valeurs si elles existent a l'objet queryObject
+
+    console.log("queryObject : ");
+    console.log(queryObject);
 
     ExecuteQuerySite(pool, {query: queryObject, "message": message}, "select",
         (resultats) => {
