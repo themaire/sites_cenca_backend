@@ -42,7 +42,7 @@ function generateUpdateQuery(table, uuid, updateData) {
     };
 }
 
-function generateInsertQuery(tableName, insertData) {
+function generateInsertQuery(tableName, insertData, useUUID = true) {
     // Convertir l'objet en tableau de paires clé-valeur
     const entries = Object.entries(insertData);
 
@@ -59,8 +59,14 @@ function generateInsertQuery(tableName, insertData) {
     // Générer les placeholders pour les valeurs
     const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
 
-    // Construire la requête SQL en utilisant gen_random_uuid() pour le premier élément
-    const insertQuery = `INSERT INTO ${tableName} (${firstEntry[0]}, ${columns}) VALUES (gen_random_uuid(), ${placeholders});`;
+    // Construire la requête SQL en utilisant (ou pas) gen_random_uuid() pour le premier élément
+    let genUUID = ''; // Pour générer un UUID (ou pas)
+    let firstEntryValue = ''; // Pour specifier la clé de la table comme premier élément (ou pas)
+    if (useUUID) {
+        genUUID = 'gen_random_uuid(),';
+        firstEntryValue = firstEntry[0];
+    }
+    const insertQuery = `INSERT INTO ${tableName} (${firstEntryValue} ${columns}) VALUES (${genUUID} ${placeholders});`;
 
     // Retourner l'objet de requête pour pg
     return {

@@ -139,25 +139,31 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
 // Ajouter un site, un acte...
 router.put("/put/table=:table/insert", (req, res) => {
     const TABLE = req.params.table;
-    const insertData = req.body; // Récupérer l'objet JSON envoyé
+    const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
+    const MESSAGE = "sites/put/table=" + TABLE + "/insert";
+    // Tables possibles pour des differents insert. En clé le nom de la table, en valeur le schema
+    const TABLES = {'sites':'sitcenca', 'actes_mfu':'sitcenca', 'projets':'opegerer', 'operations':'opegerer'};
 
     try {
-        // !!!!!!! A FAIRE PLUS TARD !!!!!!!
-        if (TABLE == 'operations') {
 
-            const queryObject = generateInsertQuery("opegerer." + TABLE, insertData);
+        if (Object.keys(TABLES).includes(TABLE)) {
+            
+            const WORKING_TABLE = TABLES[TABLE] + "." + TABLE;
+            console.log("WORKING_TABLE : " + WORKING_TABLE);
+
+            const queryObject = generateInsertQuery(WORKING_TABLE, INSERT_DATA);
             console.log(queryObject);
 
             ExecuteQuerySite(
                 pool,
-                { query: queryObject, message: "sites/put/table=" + TABLE + "/insert" },
+                { query: queryObject, message: MESSAGE },
                 "insert",
                 ( resultats, message ) => {
                     res.setHeader("Access-Control-Allow-Origin", "*");
                     res.setHeader("Content-Type", "application/json; charset=utf-8");
 
                     if (message === 'ok') {
-                        res.status(200).json({
+                        res.status(201).json({
                             success: true,
                             message: "Insert réussie.",
                             code: 0,
@@ -178,13 +184,15 @@ router.put("/put/table=:table/insert", (req, res) => {
                 }
             );
         } else {
+            const BAD_MESSAGE = "Table " + TABLE + " inconnue dans la liste des tables connues.";
+            console.log(BAD_MESSAGE);
             res.status(400).json({
                 success: false,
-                message: "Table invalide."
+                message: BAD_MESSAGE
             });
         }
     } catch (error) {
-        console.erroar("Erreur lors de la mise à jour : ", error);
+        console.error("Erreur lors de la mise à jour : ", error);
         res.status(500).json({
             success: false,
             message: "Erreur interne du serveur."

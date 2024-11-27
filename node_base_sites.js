@@ -21,6 +21,7 @@ const siteRoutesGet = require('./routes/getSitesRoutes');
 const siteRoutesPut = require('./routes/putSitesRoutes');
 const foncierRoutes = require('./routes/foncierRoutes');
 const userRoutes = require('./routes/userRoutes');
+const processRoutes = require('./routes/processRoutes');
 
 async function run() {
   try {
@@ -29,6 +30,27 @@ async function run() {
     app.use('/sites', siteRoutesPut);
     app.use('/sites', foncierRoutes);
     app.use('/menu', menuRoutes);
+    app.use('/process', processRoutes);
+
+    // Middleware pour capturer les routes inconnues
+    app.use((req, res, next) => {
+      res.status(404).json({
+        success: false,
+        message: "Route non trouvée.",
+        req : req.url
+      });
+      console.log("Route non trouvée : " + req.url);
+    });
+
+    // Middleware pour gérer les erreurs
+    app.use((err, req, res, next) => {
+      console.error(err.stack);
+      res.status(500).json({
+        success: false,
+        message: "Erreur interne du serveur."
+      });
+    });
+
   } catch (error) {
     console.error("Error try :" + error);
     pool.end();
