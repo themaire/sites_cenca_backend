@@ -67,6 +67,9 @@ router.post('/login', async (req, res) => {
   // et le renvoie au client
   // Si les mots de passe ne correspondent pas, renvoie un message d'erreur
   // Si l'utilisateur n'existe pas, renvoie un message d'erreur
+  // Si une erreur se produit, renvoie un message d'erreur
+  // Sinon une réponse 200 OK est renvoyée avec le token d'authentification
+  // Fin
   
   // Si une erreur se produit, renvoie un message d'erreur
 
@@ -76,7 +79,6 @@ router.post('/login', async (req, res) => {
   const { username, password } = req.body;
   // const hashedPassword = await bcrypt.hash(password, saltRounds);
   // console.log("---------> hashedPassword : " + hashedPassword);
-
 
   // Rechercher l'utilisateur par son nom d'utilisateur et si il existe
   let querySQL = 'SELECT sal.identifiant, sal.sal_hash, salgro.gro_id FROM admin.salaries sal ';

@@ -42,7 +42,7 @@ router.get("/foncier/parc_extraction=:id", (req, res) => {
     executeQueryAndRespond(pool, SelectFields, FromTable, where, ID, res, message)
 });
 
-// Ajouter un site, un acte...
+// Ajouter une une extraction foncière ou une parcelle
 router.put("/foncier/put/table=:table/insert", (req, res) => {
     const TABLE = req.params.table;
     const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
@@ -101,7 +101,7 @@ router.put("/foncier/put/table=:table/insert", (req, res) => {
         console.error("Erreur lors de la mise à jour : ", error);
         res.status(500).json({
             success: false,
-            message: "Erreur interne du serveur."
+            message: "Erreur interne du serveur. La base de données est accessible?"
         });
     }
 });

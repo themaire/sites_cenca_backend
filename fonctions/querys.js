@@ -42,9 +42,14 @@ function generateUpdateQuery(table, uuid, updateData) {
     };
 }
 
-function generateInsertQuery(tableName, insertData, useUUID = true) {
+function generateInsertQuery(tableName, insertData, createUUID = true) {
     // Convertir l'objet en tableau de paires clé-valeur
     const entries = Object.entries(insertData);
+
+    // Vérifier si entries contient des éléments
+    if (entries.length === 0) {
+        throw new Error("insertData ne peut pas être vide");
+    }
 
     // Ignorer le premier élément pour les placeholders
     const [firstEntry, ...filteredEntries] = entries;
@@ -62,11 +67,14 @@ function generateInsertQuery(tableName, insertData, useUUID = true) {
     // Construire la requête SQL en utilisant (ou pas) gen_random_uuid() pour le premier élément
     let genUUID = ''; // Pour générer un UUID (ou pas)
     let firstEntryValue = ''; // Pour specifier la clé de la table comme premier élément (ou pas)
-    if (useUUID) {
+    let insertQuery = '';
+    if (createUUID) {
         genUUID = 'gen_random_uuid(),';
         firstEntryValue = firstEntry[0];
+        insertQuery = `INSERT INTO ${tableName} (${firstEntryValue}, ${columns}) VALUES (${genUUID} ${placeholders});`;
+    }else{
+        insertQuery = `INSERT INTO ${tableName} (${columns}) VALUES (${placeholders});`;
     }
-    const insertQuery = `INSERT INTO ${tableName} (${firstEntryValue} ${columns}) VALUES (${genUUID} ${placeholders});`;
 
     // Retourner l'objet de requête pour pg
     return {

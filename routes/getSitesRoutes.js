@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 
+// const { authenticateToken } = require('../fonctions/fonctionsAuth.js'); 
+
 // Fonctions et connexion à PostgreSQL
 const { joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch, executeQueryAndRespond, reset } = require('../fonctions/fonctionsSites.js'); 
 const pool = require('../dbPool/poolConnect.js');
@@ -12,7 +14,7 @@ const pool = require('../dbPool/poolConnect.js');
     //   console.log(res);
     // });
 
-router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp",
+router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp", 
             (req, res) => {
 
                 // A FAIRE POUR PLUS TARD : adapter la fonction executeQueryAndRespond() (utilisée de partout sur toutes le routes) pour qu'elle puisse prendre en compte les paramètres de la requête
@@ -153,39 +155,38 @@ router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
 // Les projets version web
 router.get('/projets/uuid=:uuid/:mode', (req, res) => {
     let { SelectFields, FromTable, where, message } = reset();
-    mode = req.params.mode;
-    message = "sites/projets/uuid/" + mode;
+    message = "sites/projets/uuid/" + req.params.mode;
+    SelectFields = 'SELECT ';
 
     if (req.params.mode == 'lite') {
-        SelectFields = 'SELECT uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut, webapp, uuid_site '
+        SelectFields += 'uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut, webapp, uuid_site '
         FromTable = 'FROM ope.synthesesites ';
         where = 'where cd_localisation = $1';
     } else if (req.params.mode == 'full') {
-        SelectFields = 'SELECT uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_geom, pro_pression_ciblee, pro_typ_objectif, pro_enjeux_eco, pro_nv_enjeux, pro_obj_ope, pro_obj_projet, pro_surf_totale, pro_maitre_ouvrage ';
-        FromTable = 'FROM opegerer.projets ';
+        SelectFields += 'uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_pression_ciblee, pro_typ_objectif, pro_enjeux_eco, pro_nv_enjeux, pro_obj_ope, pro_surf_totale, pro_maitre_ouvrage, ref_loc_id, loc_poly as geom ';
+        FromTable = 'FROM opegerer.projets LEFT JOIN opegerer.localisation_tvx ON opegerer.projets.ref_loc_id = opegerer.localisation_tvx.loc_id ';
         where = 'where uuid_proj = $1;';
     }
 
-    executeQueryAndRespond(pool, SelectFields, FromTable, where, req.params.uuid, res, message, mode); // Retourne un ou plusieurs résultats
+    executeQueryAndRespond(pool, SelectFields, FromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
 });
 
 
 // Les operations version web
 router.get('/operations/uuid=:uuid/:mode', (req, res) => {
     let { SelectFields, FromTable, where, message, json } = reset();
-    mode = req.params.mode;
-    message = "sites/operation/uuid/" + mode;
+    message = "sites/operation/uuid/" + req.params.mode;
 
     if (req.params.mode == 'lite') {
         SelectFields = 'SELECT uuid_ope, code, titre, description, surf, date_debut ';
         where = 'where ref_uuid_proj = $1;';
     } else if (req.params.mode == 'full') {
-        SelectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, geom, ref_uuid_proj ';
+        SelectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id ';
         where = 'where uuid_ope = $1;';
     }
     FromTable = 'FROM opegerer.operations ';
 
-    executeQueryAndRespond(pool, SelectFields, FromTable, where, req.params.uuid, res, message, mode); // Retourne un ou plusieurs résultats
+    executeQueryAndRespond(pool, SelectFields, FromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
 });
 
 // Récuperation de l'IP publique
@@ -259,5 +260,66 @@ router.get("/selectors", (req, res) => {
     );
 });
 
+// Les liste de choix pour les champs de formulaires
+router.get('/selectvalues=:list', (req, res) => {
+    let { SelectFields, FromTable, where, message, json } = reset();
+    const list = req.params.list;
+    message = "/sites/selectvalues/" + list;
+    let order = undefined;
+
+    console.log("Demande de la liste de choix de la table " + list);
+
+    SelectFields = 'SELECT ';
+
+    const simpleTables = ['ope.typ_actions', 'ope.typ_financeurs', 'ope.typ_projets', 'ope.typ_roles', 'opegerer.typ_enjeux', 'opegerer.typ_hydrauliques', 'opegerer.typ_infrastructures', 'opegerer.typ_mecaniques', 'opegerer.typ_objectifope', 'opegerer.typ_objectifs'];
+
+    if (simpleTables.includes(list)) {
+        SelectFields += 'cd_type, libelle ';
+    }else if (list == 'ope.actions') {
+        SelectFields += 'cd_action as cd_type, niveau, cd_sup, libelle, commentaire ';
+        order = 'libelle';
+    }else if (list == 'ope.programmes') {
+        SelectFields += 'cd_prog as cd_type, nom, annee, statut ';
+    }else if (list == 'ope.typ_interventions') {
+        SelectFields += 'cd_type, lib_type as libelle ';
+    }else if (list == 'opegerer.typ_amenagements') {
+        SelectFields += 'cd_type as cd_type, libelle, categorie, libelle_pluriel ';
+    }else if (list == 'typ_travauxsol') {
+        SelectFields += 'cd_type, libelle, val_tri, val_filtre, libelle_pluriel ';
+    }else if (list == 'opegerer.typ_troupeaux') {
+        SelectFields += 'cd_type, libelle, coef_ugb, right(cd_supra,3) as code_supp, niveau ';
+    }
+    FromTable = 'FROM ' + list + ' ';
+    
+    if (order !== undefined) {
+        where = 'order by ' + order;
+    }else {
+        where = 'order by val_tri;';
+    }
+
+    const queryObject = {
+        text: joinQuery(SelectFields, FromTable, where)
+    };
+
+    ExecuteQuerySite(
+        pool,
+        { message: message, query: queryObject },
+        "select",
+        ( resultats, message ) => {
+            if (resultats.length > 0 || message == "ok") {
+            const json = JSON.stringify(resultats);
+            // console.log(json);
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(json);
+            } else {
+            const json = JSON.stringify([]);
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(json);
+            }
+        }
+    );
+});
 
 module.exports = router;
