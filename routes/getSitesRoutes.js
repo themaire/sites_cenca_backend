@@ -154,39 +154,58 @@ router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
 
 // Les projets version web
 router.get('/projets/uuid=:uuid/:mode', (req, res) => {
-    let { SelectFields, FromTable, where, message } = reset();
+    let { selectFields, fromTable, where, message } = reset();
     message = "sites/projets/uuid/" + req.params.mode;
-    SelectFields = 'SELECT ';
+    selectFields = 'SELECT ';
 
+    where = 'where ';
     if (req.params.mode == 'lite') {
-        SelectFields += 'uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut, webapp, uuid_site '
-        FromTable = 'FROM ope.synthesesites ';
-        where = 'where cd_localisation = $1';
+        selectFields += 'uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut, webapp, uuid_site '
+        fromTable = 'FROM ope.synthesesites ';
+        where += 'cd_localisation = $1';
     } else if (req.params.mode == 'full') {
-        SelectFields += 'uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_pression_ciblee, pro_typ_objectif, pro_enjeux_eco, pro_nv_enjeux, pro_obj_ope, pro_surf_totale, pro_maitre_ouvrage, ref_loc_id, loc_poly as geom ';
-        FromTable = 'FROM opegerer.projets LEFT JOIN opegerer.localisation_tvx ON opegerer.projets.ref_loc_id = opegerer.localisation_tvx.loc_id ';
-        where = 'where uuid_proj = $1;';
+        selectFields += 'uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_pression_ciblee, pro_typ_objectif, pro_enjeux_eco, pro_nv_enjeux, pro_obj_ope, pro_surf_totale, pro_maitre_ouvrage, ref_loc_id, loc_poly as geom ';
+        fromTable = 'FROM opegerer.projets LEFT JOIN opegerer.localisation_tvx ON opegerer.projets.ref_loc_id = opegerer.localisation_tvx.loc_id ';
+        where += 'uuid_proj = $1;';
     }
 
-    executeQueryAndRespond(pool, SelectFields, FromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
+    executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
 });
-
 
 // Les operations version web
 router.get('/operations/uuid=:uuid/:mode', (req, res) => {
-    let { SelectFields, FromTable, where, message, json } = reset();
+    let { selectFields, fromTable, where, message, json } = reset();
     message = "sites/operation/uuid/" + req.params.mode;
 
+    fromTable = 'FROM opegerer.operations ';
+    where = 'where ';
     if (req.params.mode == 'lite') {
-        SelectFields = 'SELECT uuid_ope, code, titre, description, surf, date_debut ';
-        where = 'where ref_uuid_proj = $1;';
+        selectFields = 'SELECT uuid_ope, code, titre, description, surf, date_debut ';
+        where += 'ref_uuid_proj = $1;';
     } else if (req.params.mode == 'full') {
-        SelectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id ';
-        where = 'where uuid_ope = $1;';
+        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id ';
+        where += 'uuid_ope = $1;';
     }
-    FromTable = 'FROM opegerer.operations ';
 
-    executeQueryAndRespond(pool, SelectFields, FromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
+    executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
+});
+
+// Les objectifs version web
+router.get('/objectifs/uuid=:uuid/:mode', (req, res) => {
+    let { selectFields, fromTable, where, message, json } = reset();
+    message = "sites/objectifs/uuid/" + req.params.mode;
+    
+    fromTable = 'FROM opegerer.objectifs ';
+    where = 'where ';
+    if (req.params.mode == 'lite') {
+        selectFields = 'SELECT uuid_objectif, typ_objectif, enjeux_eco, nv_enjeux, obj_ope, attentes, surf_totale, unite_gestion, validite, projet, surf_prevue ';
+        where += 'projet = $1;';
+    } else if (req.params.mode == 'full') {
+        selectFields = 'SELECT uuid_objectif, typ_objectif, enjeux_eco, nv_enjeux, obj_ope, attentes, surf_totale, unite_gestion, validite, projet, surf_prevue ';
+        where += 'uuid_objectif = $1;';
+    }
+
+    executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
 });
 
 // Récuperation de l'IP publique

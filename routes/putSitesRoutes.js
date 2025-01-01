@@ -53,7 +53,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
             
             updateEspaceSite(pool, res, espaceQuery, siteQuery);
             
-        } else if (['projets', 'operations'].includes(TABLE)) {
+        } else if (['projets', 'operations', 'objectifs'].includes(TABLE)) {
 
             console.log("updateData");
             console.log(updateData);
@@ -141,8 +141,8 @@ router.put("/put/table=:table/insert", (req, res) => {
     const TABLE = req.params.table;
     const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
     const MESSAGE = "sites/put/table=" + TABLE + "/insert";
-    // Tables possibles pour des differents insert. En clé le nom de la table, en valeur le schema
-    const TABLES = {'sites':'sitcenca', 'actes_mfu':'sitcenca', 'projets':'opegerer', 'operations':'opegerer'};
+    // Tables possibles pour des differents insert. En clé le nom de la table, en valeur son schema
+    const TABLES = {'sites':'sitcenca', 'actes_mfu':'sitcenca', 'projets':'opegerer', 'operations':'opegerer', 'objectifs':'opegerer'};
 
     try {
 
@@ -151,7 +151,7 @@ router.put("/put/table=:table/insert", (req, res) => {
             const WORKING_TABLE = TABLES[TABLE] + "." + TABLE;
             console.log("WORKING_TABLE : " + WORKING_TABLE);
 
-            const queryObject = generateInsertQuery(WORKING_TABLE, INSERT_DATA);
+            const queryObject = generateInsertQuery(WORKING_TABLE, INSERT_DATA, createUUID = false);
             console.log(queryObject);
 
             ExecuteQuerySite(
