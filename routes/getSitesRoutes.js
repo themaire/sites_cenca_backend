@@ -190,6 +190,24 @@ router.get('/operations/uuid=:uuid/:mode', (req, res) => {
     executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
 });
 
+// Les géométries d'operations
+router.get('/localisations/uuid=:uuid/:mode', (req, res) => {
+    let { selectFields, fromTable, where, message, json } = reset();
+    message = "sites/geometries-operation/uuid_ope/" + req.params.mode;
+
+    fromTable = 'FROM opegerer.localisation_tvx ';
+    where = 'where ';
+    if (req.params.mode == 'projet') {
+        selectFields = 'SELECT loc_id, loc_date, ST_AsGeoJSON( ST_Transform( loc_poly, 4326 ) ) geojson, st_area(loc_poly) as surface, ref_uuid_proj ';
+        where += 'ref_uuid_proj = $1;';
+    } else if (req.params.mode == 'operation') {
+        selectFields = 'SELECT loc_id, loc_date, ST_AsGeoJSON( ST_Transform( loc_poly, 4326 ) ) geojson, st_area(loc_poly) as surface, ref_uuid_ope ';
+        where += 'ref_uuid_ope = $1;';
+    }
+
+    executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
+});
+
 // Les objectifs version web
 router.get('/objectifs/uuid=:uuid/:mode', (req, res) => {
     let { selectFields, fromTable, where, message, json } = reset();
