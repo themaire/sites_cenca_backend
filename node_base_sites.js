@@ -7,7 +7,7 @@ require('dotenv').config();
 const NODE_PORT = process.env.NODE_PORT;
 
 var express = require("express");
-var axios = require("axios"); // Utiliser axios pour les requêtes HTTP
+// var axios = require("axios"); // Utiliser axios pour les requêtes HTTP
 var app = express();
 var cors = require("cors");
 app.listen(NODE_PORT);

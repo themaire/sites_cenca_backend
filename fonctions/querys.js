@@ -12,23 +12,35 @@ function generateUpdateQuery(table, uuid, updateData) {
     });
 
     updateQuery += setClauses.join(", ");
+    console.log();
     console.log("table : " + table);
     const tableParts = table.split('.');
-    let secondPart = '';
-    if (['projets', 'operations'].includes(tableParts[1])) {
-        if(tableParts[1] == 'projets'){
-            secondPart = 'proj';
+    console.log("-----------> tableParts[1] : "  + tableParts[1]);
+
+    let pkName = ''; // Nom de la clé primaire - Primary Key Name
+    if (['espaces', 'sites', 'projets', 'operations', 'objectifs'].includes(tableParts[1])) {
+        console.log("Table spéciale détectée:", tableParts[1]);
+
+        if(tableParts[1] == 'espaces'){
+            pkName = 'uuid_espace';
+        } else if(tableParts[1] == 'sites'){
+            pkName = 'uuid_site';
+        } else if(tableParts[1] == 'projets'){
+            pkName = 'uuid_proj';
         } else if(tableParts[1] == 'operations'){
-            secondPart = 'ope';
-        } else if(tableParts[1] == 'objectif'){
-            secondPart = 'objectif';
+            pkName = 'uuid_ope';
+        } else if(tableParts[1] == 'objectifs'){
+            pkName = 'uuid_objectif';
         }
+    } else if (tableParts[1] == 'localisation_tvx') {
+        pkName = 'loc_id';
     } else {
-        secondPart = tableParts[1].slice(0, -1); // Récupérer la deuxième partie (nom de la table)
+        // Si le nom de la clé est égale a celui de la table
+        pkName = tableParts[1].slice(0, -1); // Récupérer la deuxième partie (nom de la table)
     }
-    console.log("secondPart : " + secondPart);
     
-    const whereClause = " WHERE uuid_" + secondPart + " = $1";
+    console.log('pkName final:', pkName); // Debug
+    const whereClause = " WHERE " + pkName + " = $1";
     console.log("whereClause : " + whereClause);
     
     values.unshift(uuid); // Ajouter l'UUID comme première valeur
@@ -53,12 +65,10 @@ function generateInsertQuery(tableName, insertData, createUUID = true) {
         throw new Error("insertData ne peut pas être vide");
     }
 
-    
-    
+
     // Construire la requête SQL en utilisant (ou pas) gen_random_uuid() pour le premier élément
     let genUUID = ''; // Pour générer un UUID (ou pas)
-    
-    
+
     
     let insertQuery = '';
     if (createUUID) {
@@ -92,6 +102,7 @@ function generateInsertQuery(tableName, insertData, createUUID = true) {
         };
     }else{
         console.log("mode : c'est l'appli qui créé le UUID");
+        
         // Reconstruire l'objet entier
         const data = Object.fromEntries(entries);
         // Générer les noms de colonnes et les valeurs

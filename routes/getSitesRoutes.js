@@ -164,7 +164,7 @@ router.get('/projets/uuid=:uuid/:mode', (req, res) => {
         fromTable = 'FROM ope.synthesesites ';
         where += 'cd_localisation = $1';
     } else if (req.params.mode == 'full') {
-        selectFields += 'uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_pression_ciblee, pro_typ_objectif, pro_enjeux_eco, pro_nv_enjeux, pro_obj_ope, pro_surf_totale, pro_maitre_ouvrage, ref_loc_id, loc_poly as geom ';
+        selectFields += 'uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_pression_ciblee, pro_maitre_ouvrage, ref_loc_id, loc_poly as geom ';
         fromTable = 'FROM opegerer.projets LEFT JOIN opegerer.localisation_tvx ON opegerer.projets.ref_loc_id = opegerer.localisation_tvx.loc_id ';
         where += 'uuid_proj = $1;';
     }

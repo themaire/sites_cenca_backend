@@ -243,4 +243,32 @@ function reset() {
     return { SelectFields, FromTable, where, message, json };
 }
 
-module.exports = { joinQuery, ExecuteQuerySite, selectQuery, distinctSiteResearch, updateEspaceSite, executeQueryAndRespond, reset };
+function convertToWKT(coordinates) {
+    console.log('Coordonnées brutes:', coordinates[0]);
+
+    // Supprimer les doublons consécutifs
+    const uniqueCoords = coordinates[0].filter((coord, index, self) =>
+        index === self.findIndex(c => 
+            c[0] === coord[0] && c[1] === coord[1]
+        )
+    );
+    console.log('Coordonnées uniques:', uniqueCoords);
+    
+    // Ajouter le point de fermeture si nécessaire (premier point = dernier point)
+    if (uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
+        uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]) {
+        uniqueCoords.push(uniqueCoords[0]);
+        console.log('Point de fermeture ajouté');
+    }
+    
+    // Validation : minimum 3 points distincts + 1 point de fermeture = 4 points
+    if (uniqueCoords.length < 3) {
+        throw new Error("Un polygone doit avoir au moins 3 points distincts");
+    }
+    
+    const wktCoords = uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(',');
+    console.log('WKT généré:', `SRID=2154;POLYGON((${wktCoords}))`);
+    return `SRID=2154;POLYGON((${wktCoords}))`;
+}
+
+module.exports = { joinQuery, ExecuteQuerySite, selectQuery, distinctSiteResearch, updateEspaceSite, executeQueryAndRespond, reset, convertToWKT };

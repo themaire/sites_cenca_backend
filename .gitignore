@@ -140,3 +140,5 @@ node_pgsql.code-workspace
 backend*.service
 
 *.sh
+
+uploads/
