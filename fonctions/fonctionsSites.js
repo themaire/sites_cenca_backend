@@ -261,7 +261,7 @@ function convertToWKT(coordinates) {
         }
 
         // Convertir les coordonnées en WKT
-        return uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(',');
+        return uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
     };
 
     let wktCoords;
@@ -276,7 +276,7 @@ function convertToWKT(coordinates) {
     } else {
         // Simple polygon
         type = 'POLYGON';
-        wktCoords = `(${coordinates[0].map(ring => `(${processPolygon(ring)})`).join(',')})`;
+        wktCoords = coordinates.map(ring => `(${processPolygon(ring)})`).join(',');
     }
 
     const EWKT = `SRID=2154;${type}(${wktCoords})`;
