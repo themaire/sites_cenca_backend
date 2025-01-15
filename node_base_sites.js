@@ -19,6 +19,7 @@ app.use(express.urlencoded({ extended: true })); // Pour traiter les requêtes e
 const menuRoutes = require('./routes/menuRoutes');
 const siteRoutesGet = require('./routes/getSitesRoutes');
 const siteRoutesPut = require('./routes/putSitesRoutes');
+const siteRoutesDelete = require('./routes/deleteSitesRoutes');
 const foncierRoutes = require('./routes/foncierRoutes');
 const userRoutes = require('./routes/userRoutes');
 const processRoutes = require('./routes/processRoutes');
@@ -28,6 +29,7 @@ async function run() {
     app.use('/auth', userRoutes);
     app.use('/sites', siteRoutesGet);
     app.use('/sites', siteRoutesPut);
+    app.use('/sites', siteRoutesDelete);
     app.use('/sites', foncierRoutes);
     app.use('/menu', menuRoutes);
     app.use('/process', processRoutes);

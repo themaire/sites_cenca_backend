@@ -3,7 +3,7 @@ const router = express.Router();
 
 
 // Fonctions et connexion à PostgreSQL
-const { ExecuteQuerySite, updateEspaceSite, convertToWKT } = require('../fonctions/fonctionsSites.js'); 
+const { ExecuteQuerySite, updateEspaceSite, convertToWKT, extractZipFile } = require('../fonctions/fonctionsSites.js'); 
 const pool = require('../dbPool/poolConnect.js');
 
 // Generateur de requetes SQL
@@ -14,6 +14,7 @@ const shapefile = require('shapefile');
 const fs = require('fs');
 const path = require('path');
 const unzipper = require('unzipper');
+const { exit } = require('process');
 
 // Configuration de multer pour gérer l'upload de fichiers
 // Configuration Multer modifiée
@@ -158,7 +159,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
     }
 });
 
-// Ajouter un site, un acte...
+// Ajouter un site, un acte, une operation ...
 router.put("/put/table=:table/insert", (req, res) => {
     const TABLE = req.params.table;
     const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
@@ -232,6 +233,8 @@ router.post(
     multerMiddlewareZip,
 
     // 3  - Middleware de validation
+    // pour vérifier si le type de géométrie est présent
+    // Sinon, renvoyer une erreur 400 et on ne fait pas la suite (le next() n'est pas appelé)
     (req, res, next) => {
         console.log('');
         console.log('Requête reçue pour le traitement d\'un shapefile');
@@ -240,11 +243,19 @@ router.post(
         console.log('Body raw:', req.body);
         console.log('Files:', req.files);
         // console.log('Fields:', req.fields);()
-
+        
+        // Bien vérifier si le type de géométrie est présent
         if (!req.body.type_geometry && !req.fields?.type_geometry) {
             return res.status(400).json({
                 success: false,
                 message: "Le type de géométrie est requis"
+            });
+        }
+        // Vérification si le fichier est présent
+        if (!req.files?.file?.[0]) {
+            return res.status(400).json({
+                success: false,
+                message: "Aucun fichier n'a été envoyé"
             });
         }
         next();
@@ -255,55 +266,75 @@ router.post(
         let filePath;
 
         try {
-            // Vérification du fichier
-            if (!req.files?.file?.[0]) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Aucun fichier n'a été envoyé"
-                });
-            }
+            // Variables envoyées par le client
+            // Fichier reçu
+            const filePath = req.files.file[0].path; // Chemin du fichier reçu sur le serveur (a effacer apres décompression)
+            const originalname = req.files.file[0].originalname; // Nom du fichier reçu
+            const fileName = originalname.split('.').slice(0, -1).join('.'); // Nom du fichier reçu avec l'extension
 
-            filePath = req.files.file[0].path;
-            const extractPath = path.join(__dirname, '../uploads/extracted');
+            const extractPath = path.join(__dirname, '../uploads/extracted'); // Où les zip sont mis les zip extraits
+            // const extractedFolder = path.join(extractPath, fileName); // Chemin du zip extrait
+            let workingPath = '';
+            let zippedFolder = '';
+
+            // Infos envoyés par le client
             const typeGeometry = req.body.type_geometry || req.fields.type_geometry;
             const uuid_ope = req.body.uuid_ope || req.fields.uuid_ope;
             
-            console.log('Chemin du fichier : ', filePath);
-            console.log('Fichier reçu : ', req.files.file[0].originalname);
-            console.log('Type de fichier : ', req.files.file[0].mimetype);
-            console.log('Type de géométrie : ', typeGeometry);
-            console.log('Chemin d\'extraction : ', extractPath);
+            // Debug
+            console.log('Chemin du fichier reçu par le client : ' + filePath + '. De type : ' + req.files.file[0].mimetype);
+            console.log('Vrai nom du fichier reçu : ', originalname);
+            console.log("Vrai nom du fichier reçu (sans l'extension) : ", fileName);
+            console.log('Type de géométrie déclarée : ', typeGeometry);
+            console.log('Où les zip sont mis les zip extraits : ', extractPath);
+            // console.log('Chemin du zip extrait : ', extractedFolder);
             console.log('');
             
-            
-            // Extraire le zip et renommer les fichiers extraits
-            // Extraire
-            await fs.createReadStream(filePath)
-                .pipe(unzipper.Extract({ path: extractPath }))
-                .promise();
-            const files = await fs.promises.readdir(extractPath);
-            
-            // Renommer
-            for (const file of files) {
-                const extension = path.extname(file);
-                const oldPath = path.join(extractPath, file);
-                const newPath = path.join(extractPath, `shapefile${extension}`);
-                
-                await fs.promises.rename(oldPath, newPath);
-                console.log(`Fichier renommé: ${file} -> shapefile${extension}`);
+            // Utiliser await pour récupérer la valeur retournée par la fonction extractZipFile
+            zippedFolder = await extractZipFile(filePath, extractPath);
+            console.log('Fichier zip bien extrait avec succès');
+
+            if (zippedFolder != '') {
+                // Si la personne a zippé un dossier
+                workingPath = path.join(extractPath, zippedFolder);
+            } else if (zippedFolder == '') {
+                // Si la personne a zippé les fichiers du shapefile directement
+                workingPath = extractPath;
             }
+            console.log("Chemin d'extraction : ", workingPath);
+            
+            // Supprimer le répertoire de destination s'il existe et n'est pas vide
+            // const destPath = '/home/nico/Documents/sites_cenca/node_pgsql/uploads/extracted/shapefile';
+            // if (fs.existsSync(destPath)) {
+                //     await fs.promises.rm(destPath, { recursive: true, force: true });
+                // }
+
+            // Renommer
+            const files = await fs.promises.readdir(workingPath); // Obtenir la liste des fichiers extraits
+            console.log('Fichiers extraits:', files);
+            for (const file of files) {
+                    const extension = path.extname(file);
+                    const oldPath = path.join(workingPath, file);
+                    const newPath = path.join(workingPath, `shapefile${extension}`);
+                
+                    await fs.promises.rename(oldPath, newPath);
+                    console.log(`Fichier renommé: ${file} -> shapefile${extension}`);
+                }
+            
+            // exit(0);
+            // await fs.promises.rm(workingPath, { recursive: true });
 
             // Lire le fichier shapefile
-            const shpFilePath = path.join(extractPath, 'shapefile.shp');
-            const dbfFilePath = path.join(extractPath, 'shapefile.dbf');
+            const shpFile = path.join(workingPath, 'shapefile.shp');
+            const dbfFile = path.join(workingPath, 'shapefile.dbf');
 
             let features = [];
-            await shapefile.open(shpFilePath, dbfFilePath)
+            await shapefile.open(shpFile, dbfFile)
                 .then(source => source.read()
                     .then(function log(result) {
                         if (result.done) {
                             if (features.length > 1) {
-                                throw new Error(`Plus d'une géométrie dans le fichier shapefile (${features.length} trouvées au lieu de 1 maximum)`);
+                                throw new Error(`Plus d'une géométrie dans le fichier shapefile (${features.length} trouvées au lieu de 1 maximum).`);
                             }
                             return;
                         }
@@ -312,6 +343,7 @@ router.post(
                     })
                 )
                 .catch(error => {
+                    // Log détaillé de l'erreur en cas de dépassement de 1 géométrie
                     throw new Error(error.message);
                 });
                 
@@ -319,20 +351,21 @@ router.post(
                 throw new Error('Aucune géométrie trouvée dans le fichier shapefile');
             }
 
-            // Debug
-            console.log('Géométrie extraite:', features[0]);
-
+            
             // Insérer le polygone dans la base de données
             for (const feature of features) { // Boucle meme si une seule geometrie dans la liste
+                // Debug
+                console.log('Géométrie extraite:', features);
+
                 const properties = { ...feature.properties, 
-                                    wkt: convertToWKT(feature.geometry.coordinates), 
+                                    wkt: convertToWKT(feature.geometry.coordinates),
                                     type_geometry: typeGeometry, 
                                     ref_uuid_ope: uuid_ope,
                                  };
 
                 // Créer l'objet de requête avec la géométrie
                 const queryObject = {
-                    text: `INSERT INTO opegerer.localisation_tvx (loc_poly, ref_uuid_ope ) VALUES (ST_GeomFromEWKT($1), $2);`,
+                    text: `INSERT INTO opegerer.localisations (loc_poly, ref_uuid_ope) VALUES (ST_GeomFromEWKT($1), $2);`,
                     values: [properties.wkt, properties.ref_uuid_ope]
                 };
                 console.log('Requête:', queryObject);
@@ -350,7 +383,7 @@ router.post(
                         // Réponse en cas de succès
                         res.status(200).json({
                             success: true,
-                            message: "Polygone inseré avec succès.",
+                            message: "Polygone importé avec succès.",
                             data: resultats
                         });
                         console.log("message : " + message);
@@ -362,7 +395,7 @@ router.post(
                         console.log(queryObject.values);
                         res.status(500).json({
                             success: false,
-                            message: "Erreur, la requête s'est mal exécutée."
+                            message: "Erreur, la requête s'est mal exécutée (" + message + "."
                         });
                     }
                 });
@@ -379,8 +412,18 @@ router.post(
             });
         } finally {
             // Nettoyage des fichiers temporaires
-            if (filePath) {
-                await fs.promises.rm(filePath, { force: true });
+            // if (filePath) {
+            //     await fs.promises.rm(workingPath, { force: true });
+            // }
+            
+            const cleanUpFolder = path.join(__dirname, '../uploads/extracted');
+            try {
+                const things = await fs.promises.readdir(cleanUpFolder);
+                for (const thing of things) {
+                    await fs.promises.rm(path.join(cleanUpFolder, thing), { recursive: true, force: true });
+                }
+            } catch (cleanupError) {
+                console.error("Erreur lors du nettoyage des fichiers temporaires:", cleanupError);
             }
         }
     }

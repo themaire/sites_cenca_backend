@@ -244,31 +244,101 @@ function reset() {
 }
 
 function convertToWKT(coordinates) {
-    console.log('Coordonnées brutes:', coordinates[0]);
+    console.log('Coordonnées brutes:', coordinates);
 
-    // Supprimer les doublons consécutifs
-    const uniqueCoords = coordinates[0].filter((coord, index, self) =>
-        index === self.findIndex(c => 
-            c[0] === coord[0] && c[1] === coord[1]
-        )
-    );
-    console.log('Coordonnées uniques:', uniqueCoords);
-    
-    // Ajouter le point de fermeture si nécessaire (premier point = dernier point)
-    if (uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
-        uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]) {
-        uniqueCoords.push(uniqueCoords[0]);
-        console.log('Point de fermeture ajouté');
+    const processPolygon = (polygon) => {
+        // Supprimer les doublons consécutifs
+        const uniqueCoords = polygon.filter((coord, index, self) =>
+            index === self.findIndex(c => 
+                c[0] === coord[0] && c[1] === coord[1]
+            )
+        );
+
+        // Ajouter le point de fermeture si nécessaire (premier point = dernier point)
+        if (uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
+            uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]) {
+            uniqueCoords.push(uniqueCoords[0]);
+        }
+
+        // Convertir les coordonnées en WKT
+        return uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(',');
+    };
+
+    let wktCoords;
+    let type;
+
+    if (coordinates.length > 1) {
+        // Multipolygon
+        type = 'MULTIPOLYGON';
+        wktCoords = coordinates.map(polygon => 
+            `(${polygon.map(ring => `(${processPolygon(ring)})`).join(',')})`
+        ).join(',');
+    } else {
+        // Simple polygon
+        type = 'POLYGON';
+        wktCoords = `(${coordinates[0].map(ring => `(${processPolygon(ring)})`).join(',')})`;
     }
-    
-    // Validation : minimum 3 points distincts + 1 point de fermeture = 4 points
-    if (uniqueCoords.length < 3) {
-        throw new Error("Un polygone doit avoir au moins 3 points distincts");
-    }
-    
-    const wktCoords = uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(',');
-    console.log('WKT généré:', `SRID=2154;POLYGON((${wktCoords}))`);
-    return `SRID=2154;POLYGON((${wktCoords}))`;
+
+    const EWKT = `SRID=2154;${type}(${wktCoords})`;
+    console.log(EWKT);
+    return EWKT;
 }
 
-module.exports = { joinQuery, ExecuteQuerySite, selectQuery, distinctSiteResearch, updateEspaceSite, executeQueryAndRespond, reset, convertToWKT };
+const unzipper = require('unzipper');
+const fs = require('fs');
+const path = require('path');
+
+async function extractZipFile(filePath, extractPath) {
+    // Retourne true si le shapefile extrait est un dossier
+    // Retourne false si les fichiers du shapefile ont été zippé comme ça 
+    let folderToReturn = '';
+    folderToReturn = await new Promise((resolve, reject) => { 
+        // Cette promise retourne sa valeur isFolder au travers de resolve
+        fs.createReadStream(filePath)
+            .pipe(unzipper.Parse())
+            .on('entry', async (entry) => {
+            const cheminElement = entry.path;
+            // console.log('cheminElement:', cheminElement);
+            const name = path.basename(cheminElement); // Nom d'un dossier à retourner
+
+            const type = entry.type;
+            const fullPath = path.join(extractPath, cheminElement);
+
+            if (cheminElement.startsWith('__MACOSX') || 
+                cheminElement.startsWith('.DS_Store') || 
+                cheminElement.startsWith('._')) {
+                entry.autodrain();
+            } else {
+                if (type === 'Directory') {
+                    folderToReturn = name;
+                    await fs.promises.mkdir(fullPath, { recursive: true });
+                } else {
+                entry.pipe(fs.createWriteStream(fullPath));
+                }
+            }
+            })
+            .on('close', async () => {
+            try {
+                console.log('Fichier extrait à supprimer :', filePath);
+                await fs.promises.rm(filePath, { force: true });
+                resolve(folderToReturn); // Résoudre la promesse avec isFolder
+            } catch (error) {
+                reject(error);
+            }
+            })
+            .on('error', reject);
+    });
+    return folderToReturn;
+}
+
+module.exports = { 
+    joinQuery, 
+    ExecuteQuerySite, 
+    selectQuery, 
+    distinctSiteResearch, 
+    updateEspaceSite, 
+    executeQueryAndRespond, 
+    reset, 
+    convertToWKT,
+    extractZipFile // Ajouter l'export de la nouvelle fonction
+};

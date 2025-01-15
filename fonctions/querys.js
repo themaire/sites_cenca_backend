@@ -1,3 +1,27 @@
+// const { get } = require("../routes/putSitesRoutes"); // Supprimer cette ligne
+
+function getRightId(table) {
+    let pkName = '';
+    if (['espaces', 'sites', 'projets', 'operations', 'objectifs'].includes(table)) {
+        if(table == 'espaces'){
+            pkName = 'uuid_espace';
+        } else if(table == 'sites'){
+            pkName = 'uuid_site';
+        } else if(table == 'projets'){
+            pkName = 'uuid_proj';
+        } else if(table == 'operations'){
+            pkName = 'uuid_ope';
+        } else if(table == 'objectifs'){
+            pkName = 'uuid_objectif';
+        }
+    } else if (table == 'localisations') {
+        pkName = 'loc_id';
+    } else {
+        pkName = table.slice(0, -1);
+    }
+    return pkName;
+}
+
 function generateUpdateQuery(table, uuid, updateData) {
     let updateQuery = `UPDATE ${table} SET `;
     const setClauses = [];
@@ -17,27 +41,7 @@ function generateUpdateQuery(table, uuid, updateData) {
     const tableParts = table.split('.');
     console.log("-----------> tableParts[1] : "  + tableParts[1]);
 
-    let pkName = ''; // Nom de la clé primaire - Primary Key Name
-    if (['espaces', 'sites', 'projets', 'operations', 'objectifs'].includes(tableParts[1])) {
-        console.log("Table spéciale détectée:", tableParts[1]);
-
-        if(tableParts[1] == 'espaces'){
-            pkName = 'uuid_espace';
-        } else if(tableParts[1] == 'sites'){
-            pkName = 'uuid_site';
-        } else if(tableParts[1] == 'projets'){
-            pkName = 'uuid_proj';
-        } else if(tableParts[1] == 'operations'){
-            pkName = 'uuid_ope';
-        } else if(tableParts[1] == 'objectifs'){
-            pkName = 'uuid_objectif';
-        }
-    } else if (tableParts[1] == 'localisation_tvx') {
-        pkName = 'loc_id';
-    } else {
-        // Si le nom de la clé est égale a celui de la table
-        pkName = tableParts[1].slice(0, -1); // Récupérer la deuxième partie (nom de la table)
-    }
+    const pkName = getRightId(table); // Nom de la clé primaire - Primary Key Name
     
     console.log('pkName final:', pkName); // Debug
     const whereClause = " WHERE " + pkName + " = $1";
@@ -122,4 +126,15 @@ function generateInsertQuery(tableName, insertData, createUUID = true) {
 
 }
 
-module.exports = { generateUpdateQuery, generateInsertQuery };
+function generateDeleteQuery(table, uuid) {
+    const tableParts = table.split('.');
+    const pkName = getRightId(tableParts[1]); // Nom de la clé primaire - Primary Key Name
+
+    const deleteQuery = `DELETE FROM ${table} WHERE ${pkName} = $1`;
+    return {
+        text: deleteQuery,
+        values: [uuid]
+    };
+}
+
+module.exports = { generateUpdateQuery, generateInsertQuery, generateDeleteQuery };

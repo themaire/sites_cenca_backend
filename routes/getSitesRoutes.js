@@ -165,7 +165,7 @@ router.get('/projets/uuid=:uuid/:mode', (req, res) => {
         where += 'cd_localisation = $1';
     } else if (req.params.mode == 'full') {
         selectFields += 'uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_pression_ciblee, pro_maitre_ouvrage, ref_loc_id, loc_poly as geom ';
-        fromTable = 'FROM opegerer.projets LEFT JOIN opegerer.localisation_tvx ON opegerer.projets.ref_loc_id = opegerer.localisation_tvx.loc_id ';
+        fromTable = 'FROM opegerer.projets LEFT JOIN opegerer.localisations ON opegerer.projets.ref_loc_id = opegerer.localisations.loc_id ';
         where += 'uuid_proj = $1;';
     }
 
@@ -195,7 +195,7 @@ router.get('/localisations/uuid=:uuid/:mode', (req, res) => {
     let { selectFields, fromTable, where, message, json } = reset();
     message = "sites/geometries-operation/uuid_ope/" + req.params.mode;
 
-    fromTable = 'FROM opegerer.localisation_tvx ';
+    fromTable = 'FROM opegerer.localisations ';
     where = 'where ';
     if (req.params.mode == 'projet') {
         selectFields = 'SELECT loc_id, loc_date, ST_AsGeoJSON( ST_Transform( loc_poly, 4326 ) ) geojson, st_area(loc_poly) as surface, ref_uuid_proj ';
