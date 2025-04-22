@@ -29,10 +29,7 @@ function generateUpdateQuery(table, uuid, updateData) {
 
     Object.keys(updateData).forEach((key, index) => {
         setClauses.push(`${key} = $${index + 2}`); // +2 pour compenser l'UUID
-        // console.log("ajout de", `${key} = $${index + 2}`)
-
         values.push(updateData[key]); // Ajouter la valeur
-        // console.log("ajout de", updateData[key])
     });
 
     updateQuery += setClauses.join(", ");
@@ -41,7 +38,7 @@ function generateUpdateQuery(table, uuid, updateData) {
     const tableParts = table.split('.');
     console.log("-----------> tableParts[1] : "  + tableParts[1]);
 
-    const pkName = getRightId(table); // Nom de la clé primaire - Primary Key Name
+    const pkName = getRightId(tableParts[1]); // Nom de la clé primaire - Prendre le nom de la table sans le schema
     
     console.log('pkName final:', pkName); // Debug
     const whereClause = " WHERE " + pkName + " = $1";

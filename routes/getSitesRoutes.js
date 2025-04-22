@@ -152,27 +152,35 @@ router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
     executeQueryAndRespond(pool, SelectFields, FromTable, where, req.params.uuid, res, message, mode); // Retourne un ou plusieurs résultats
 });
 
-// Les projets version web
-router.get('/projets/uuid=:uuid/:mode', (req, res) => {
+// Les projets
+router.get('/projets/uuid=:uuid/:mode/:type?', (req, res) => {
     let { selectFields, fromTable, where, message } = reset();
     message = "sites/projets/uuid/" + req.params.mode;
     selectFields = 'SELECT ';
 
     where = 'where ';
-    if (req.params.mode == 'lite') {
-        selectFields += 'uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, statut, webapp, uuid_site '
+    if (req.params.mode == 'lite' && !req.params.type) {
+        selectFields += 'uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, generation, statut, webapp, uuid_site ';
         fromTable = 'FROM ope.synthesesites ';
         where += 'cd_localisation = $1';
+        where += " and generation = '1_TVX'";
+        where += " order by annee desc;";
     } else if (req.params.mode == 'full') {
-        selectFields += 'uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_fin, pro_pression_ciblee, pro_maitre_ouvrage, ref_loc_id, loc_poly as geom ';
-        fromTable = 'FROM opegerer.projets LEFT JOIN opegerer.localisations ON opegerer.projets.ref_loc_id = opegerer.localisations.loc_id ';
-        where += 'uuid_proj = $1;';
+        if (req.params.type == 'gestion') {
+            selectFields += 'uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_webapp, pro_fin, pro_pression_ciblee, pro_maitre_ouvrage, pro_results_attendus, pro_surf_totale, loc_poly as geom ';
+            fromTable = 'FROM opegerer.projets LEFT JOIN opegerer.localisations ON opegerer.projets.uuid_proj = opegerer.localisations.ref_uuid_proj ';
+            where += 'uuid_proj = $1;';
+        } else if (req.params.type == 'autre') {
+            selectFields += 'uuid_proj, code, validite, programme, nom, annee, statut, responsable, typ_projet, createur, date_crea, loc_poly as geom ';
+            fromTable = 'FROM opeautres.projets proj LEFT JOIN opegerer.localisations loc ON proj.uuid_proj = loc.ref_uuid_proj ';
+            where += 'uuid_proj = $1;';
+        }
     }
 
     executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
 });
 
-// Les operations version web
+// Les operations
 router.get('/operations/uuid=:uuid/:mode', (req, res) => {
     let { selectFields, fromTable, where, message, json } = reset();
     message = "sites/operation/uuid/" + req.params.mode;
@@ -183,7 +191,7 @@ router.get('/operations/uuid=:uuid/:mode', (req, res) => {
         selectFields = 'SELECT uuid_ope, code, titre, description, surf, date_debut ';
         where += 'ref_uuid_proj = $1;';
     } else if (req.params.mode == 'full') {
-        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id ';
+        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, programme ';
         where += 'uuid_ope = $1;';
     }
 
@@ -208,7 +216,7 @@ router.get('/localisations/uuid=:uuid/:mode', (req, res) => {
     executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
 });
 
-// Les objectifs version web
+// Les objectifs
 router.get('/objectifs/uuid=:uuid/:mode', (req, res) => {
     let { selectFields, fromTable, where, message, json } = reset();
     message = "sites/objectifs/uuid/" + req.params.mode;
@@ -298,10 +306,11 @@ router.get("/selectors", (req, res) => {
 });
 
 // Les liste de choix pour les champs de formulaires
-router.get('/selectvalues=:list', (req, res) => {
+router.get('/selectvalues=:list/:option?', (req, res) => {
     let { SelectFields, FromTable, where, message, json } = reset();
     const list = req.params.list;
-    message = "/sites/selectvalues/" + list;
+    const option = req.params.option;
+    message = "/sites/selectvalues/" + list + "/" + option;
     let order = undefined;
 
     console.log("Demande de la liste de choix de la table " + list);
@@ -313,8 +322,7 @@ router.get('/selectvalues=:list', (req, res) => {
     if (simpleTables.includes(list)) {
         SelectFields += 'cd_type, libelle ';
     }else if (list == 'ope.actions') {
-        SelectFields += 'cd_action as cd_type, niveau, cd_sup, libelle, commentaire ';
-        order = 'libelle';
+        SelectFields += 'cd_action as cd_type, libelle, commentaire ';
     }else if (list == 'ope.programmes') {
         SelectFields += 'cd_prog as cd_type, nom, annee, statut ';
     }else if (list == 'ope.typ_interventions') {
@@ -325,13 +333,34 @@ router.get('/selectvalues=:list', (req, res) => {
         SelectFields += 'cd_type, libelle, val_tri, val_filtre, libelle_pluriel ';
     }else if (list == 'opegerer.typ_troupeaux') {
         SelectFields += 'cd_type, libelle, coef_ugb, right(cd_supra,3) as code_supp, niveau ';
+    }else if (list == 'ope.listprogrammes') {
+        SelectFields += "cd_programme as cd_type, cd_programme || ' - ' || libelle as libelle ";
     }
     FromTable = 'FROM ' + list + ' ';
     
     if (order !== undefined) {
         where = 'order by ' + order;
     }else {
-        where = 'order by val_tri;';
+        // Filtrer sur des nouvelles valeurs précises
+        if (list == 'opegerer.typ_objectifope') {
+            where = "where cd_type in ('CRE', 'ENT', 'RES', 'REA') order by val_filtre;";
+        } else if (list == 'ope.actions' && option == 1) { // Les actions comme Pâturage et opérations associées, Gestion hydraulique...
+            where = "where cd_action like '%V2' and cd_action != '029_TRAV_SOL_V2' and cd_sup = '004_TRAV' ORDER BY val_tri ASC ;";
+        } else if (list == 'ope.actions' && option == 'meca') {
+            where = "where cd_sup = '027_TRAV_MECA_V2' order by val_tri;";
+        } else if (list == 'ope.actions' && option == 'pat') {
+            where = "where cd_sup = '028_TRAV_PAT_V2' order by val_tri;";
+        } else if (list == 'ope.actions' && option == 'ame') {
+            where = "where cd_sup = '008_TRAV_AMEN_V2' order by val_tri;";
+        } else if (list == 'ope.actions' && option == 'hydro') {
+            where = "where cd_sup = '005_TRAV_HYDRO_V2' order by val_tri;";
+        } else if (list == 'ope.actions' && option == 'dech') {
+            where = "where cd_sup = '200_TRAV_DECH_V2' order by val_tri;";
+        } else if (list == 'ope.typ_interventions') {
+            where = "where val_filtre in (1, 2) order by lib_type;";
+        } else if (list == 'ope.listprogrammes') {
+            where = "where left(cd_programme,2) in ('24', '25') order by cd_programme;";
+        } else where = 'order by val_tri;';
     }
 
     const queryObject = {

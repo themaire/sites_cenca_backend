@@ -61,7 +61,7 @@ function selectQuery(params) {
     let SelectFields = "SELECT ";
     SelectFields +=
         "uuid_site, code, nom, statut, communes, milieux_naturels, bassin_agence, prem_ctr, fin, responsable, validite, typ_site, typ_site_txt ";
-    let FromTable = "FROM sitcenca.listesitescenca ";
+    let FromTable = "FROM sitcenca.listesitescenca;";
 
     let query = {
         // text: 'SELECT uuid_site, code, prem_ctr, typ_site, typ_site_txt, milieux_naturels, communes, insee, bassin_agence, responsable, nom, espace, statut, fin, alerte_fin, validite
