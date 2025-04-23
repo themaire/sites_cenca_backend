@@ -191,7 +191,7 @@ router.get('/operations/uuid=:uuid/:mode', (req, res) => {
         selectFields = 'SELECT uuid_ope, code, titre, description, surf, date_debut ';
         where += 'ref_uuid_proj = $1;';
     } else if (req.params.mode == 'full') {
-        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, programme ';
+        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, programme, cadre_intervention, cadre_intervention_detail ';
         where += 'uuid_ope = $1;';
     }
 
@@ -318,6 +318,9 @@ router.get('/selectvalues=:list/:option?', (req, res) => {
     SelectFields = 'SELECT ';
 
     const simpleTables = ['ope.typ_actions', 'ope.typ_financeurs', 'ope.typ_projets', 'ope.typ_roles', 'opegerer.typ_enjeux', 'opegerer.typ_hydrauliques', 'opegerer.typ_infrastructures', 'opegerer.typ_mecaniques', 'opegerer.typ_objectifope', 'opegerer.typ_objectifs'];
+    
+    // Liste des libelles de la table commune des libelles
+    const libelles_names = ['cadre_intervention', 'chantier_nature'];
 
     if (simpleTables.includes(list)) {
         SelectFields += 'cd_type, libelle ';
@@ -335,6 +338,8 @@ router.get('/selectvalues=:list/:option?', (req, res) => {
         SelectFields += 'cd_type, libelle, coef_ugb, right(cd_supra,3) as code_supp, niveau ';
     }else if (list == 'ope.listprogrammes') {
         SelectFields += "cd_programme as cd_type, cd_programme || ' - ' || libelle as libelle ";
+    }else if (list == 'opegerer.libelles') {
+        SelectFields += 'lib_id as cd_type, lib_libelle as libelle ';
     }
     FromTable = 'FROM ' + list + ' ';
     
@@ -360,7 +365,18 @@ router.get('/selectvalues=:list/:option?', (req, res) => {
             where = "where val_filtre in (1, 2) order by lib_type;";
         } else if (list == 'ope.listprogrammes') {
             where = "where left(cd_programme,2) in ('24', '25') order by cd_programme;";
+        } else if (list == 'opegerer.libelles' && libelles_names.includes(option)) {
+            // Si l'option est dans la liste des libelles_names
+            // sera dynamique en fonction de l'option choisi c'est a dire la famille de libelles.
+            where = "where libnom_id = (SELECT libnom_id FROM opegerer.libelles_nom where libnom_nom = '" + option + "') order by lib_ordre;";
         } else where = 'order by val_tri;';
+    }
+
+    if (libelles_names.includes(option)) {
+        console.log("---------------Demande de la liste de choix de la table " + list + " pour l'option " + option);
+        // Si l'option est dans la liste des libelles_names
+    }else {
+        console.log("option " + option + " n'est pas dans la liste des libelles_names");
     }
 
     const queryObject = {
