@@ -165,7 +165,7 @@ router.put("/put/table=:table/insert", (req, res) => {
     const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
     const MESSAGE = "sites/put/table=" + TABLE + "/insert";
     // Tables possibles pour des differents insert. En clé le nom de la table, en valeur son schema
-    const TABLES = {'sites':'sitcenca', 'actes_mfu':'sitcenca', 'projets':'opegerer', 'operations':'opegerer', 'objectifs':'opegerer'};
+    const TABLES = {'sites':'sitcenca', 'actes_mfu':'sitcenca', 'projets':'opegerer', 'operations':'opegerer', 'objectifs':'opegerer', 'operation_programmes':'opegerer'};
 
     try {
 

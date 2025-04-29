@@ -123,14 +123,20 @@ function generateInsertQuery(tableName, insertData, createUUID = true) {
 
 }
 
-function generateDeleteQuery(table, uuid) {
-    const tableParts = table.split('.');
-    const pkName = getRightId(tableParts[1]); // Nom de la clé primaire - Primary Key Name
+function generateDeleteQuery(table, id, idBisName = null, idBis = null) {
+    let query = `DELETE FROM ${table} WHERE uuid_ope = $1`;
 
-    const deleteQuery = `DELETE FROM ${table} WHERE ${pkName} = $1`;
+    if (idBisName) {
+        query += ` AND ${idBisName} = $2`;
+        return {
+            text: query,
+            values: [id, idBis]
+        };
+    }
+
     return {
-        text: deleteQuery,
-        values: [uuid]
+        text: query,
+        values: [id]
     };
 }
 

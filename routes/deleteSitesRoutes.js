@@ -9,13 +9,21 @@ const pool = require('../dbPool/poolConnect.js');
 // Generateur de requetes SQL
 const { generateDeleteQuery } = require('../fonctions/querys.js');
 
-// Supprimer une opération
-router.delete("/delete/:table/uuid=:id", (req, res) => {
+// Supprimer une opération, une localisation (d'opération)
+router.delete("/delete/:table/uuid=:id/:idBisName?/:idBis?", (req, res) => {
     const table = req.params.table.split('.');
     const id = req.params.id;
+    const idBisName = req.params.idBisName; // Nom de la clé supplémentaire (optionnel)
+    const idBis = req.params.idBis; // Valeur de la clé supplémentaire (optionnel)
 
     try {
-        const queryObject = generateDeleteQuery(req.params.table, id);
+        // Avant la gestion d'une eventuelle seconde clé primaire à utiliser pour supprimer un enregistrement
+        // const queryObject = generateDeleteQuery(req.params.table, id, programmeId);
+
+        // Si idBisName et idBis sont définis, passez-les à generateDeleteQuery
+        const queryObject = idBisName && idBis
+            ? generateDeleteQuery(req.params.table, id, idBisName, idBis)
+            : generateDeleteQuery(req.params.table, id);
 
         ExecuteQuerySite(
             pool,

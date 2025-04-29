@@ -182,7 +182,7 @@ router.get('/projets/uuid=:uuid/:mode/:type?', (req, res) => {
 
 // Les operations
 router.get('/operations/uuid=:uuid/:mode', (req, res) => {
-    let { selectFields, fromTable, where, message, json } = reset();
+    let { selectFields, fromTable, where, message } = reset();
     message = "sites/operation/uuid/" + req.params.mode;
 
     fromTable = 'FROM opegerer.operations ';
@@ -191,16 +191,37 @@ router.get('/operations/uuid=:uuid/:mode', (req, res) => {
         selectFields = 'SELECT uuid_ope, code, titre, description, surf, date_debut ';
         where += 'ref_uuid_proj = $1;';
     } else if (req.params.mode == 'full') {
-        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, programme, cadre_intervention, cadre_intervention_detail ';
+        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, description_programme ';
         where += 'uuid_ope = $1;';
     }
 
     executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
 });
 
+// Les programmes d'une operation
+router.get('/ope-programmes/uuid=:uuid?', (req, res) => {
+    let { selectFields, fromTable, where, message } = reset();
+    message = "sites/ope-programmes/uuid/";
+
+    // Si on n'a pas d'uuid, on récupèrera la liste de tous les types de programmes possibles
+    if (!req.params.uuid) {
+        selectFields = 'SELECT lib_id, lib_libelle ';
+        fromTable = 'FROM opegerer.libelles libelles ';
+        where = 'where libnom_id = 8 order by lib_ordre;';
+        executeQueryAndRespond(pool, selectFields, fromTable, where, "null", res, message, req.params.mode); // Retourne un ou plusieurs résultats
+
+    }else{
+        // Sinon, on récupère les programmes qui ont été saisi d'une opération
+        selectFields = 'SELECT lib_id, lib_libelle ';
+        fromTable = 'FROM opegerer.libelles libelles JOIN opegerer.operation_programmes opro ON libelles.lib_id = opro.programme_id ';
+        where = 'where uuid_ope = $1;';
+        executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
+    }
+});
+
 // Les géométries d'operations
 router.get('/localisations/uuid=:uuid/:mode', (req, res) => {
-    let { selectFields, fromTable, where, message, json } = reset();
+    let { selectFields, fromTable, where, message } = reset();
     message = "sites/geometries-operation/uuid_ope/" + req.params.mode;
 
     fromTable = 'FROM opegerer.localisations ';
@@ -218,7 +239,7 @@ router.get('/localisations/uuid=:uuid/:mode', (req, res) => {
 
 // Les objectifs
 router.get('/objectifs/uuid=:uuid/:mode', (req, res) => {
-    let { selectFields, fromTable, where, message, json } = reset();
+    let { selectFields, fromTable, where, message } = reset();
     message = "sites/objectifs/uuid/" + req.params.mode;
     
     fromTable = 'FROM opegerer.objectifs ';
