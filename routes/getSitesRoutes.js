@@ -191,7 +191,7 @@ router.get('/operations/uuid=:uuid/:mode', (req, res) => {
         selectFields = 'SELECT uuid_ope, code, titre, description, surf, date_debut ';
         where += 'ref_uuid_proj = $1;';
     } else if (req.params.mode == 'full') {
-        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, description_programme ';
+        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, description_programme, quantite, unite ';
         where += 'uuid_ope = $1;';
     }
 
@@ -341,7 +341,7 @@ router.get('/selectvalues=:list/:option?', (req, res) => {
     const simpleTables = ['ope.typ_actions', 'ope.typ_financeurs', 'ope.typ_projets', 'ope.typ_roles', 'opegerer.typ_enjeux', 'opegerer.typ_hydrauliques', 'opegerer.typ_infrastructures', 'opegerer.typ_mecaniques', 'opegerer.typ_objectifope', 'opegerer.typ_objectifs'];
     
     // Liste des libelles de la table commune des libelles
-    const libelles_names = ['cadre_intervention', 'chantier_nature'];
+    const libelles_names = ['cadre_intervention', 'chantier_nature', 'unites'];
 
     if (simpleTables.includes(list)) {
         SelectFields += 'cd_type, libelle ';
