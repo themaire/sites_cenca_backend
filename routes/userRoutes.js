@@ -148,7 +148,7 @@ router.get("/me", authenticateToken, (req, res) => {
   console.log("req.tokenInfos : ");
   console.log(req.tokenInfos);
 
-  const SelectFields = "SELECT sal.nom, sal.prenom, sal.identifiant, salgro.gro_id ";
+  const SelectFields = "SELECT sal.nom, sal.prenom, sal.identifiant, sal.cd_salarie, salgro.gro_id ";
   
   let FromTable = "FROM admin.salaries sal ";
   FromTable +=    "LEFT JOIN admin.salarie_groupes salgro ON sal.cd_salarie = salgro.cd_salarie ";
