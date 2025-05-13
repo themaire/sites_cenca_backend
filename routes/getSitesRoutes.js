@@ -191,7 +191,10 @@ router.get('/operations/uuid=:uuid/:mode', (req, res) => {
         selectFields = 'SELECT uuid_ope, code, titre, description, surf, date_debut ';
         where += 'ref_uuid_proj = $1;';
     } else if (req.params.mode == 'full') {
-        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, description_programme, quantite, unite ';
+        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, ';
+        selectFields += 'charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ';
+        selectFields += 'ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, description_programme, quantite, unite, ';
+        selectFields += 'exportation_fauche, total_exporte_fauche, productivite_fauche, effectif_paturage, nb_jours_paturage, chargement_paturage, abroutissement_paturage, recouvrement_ligneux_paturage, interv_cloture ';
         where += 'uuid_ope = $1;';
     }
 
@@ -213,7 +216,28 @@ router.get('/ope-programmes/uuid=:uuid?', (req, res) => {
     }else{
         // Sinon, on récupère les programmes qui ont été saisi d'une opération
         selectFields = 'SELECT lib_id, lib_libelle ';
-        fromTable = 'FROM opegerer.libelles libelles JOIN opegerer.operation_programmes opro ON libelles.lib_id = opro.programme_id ';
+        fromTable = 'FROM opegerer.libelles libelles JOIN opegerer.operation_programmes opro ON libelles.lib_id = opro.checkbox_id ';
+        where = 'where uuid_ope = $1;';
+        executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
+    }
+});
+
+// Les animaux d'une operation
+router.get('/ope-animaux/uuid=:uuid?', (req, res) => {
+    let { selectFields, fromTable, where, message } = reset();
+    message = "sites/ope-animaux/uuid/";
+
+    // Si on n'a pas d'uuid, on récupèrera la liste de tous les types de programmes possibles
+    if (!req.params.uuid) {
+        selectFields = 'SELECT lib_id, lib_libelle ';
+        fromTable = 'FROM opegerer.libelles libelles ';
+        where = 'where libnom_id = 10 order by lib_ordre;';
+        executeQueryAndRespond(pool, selectFields, fromTable, where, "null", res, message, req.params.mode); // Retourne un ou plusieurs résultats
+
+    }else{
+        // Sinon, on récupère les programmes qui ont été saisi d'une opération
+        selectFields = 'SELECT lib_id, lib_libelle ';
+        fromTable = 'FROM opegerer.libelles libelles JOIN opegerer.operation_animaux oanimaux ON libelles.lib_id = oanimaux.checkbox_id ';
         where = 'where uuid_ope = $1;';
         executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
     }
