@@ -123,8 +123,8 @@ function generateInsertQuery(tableName, insertData, createUUID = true) {
 
 }
 
-function generateDeleteQuery(table, id, idBisName = null, idBis = null) {
-    let query = `DELETE FROM ${table} WHERE uuid_ope = $1`;
+function generateDeleteQuery(table, uuidName, id, idBisName = null, idBis = null) {
+    let query = `DELETE FROM ${table} WHERE ${uuidName} = $1`;
 
     if (idBisName) {
         query += ` AND ${idBisName} = $2`;

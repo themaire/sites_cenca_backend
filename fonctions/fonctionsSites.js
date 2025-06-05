@@ -1,3 +1,5 @@
+const shapefile = require('shapefile');
+
 function joinQuery(select, from, where = "") {
     const query = select + from + where;
 
@@ -243,7 +245,7 @@ function reset() {
     return { SelectFields, FromTable, where, message, json };
 }
 
-function convertToWKT(coordinates) {
+function convertToWKT_origonal(coordinates) {
     console.log('Coordonnées brutes:', coordinates);
 
     const processPolygon = (polygon) => {
@@ -282,6 +284,86 @@ function convertToWKT(coordinates) {
     const EWKT = `SRID=2154;${type}(${wktCoords})`;
     console.log(EWKT);
     return EWKT;
+}
+
+/**
+ * Détecte le type de géométrie d'un shapefile (POINT, LINESTRING, POLYGON, MULTIPOLYGON, etc.)
+ * @param {string} shpPath - Chemin vers le fichier .shp
+ * @param {string} dbfPath - Chemin vers le fichier .dbf
+ * @returns {Promise<string>} - Le type de géométrie détecté (ex: 'Point', 'Polygon', ...)
+ */
+async function detectShapefileGeometryType(shpPath, dbfPath) {
+    try {
+        const source = await shapefile.open(shpPath, dbfPath);
+        const result = await source.read();
+        if (result.done) {
+            throw new Error('Aucune géométrie trouvée dans le shapefile');
+        }
+        // Le type est dans result.value.geometry.type (ex: 'Point', 'Polygon', ...)
+        return result.value.geometry.type.toUpperCase();
+    } catch (error) {
+        console.error('Erreur lors de la détection du type de géométrie :', error);
+        throw error;
+    }
+}
+
+function convertToWKT(coordinates, typeGeometry = null) {
+    console.log('Coordonnées brutes:', coordinates);
+
+    // Si le type est explicitement passé, on l'utilise, sinon on déduit
+    let type = typeGeometry ? typeGeometry.toUpperCase() : null;
+
+    // Détection automatique si type non fourni
+    // if (!type) {
+    if (1) {
+        if (typeof coordinates[0] === 'number') {
+            type = 'POINT';
+        } else if (Array.isArray(coordinates[0]) && typeof coordinates[0][0] === 'number') {
+            type = 'LINESTRING';
+        } else if (Array.isArray(coordinates[0]) && Array.isArray(coordinates[0][0])) {
+            // Polygon ou MultiPolygon
+            type = coordinates.length > 1 ? 'MULTIPOLYGON' : 'POLYGON';
+        }
+    }
+
+    if (type === 'POINT') {
+        // [x, y]
+        wktCoords = `${coordinates[0]} ${coordinates[1]}`;
+    } else if (type === 'LINESTRING') {
+        wktCoords = coordinates.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+    } else if (type === 'POLYGON') {
+        const processPolygon = (polygon) => {
+            const uniqueCoords = polygon.filter((coord, index, self) =>
+                index === self.findIndex(c => c[0] === coord[0] && c[1] === coord[1])
+            );
+            if (uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
+                uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]) {
+                uniqueCoords.push(uniqueCoords[0]);
+            }
+            return uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+        };
+        wktCoords = coordinates.map(ring => `(${processPolygon(ring)})`).join(',');
+    } else if (type === 'MULTIPOLYGON') {
+        const processPolygon = (polygon) => {
+            const uniqueCoords = polygon.filter((coord, index, self) =>
+                index === self.findIndex(c => c[0] === coord[0] && c[1] === coord[1])
+            );
+            if (uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
+                uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]) {
+                uniqueCoords.push(uniqueCoords[0]);
+            }
+            return uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+        };
+        wktCoords = coordinates.map(polygon =>
+            `(${polygon.map(ring => `(${processPolygon(ring)})`).join(',')})`
+        ).join(',');
+    } else {
+        throw new Error('Type de géométrie non supporté');
+    }
+
+    const EWKT = `SRID=2154;${type}(${wktCoords})`;
+    console.log(EWKT);
+    return {"type": type, "EWKT": EWKT};
 }
 
 const unzipper = require('unzipper');
@@ -338,7 +420,8 @@ module.exports = {
     distinctSiteResearch, 
     updateEspaceSite, 
     executeQueryAndRespond, 
-    reset, 
+    reset,
+    detectShapefileGeometryType,
     convertToWKT,
     extractZipFile // Ajouter l'export de la nouvelle fonction
 };

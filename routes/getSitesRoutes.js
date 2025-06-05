@@ -58,7 +58,7 @@ router.get("/uuid=:uuid", (req, res) => {
     SelectFields +=
         "espa.uuid_espace, espa.date_crea as date_crea_espace, espa.id_espace, espa.nom, espa.surface, espa.carto_hab, espa.zh, espa.typ_espace, espa.bassin_agence, espa.rgpt, espa.typ_geologie, ";
     SelectFields +=
-        "espa.id_source, espa.id_crea, espa.url, espa.maj_admin, ST_AsGeoJSON( ST_Transform( geo.geom, 4326 ) ) geojson ";
+        "espa.id_source, espa.id_crea, espa.url, espa.maj_admin, ST_AsGeoJSON( ST_Transform( geo.geom, 4326 ) ) geojson, geo.date_crea as date_crea_geom, 'POLYGONE' as type_geom, ST_AREA(geo.geom) as surface_geom ";
 
     FromTable = "FROM esp.espaces as espa ";
     FromTable +=
@@ -153,28 +153,42 @@ router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
 });
 
 // Les projets
-router.get('/projets/uuid=:uuid/:mode/:type?', (req, res) => {
+router.get('/projets/uuid=:uuid/:mode', (req, res) => {
+    const mode = req.params.mode; // 'lite' ou 'full'
+    const type = req.query.type || null; // Paramètre optionnel "type"
+    const webapp = req.query.webapp || null; // Paramètre optionnel "webapp"
+    console.log("Demande de projet pour l'uuid " + req.params.uuid + " et le mode " + req.params.mode + " avec type " + type + " et webapp " + webapp);
+
     let { selectFields, fromTable, where, message } = reset();
-    message = "sites/projets/uuid/" + req.params.mode;
+    message = "sites/projets/uuid/" + req.params.mode + ". Params " + JSON.stringify(req.query);
     selectFields = 'SELECT ';
 
     where = 'where ';
-    if (req.params.mode == 'lite' && !req.params.type) {
-        selectFields += 'uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, typ_interv, generation, statut, webapp, uuid_site ';
-        fromTable = 'FROM ope.synthesesites ';
-        where += 'cd_localisation = $1';
-        where += " and generation = '1_TVX'";
-        where += " order by annee desc;";
-    } else if (req.params.mode == 'full') {
-        if (req.params.type == 'gestion') {
-            selectFields += 'uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_debut, pro_webapp, pro_fin, pro_pression_ciblee, pro_maitre_ouvrage, pro_results_attendus, pro_surf_totale, loc_poly as geom ';
+    // Liste liste pour les projets à l'ancienne (application MS Access)
+    if (mode == 'lite') {
+        if (webapp != 1) {
+            selectFields += 'uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, generation, statut, webapp, uuid_site ';
+            fromTable = 'FROM ope.synthesesites ';
+            where += 'cd_localisation = $1';
+            // where += " and generation = '1_TVX'";
+            where += " order by annee desc;";
+        } else {
+            console.log("Erreur : mode 'lite' non géré pour webapp");
+            console.log("Type de webapp : " + webapp + "  --  " + typeof(webapp));
+        }
+    } else if (mode == 'full') {
+        if (type == 'gestion') {
+            selectFields += 'uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_webapp, pro_maitre_ouvrage, loc_poly as geom ';
             fromTable = 'FROM opegerer.projets LEFT JOIN opegerer.localisations ON opegerer.projets.uuid_proj = opegerer.localisations.ref_uuid_proj ';
             where += 'uuid_proj = $1;';
-        } else if (req.params.type == 'autre') {
+        } else if (type == 'autre') {
             selectFields += 'uuid_proj, code, validite, programme, nom, annee, statut, responsable, typ_projet, createur, date_crea, loc_poly as geom ';
             fromTable = 'FROM opeautres.projets proj LEFT JOIN opegerer.localisations loc ON proj.uuid_proj = loc.ref_uuid_proj ';
             where += 'uuid_proj = $1;';
         }
+    } else {
+            console.log("Erreur : mode 'lite' non géré pour webapp");
+            console.log("Type de webapp : " + webapp + "  --  " + typeof(webapp));
     }
 
     executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
@@ -183,30 +197,37 @@ router.get('/projets/uuid=:uuid/:mode/:type?', (req, res) => {
 // Les operations
 router.get('/operations/uuid=:uuid/:mode', (req, res) => {
     let { selectFields, fromTable, where, message } = reset();
+    const webapp = req.query.webapp || null; // Paramètre optionnel "webapp"
     message = "sites/operation/uuid/" + req.params.mode;
 
     fromTable = 'FROM opegerer.operations ';
     where = 'where ';
     if (req.params.mode == 'lite') {
-        selectFields = 'SELECT uuid_ope, code, titre, description, surf, date_debut ';
-        where += 'ref_uuid_proj = $1;';
+
+        selectFields = `SELECT op.uuid_ope, concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)) as type, op.nom_mo, op.quantite, opegerer.get_libelle(op.unite) as unite_str, op.code, op.titre, op.description, op.surf, `;
+        selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_financeurs `;
+        selectFields += `WHERE uuid_ope = op.uuid_ope ) AS financeurs `;
+        fromTable += 'AS op ';
+        where += 'op.ref_uuid_proj = $1 ';
+        where += "ORDER BY op.date_ajout DESC;";
+
     } else if (req.params.mode == 'full') {
         selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, ';
         selectFields += 'charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ';
-        selectFields += 'ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, description_programme, quantite, unite, ';
-        selectFields += 'exportation_fauche, total_exporte_fauche, productivite_fauche, effectif_paturage, nb_jours_paturage, chargement_paturage, abroutissement_paturage, recouvrement_ligneux_paturage, interv_cloture ';
+        selectFields += 'ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, financeur_description, quantite, unite, ';
+        selectFields += 'exportation_fauche, total_exporte_fauche, productivite_fauche, effectif_paturage, nb_jours_paturage, chargement_paturage, abroutissement_paturage, recouvrement_ligneux_paturage, interv_cloture, type_intervention_hydro ';
         where += 'uuid_ope = $1;';
     }
 
     executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
 });
 
-// Les programmes d'une operation
-router.get('/ope-programmes/uuid=:uuid?', (req, res) => {
+// Les financeurs d'une operation
+router.get('/ope-financeurs/uuid=:uuid?', (req, res) => {
     let { selectFields, fromTable, where, message } = reset();
-    message = "sites/ope-programmes/uuid/";
+    message = "sites/ope-financeurs/uuid/";
 
-    // Si on n'a pas d'uuid, on récupèrera la liste de tous les types de programmes possibles
+    // Si on n'a pas d'uuid, on récupèrera la liste de tous les types de financeurs possibles
     if (!req.params.uuid) {
         selectFields = 'SELECT lib_id, lib_libelle ';
         fromTable = 'FROM opegerer.libelles libelles ';
@@ -214,9 +235,9 @@ router.get('/ope-programmes/uuid=:uuid?', (req, res) => {
         executeQueryAndRespond(pool, selectFields, fromTable, where, "null", res, message, req.params.mode); // Retourne un ou plusieurs résultats
 
     }else{
-        // Sinon, on récupère les programmes qui ont été saisi d'une opération
+        // Sinon, on récupère les financeurs qui ont été saisi d'une opération
         selectFields = 'SELECT lib_id, lib_libelle ';
-        fromTable = 'FROM opegerer.libelles libelles JOIN opegerer.operation_programmes opro ON libelles.lib_id = opro.checkbox_id ';
+        fromTable = 'FROM opegerer.libelles libelles JOIN opegerer.operation_financeurs ofi ON libelles.lib_id = ofi.checkbox_id ';
         where = 'where uuid_ope = $1;';
         executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
     }
@@ -227,7 +248,7 @@ router.get('/ope-animaux/uuid=:uuid?', (req, res) => {
     let { selectFields, fromTable, where, message } = reset();
     message = "sites/ope-animaux/uuid/";
 
-    // Si on n'a pas d'uuid, on récupèrera la liste de tous les types de programmes possibles
+    // Si on n'a pas d'uuid, on récupèrera la liste de tous les types d'animaux possibles
     if (!req.params.uuid) {
         selectFields = 'SELECT lib_id, lib_libelle ';
         fromTable = 'FROM opegerer.libelles libelles ';
@@ -235,7 +256,7 @@ router.get('/ope-animaux/uuid=:uuid?', (req, res) => {
         executeQueryAndRespond(pool, selectFields, fromTable, where, "null", res, message, req.params.mode); // Retourne un ou plusieurs résultats
 
     }else{
-        // Sinon, on récupère les programmes qui ont été saisi d'une opération
+        // Sinon, on récupère les animaux qui ont été saisi d'une opération
         selectFields = 'SELECT lib_id, lib_libelle ';
         fromTable = 'FROM opegerer.libelles libelles JOIN opegerer.operation_animaux oanimaux ON libelles.lib_id = oanimaux.checkbox_id ';
         where = 'where uuid_ope = $1;';
@@ -250,13 +271,31 @@ router.get('/localisations/uuid=:uuid/:mode', (req, res) => {
 
     fromTable = 'FROM opegerer.localisations ';
     where = 'where ';
+    columnName = '';
     if (req.params.mode == 'projet') {
-        selectFields = 'SELECT loc_id, loc_date, ST_AsGeoJSON( ST_Transform( loc_poly, 4326 ) ) geojson, st_area(loc_poly) as surface, ref_uuid_proj ';
-        where += 'ref_uuid_proj = $1;';
+        columnName = 'ref_uuid_proj';
     } else if (req.params.mode == 'operation') {
-        selectFields = 'SELECT loc_id, loc_date, ST_AsGeoJSON( ST_Transform( loc_poly, 4326 ) ) geojson, st_area(loc_poly) as surface, ref_uuid_ope ';
-        where += 'ref_uuid_ope = $1;';
+        columnName = 'ref_uuid_ope';
     }
+
+    selectFields = 'SELECT loc_id, loc_date, ';
+    selectFields += 'CASE ';
+    selectFields += 'WHEN loc_poly is not null THEN ST_AsGeoJSON( ST_Transform( loc_poly, 4326 ) ) ';
+    selectFields += 'WHEN loc_point is not null THEN ST_AsGeoJSON( ST_Transform( loc_point, 4326 ) ) ';
+    selectFields += 'WHEN loc_line is not null THEN ST_AsGeoJSON( ST_Transform( loc_line, 4326 ) ) ';
+    selectFields += 'END AS geojson, ';
+    selectFields += 'CASE ';
+    selectFields += 'WHEN loc_poly is not null THEN st_area(loc_poly) ';
+    selectFields += 'WHEN loc_point is not null THEN st_area(loc_point) ';
+    selectFields += 'WHEN loc_line is not null THEN st_area(loc_line) ';
+    selectFields += `END as surface, `;
+    selectFields += 'CASE ';
+    selectFields += 'WHEN loc_poly is not null THEN \'polygon\' ';
+    selectFields += 'WHEN loc_point is not null THEN \'point\' ';
+    selectFields += 'WHEN loc_line is not null THEN \'ligne\' ';
+    selectFields += `END as type, `;
+    selectFields += `${columnName} `;
+    where += `${columnName} = $1;`;
 
     executeQueryAndRespond(pool, selectFields, fromTable, where, req.params.uuid, res, message, req.params.mode); // Retourne un ou plusieurs résultats
 });
@@ -269,10 +308,12 @@ router.get('/objectifs/uuid=:uuid/:mode', (req, res) => {
     fromTable = 'FROM opegerer.objectifs ';
     where = 'where ';
     if (req.params.mode == 'lite') {
-        selectFields = 'SELECT uuid_objectif, typ_objectif, enjeux_eco, nv_enjeux, obj_ope, attentes, surf_totale, unite_gestion, validite, projet, surf_prevue ';
+        selectFields = 'SELECT uuid_objectif, typ_objectif, enjeux_eco, nv_enjeux, obj_ope, objectifop.libelle AS obj_ope_str, enjeux.libelle AS nv_enjeux_str, attentes, surf_totale, unite_gestion, validite, projet, surf_prevue, pression_maitrise ';
+        fromTable += ' LEFT JOIN opegerer.typ_objectifope objectifop ON obj_ope = objectifop.cd_type ';
+        fromTable += ' LEFT JOIN opegerer.typ_enjeux enjeux ON nv_enjeux = enjeux.cd_type ';
         where += 'projet = $1;';
     } else if (req.params.mode == 'full') {
-        selectFields = 'SELECT uuid_objectif, typ_objectif, enjeux_eco, nv_enjeux, obj_ope, attentes, surf_totale, unite_gestion, validite, projet, surf_prevue ';
+        selectFields = 'SELECT uuid_objectif, typ_objectif, enjeux_eco, nv_enjeux, obj_ope, attentes, surf_totale, unite_gestion, validite, projet, surf_prevue, pression_maitrise ';
         where += 'uuid_objectif = $1;';
     }
 
@@ -365,13 +406,13 @@ router.get('/selectvalues=:list/:option?', (req, res) => {
     const simpleTables = ['ope.typ_actions', 'ope.typ_financeurs', 'ope.typ_projets', 'ope.typ_roles', 'opegerer.typ_enjeux', 'opegerer.typ_hydrauliques', 'opegerer.typ_infrastructures', 'opegerer.typ_mecaniques', 'opegerer.typ_objectifope', 'opegerer.typ_objectifs'];
     
     // Liste des libelles de la table commune des libelles
-    const libelles_names = ['cadre_intervention', 'chantier_nature', 'unites'];
+    const libelles_names = ['cadre_intervention', 'chantier_nature', 'unites', 'pression_maitrise'];
 
     if (simpleTables.includes(list)) {
         SelectFields += 'cd_type, libelle ';
     }else if (list == 'ope.actions') {
         SelectFields += 'cd_action as cd_type, libelle, commentaire ';
-    }else if (list == 'ope.programmes') {
+    }else if (list == 'ope.financeurs') {
         SelectFields += 'cd_prog as cd_type, nom, annee, statut ';
     }else if (list == 'ope.typ_interventions') {
         SelectFields += 'cd_type, lib_type as libelle ';

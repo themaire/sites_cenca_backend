@@ -3,7 +3,7 @@ const router = express.Router();
 
 
 // Fonctions et connexion à PostgreSQL
-const { ExecuteQuerySite, updateEspaceSite, convertToWKT, extractZipFile } = require('../fonctions/fonctionsSites.js'); 
+const { ExecuteQuerySite, updateEspaceSite, convertToWKT, detectShapefileGeometryType, extractZipFile } = require('../fonctions/fonctionsSites.js'); 
 const pool = require('../dbPool/poolConnect.js');
 
 // Generateur de requetes SQL
@@ -95,7 +95,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                     if (message === 'ok') {
                         res.status(200).json({
                             success: true,
-                            message: "Mise à jour réussie sur la table " + TABLE + ".",
+                            message: "Mise à jour réussie (" + TABLE + ").", // sera viible dans le snackbar
                             data: resultats
                         });
                         console.log("message : " + message);
@@ -165,7 +165,7 @@ router.put("/put/table=:table/insert", (req, res) => {
     const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
     const MESSAGE = "sites/put/table=" + TABLE + "/insert";
     // Tables possibles pour des differents insert. En clé le nom de la table, en valeur son schema
-    const TABLES = {'sites':'sitcenca', 'actes_mfu':'sitcenca', 'projets':'opegerer', 'operations':'opegerer', 'objectifs':'opegerer', 'operation_programmes':'opegerer'};
+    const TABLES = {'sites':'sitcenca', 'actes_mfu':'sitcenca', 'projets':'opegerer', 'operations':'opegerer', 'objectifs':'opegerer', 'operation_financeurs':'opegerer', 'operation_animaux':'opegerer'};
 
     try {
 
@@ -245,12 +245,12 @@ router.post(
         // console.log('Fields:', req.fields);()
         
         // Bien vérifier si le type de géométrie est présent
-        if (!req.body.type_geometry && !req.fields?.type_geometry) {
-            return res.status(400).json({
-                success: false,
-                message: "Le type de géométrie est requis"
-            });
-        }
+        // if (!req.body.type_geometry && !req.fields?.type_geometry) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: "Le type de géométrie est requis"
+        //     });
+        // }
         // Vérification si le fichier est présent
         if (!req.files?.file?.[0]) {
             return res.status(400).json({
@@ -277,22 +277,22 @@ router.post(
             let workingPath = '';
             let zippedFolder = '';
 
-            // Infos envoyés par le client
-            const typeGeometry = req.body.type_geometry || req.fields.type_geometry;
+            // Infos envoyées par le client
+            let typeGeometry = req.body.type_geometry || req.fields.type_geometry;
             const uuid_ope = req.body.uuid_ope || req.fields.uuid_ope;
             
             // Debug
             console.log('Chemin du fichier reçu par le client : ' + filePath + '. De type : ' + req.files.file[0].mimetype);
             console.log('Vrai nom du fichier reçu : ', originalname);
             console.log("Vrai nom du fichier reçu (sans l'extension) : ", fileName);
-            console.log('Type de géométrie déclarée : ', typeGeometry);
+            console.log('Type de géométrie déclaré : ', typeGeometry);
             console.log('Où les zip sont mis les zip extraits : ', extractPath);
             // console.log('Chemin du zip extrait : ', extractedFolder);
             console.log('');
             
             // Utiliser await pour récupérer la valeur retournée par la fonction extractZipFile
             zippedFolder = await extractZipFile(filePath, extractPath);
-            console.log('Fichier zip bien extrait avec succès');
+            console.log('Fichier zip extrait avec succès');
 
             if (zippedFolder != '') {
                 // Si la personne a zippé un dossier
@@ -328,12 +328,18 @@ router.post(
             const shpFile = path.join(workingPath, 'shapefile.shp');
             const dbfFile = path.join(workingPath, 'shapefile.dbf');
 
+            // Test de la nature du shapefile
+            typeGeometry = await detectShapefileGeometryType(shpFile, dbfFile);
+            console.log('Type de géométrie détecté :', typeGeometry);
+
+            // Lecture et test d'ouverture puis du contenu du shapefile
             let features = [];
             await shapefile.open(shpFile, dbfFile)
                 .then(source => source.read()
                     .then(function log(result) {
                         if (result.done) {
-                            if (features.length > 1) {
+                            // Présence d'une couche de polygone(s) dans le shapefile
+                            if (typeof typeGeometry === 'string' && typeGeometry.trim().endsWith('POLYGON') && features.length > 1) {
                                 throw new Error(`Plus d'une géométrie dans le fichier shapefile (${features.length} trouvées au lieu de 1 maximum).`);
                             }
                             return;
@@ -351,53 +357,73 @@ router.post(
                 throw new Error('Aucune géométrie trouvée dans le fichier shapefile');
             }
 
-            
-            // Insérer le polygone dans la base de données
-            for (const feature of features) { // Boucle meme si une seule geometrie dans la liste
-                // Debug
-                console.log('Géométrie extraite:', features);
+            let insertResults = [];
+            let insertErrors = [];
 
-                const properties = { ...feature.properties, 
-                                    wkt: convertToWKT(feature.geometry.coordinates),
+            // Insérer le polygone dans la base de données
+            for (let i = 0; i < features.length; i++) { // Boucle meme si une seule geometrie dans la liste
+                // Convertir les coordonnées en WKT
+                WKTData = convertToWKT(features[i].geometry.coordinates, typeGeometry);
+
+                geomColumn = '';
+                // Détermination de la colonne de géométrie dans la table opegerer.localisations
+                if (WKTData.type.trim().endsWith('POLYGON')) {
+                    geomColumn = 'loc_poly';
+                } else if (WKTData.type == 'POINT') {
+                    geomColumn = 'loc_point';
+                } else if (WKTData.type == 'LINESTRING') {
+                    geomColumn = 'loc_line';
+                } else {
+                    geomColumn = '';
+                }
+                console.log(`Type de la géométrie [${i}]:`, WKTData.type);
+                console.log(`Colonne de la géométrie [${i}]:`, geomColumn);
+                console.log(`WKT de la géométrie [${i}]:`, WKTData.EWKT);
+
+                const properties = { ...features[i].properties, 
+                                    wkt: WKTData.EWKT,
                                     type_geometry: typeGeometry, 
                                     ref_uuid_ope: uuid_ope,
-                                 };
+                                    };
 
                 // Créer l'objet de requête avec la géométrie
                 const queryObject = {
-                    text: `INSERT INTO opegerer.localisations (loc_poly, ref_uuid_ope) VALUES (ST_GeomFromEWKT($1), $2);`,
+                    text: `INSERT INTO opegerer.localisations (${geomColumn}, ref_uuid_ope) VALUES (ST_GeomFromEWKT($1), $2);`,
                     values: [properties.wkt, properties.ref_uuid_ope]
                 };
                 console.log('Requête:', queryObject);
 
-                // Exécuter la requête
-                await ExecuteQuerySite(
-                    pool, 
-                    {query: queryObject, message: 'insert polygon from shapefile to opegerer.localisation_tvx'},
-                    'insert',
-                    ( resultats, message ) => {
-                    res.setHeader("Access-Control-Allow-Origin", "*");
-                    res.setHeader("Content-Type", "application/json; charset=utf-8");
+                try {
+                    // Exécuter la requête
+                    await ExecuteQuerySite(
+                        pool, 
+                        {query: queryObject, message: 'insert polygon from shapefile to opegerer.localisation_tvx'},
+                        'insert',
+                        (resultats, message) => {
+                            if (message === 'ok') {
+                                insertResults.push({ success: true, type: WKTData.type, data: resultats });
+                            } else {
+                                insertErrors.push({ success: false, message });
+                            }
+                        }
+                    );
+                } catch (e) {
+                    insertErrors.push({ success: false, message: e.message });
+                }
+            }
 
-                    if (message === 'ok') {
-                        // Réponse en cas de succès
-                        res.status(200).json({
-                            success: true,
-                            message: "Polygone importé avec succès.",
-                            data: resultats
-                        });
-                        console.log("message : " + message);
-                        console.log("resultats : " + resultats);
-                    } else {
-                        const currentDateTime = new Date().toISOString();
-                        console.log(`Échec de la requête à ${currentDateTime}`);
-                        console.log(queryObject.text);
-                        console.log(queryObject.values);
-                        res.status(500).json({
-                            success: false,
-                            message: "Erreur, la requête s'est mal exécutée (" + message + "."
-                        });
-                    }
+            // Après la boucle, une seule réponse HTTP
+            if (insertErrors.length === 0) {
+                res.status(200).json({
+                    success: true,
+                    message: `${insertResults.length} géométrie(s) importée(s) avec succès.`,
+                    data: insertResults
+                });
+            } else {
+                res.status(500).json({
+                    success: false,
+                    message: "Erreur(s) lors de l'import.",
+                    errors: insertErrors
                 });
             }
 
