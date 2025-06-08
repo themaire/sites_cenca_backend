@@ -4,7 +4,8 @@ const router = express.Router();
 // const { authenticateToken } = require('../fonctions/fonctionsAuth.js'); 
 
 // Fonctions et connexion à PostgreSQL
-const { joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch, executeQueryAndRespond, reset } = require('../fonctions/fonctionsSites.js'); 
+const { joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch, executeQueryAndRespond, reset, getBilan } = require('../fonctions/fonctionsSites.js');
+const { generateFicheTravauxWord } = require('../scripts/gen_fiche_travaux.js');
 const pool = require('../dbPool/poolConnect.js');
 
 
@@ -84,7 +85,11 @@ router.get("/commune/uuid=:uuid", (req, res) => {
 
     SelectFields = "SELECT ";
     // SelectFields += 'commune as insee, com.nom_officiel '
-    SelectFields += "commune as insee, com.nom ";
+    SelectFields += "commune as insee, com.nom, ";
+    SelectFields += "CASE WHEN LEFT(commune,2) = '08' THEN 'Ardennes' ";
+    SelectFields += "WHEN LEFT(commune,2) = '10' THEN 'Aube' ";
+    SelectFields += "WHEN LEFT(commune,2) = '51' THEN 'Marne' ";
+    SelectFields += "WHEN LEFT(commune,2) = '52' THEN 'Haute-Marne' END AS departement ";
     FromTable = "FROM esp.localisations loca ";
     FromTable +=
         "left join esp.espaces espa on loca.espace = espa.uuid_espace ";
@@ -205,8 +210,8 @@ router.get('/operations/uuid=:uuid/:mode', (req, res) => {
     if (req.params.mode == 'lite') {
 
         selectFields = `SELECT op.uuid_ope, concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)) as type, op.nom_mo, op.quantite, opegerer.get_libelle(op.unite) as unite_str, op.code, op.titre, op.description, op.surf, `;
-        selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_financeurs `;
-        selectFields += `WHERE uuid_ope = op.uuid_ope ) AS financeurs `;
+        selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_financeurs WHERE uuid_ope = op.uuid_ope ) AS financeurs, `;
+        selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_animaux WHERE uuid_ope = op.uuid_ope ) AS animaux `;
         fromTable += 'AS op ';
         where += 'op.ref_uuid_proj = $1 ';
         where += "ORDER BY op.date_ajout DESC;";
@@ -215,7 +220,8 @@ router.get('/operations/uuid=:uuid/:mode', (req, res) => {
         selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, ';
         selectFields += 'charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ';
         selectFields += 'ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, financeur_description, quantite, unite, ';
-        selectFields += 'exportation_fauche, total_exporte_fauche, productivite_fauche, effectif_paturage, nb_jours_paturage, chargement_paturage, abroutissement_paturage, recouvrement_ligneux_paturage, interv_cloture, type_intervention_hydro ';
+        selectFields += 'exportation_fauche, total_exporte_fauche, productivite_fauche, effectif_paturage, nb_jours_paturage, chargement_paturage, abroutissement_paturage, recouvrement_ligneux_paturage, interv_cloture, type_intervention_hydro, ';
+        selectFields += 'opegerer.get_libelle(cadre_intervention) as cadre_intervention_str, opegerer.get_libelle(cadre_intervention_detail) as cadre_intervention_detail_str, to_char(date_debut, \'DD/MM/YYYY\') as date_debut_str, to_char(date_fin, \'DD/MM/YYYY\') as date_fin_str ';
         where += 'uuid_ope = $1;';
     }
 
@@ -488,6 +494,37 @@ router.get('/selectvalues=:list/:option?', (req, res) => {
             }
         }
     );
+});
+
+router.get('/bilan_exe/uuid_proj=:uuid', async (req, res) => {
+    try {
+        const uuid = req.params.uuid;
+        const bilan = await getBilan(uuid);
+        res.status(200).json(bilan);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+const http = require('http');
+
+// Route bilan_exe qui combine les infos du projet travaux
+router.get('/gen_fiche_travaux/uuid_proj=:uuid', async (req, res) => {
+    console.log("Demande de la fiche travaux pour l'UUID : " + req.params.uuid);
+    try {
+        const uuid = req.params.uuid;
+        const bilan = await getBilan(uuid);
+        console.log("Bilan récupéré pour l'UUID : " + uuid);
+        if (!bilan) {
+            return res.status(404).json({ error: 'Bilan not found for the given UUID.' });
+        }
+        const buffer = await generateFicheTravauxWord(bilan);
+        res.setHeader('Content-Disposition', `attachment; filename=fiche_travaux_${bilan.objectifs[0].obj_ope_str}-${bilan.site.nom}.docx`);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        res.send(buffer);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 module.exports = router;

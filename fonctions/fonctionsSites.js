@@ -413,6 +413,78 @@ async function extractZipFile(filePath, extractPath) {
     return folderToReturn;
 }
 
+const http = require('http');
+
+async function getBilan(uuid) {
+    console.log("getBilan() : uuid = " + uuid);
+
+    const projet = await getData("projet", uuid);
+    const site = await getData("site", projet.site);
+    const communes = await getData("commune", projet.site);
+    const objectifs = await getData("objectif", uuid);
+    const operations = await getData("operation", uuid);
+    const operations_full = {}
+    for (let op of operations) {
+        operations_full[op.uuid_ope] = await getData("operation_full", op.uuid_ope);
+    }
+
+    return { projet, site, communes, objectifs, operations, operations_full };
+}
+
+function getData(type, uuid, hostname = 'localhost', port = process.env.NODE_PORT) {
+    // ... retourne une Promise qui résout le site
+    return new Promise((resolve, reject) => {
+        let path = '';
+        if (!type || !uuid) {
+            return reject(new Error('Type et uuid sont requis'));
+        } else if (type === 'projet') {
+            path = '/sites/projets/uuid=' + uuid + '/full?type=gestion&webapp=1';
+        } else if (type === 'site') {
+            path = '/sites/uuid=' + uuid;
+        } else if (type === 'objectif') {
+            path = '/sites/objectifs/uuid=' + uuid + '/lite';
+        } else if (type === 'operation') {
+            path = '/sites/operations/uuid=' + uuid + '/lite';
+        } else if (type === 'operation_full') {
+            path = '/sites/operations/uuid=' + uuid + '/full?webapp=1';
+        } else if (type === 'commune') {
+            path = '/sites/commune/uuid=' + uuid;
+        }
+
+        const options = {
+            hostname,
+            port,
+            path,
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        };
+
+        const httpReq = http.request(options, (httpRes) => {
+            let data = '';
+            httpRes.on('data', (chunk) => { data += chunk; });
+            httpRes.on('end', () => {
+                try {
+                    resolve(JSON.parse(data));
+                } catch (e) {
+                    reject(e);
+                }
+            });
+            httpRes.on('error', reject);
+        });
+
+        // Ajout du timeout (exemple 5000 ms)
+        httpReq.setTimeout(5000, () => {
+            httpReq.abort();
+            reject(new Error(`Timeout lors de la récupération de ${type}`));
+        });
+
+        httpReq.on('error', reject);
+        httpReq.end();
+    });
+}
+
+
+
 module.exports = { 
     joinQuery, 
     ExecuteQuerySite, 
@@ -423,5 +495,7 @@ module.exports = {
     reset,
     detectShapefileGeometryType,
     convertToWKT,
-    extractZipFile // Ajouter l'export de la nouvelle fonction
+    extractZipFile, // Ajouter l'export de la nouvelle fonction
+    getBilan
+
 };

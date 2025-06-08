@@ -10,7 +10,6 @@
   "author": "Nicolas ELIE",
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.4.0",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "docx": "^9.5.0",
