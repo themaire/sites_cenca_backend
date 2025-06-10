@@ -183,9 +183,10 @@ router.get('/projets/uuid=:uuid/:mode', (req, res) => {
         }
     } else if (mode == 'full') {
         if (type == 'gestion') {
-            selectFields += 'uuid_proj, code, itin_tech, validite, document, programme, nom, perspectives, annee, statut, responsable, typ_projet, createur, date_crea, site, pro_webapp, pro_maitre_ouvrage, loc_poly as geom ';
-            fromTable = 'FROM opegerer.projets LEFT JOIN opegerer.localisations ON opegerer.projets.uuid_proj = opegerer.localisations.ref_uuid_proj ';
-            where += 'uuid_proj = $1;';
+            selectFields += "uuid_proj, code, itin_tech, validite, document, programme, opegerer.projets.nom, perspectives, annee, opegerer.projets.statut, responsable, concat(sal.prenom, ' ', sal.nom) as responsable_str, typ_projet, createur, date_crea, site, pro_webapp, pro_maitre_ouvrage, loc_poly as geom ";
+            fromTable = "FROM opegerer.projets LEFT JOIN opegerer.localisations ON opegerer.projets.uuid_proj = opegerer.localisations.ref_uuid_proj ";
+            fromTable += "LEFT JOIN admin.salaries sal ON sal.cd_salarie = opegerer.projets.responsable ";
+            where += "uuid_proj = $1;";
         } else if (type == 'autre') {
             selectFields += 'uuid_proj, code, validite, programme, nom, annee, statut, responsable, typ_projet, createur, date_crea, loc_poly as geom ';
             fromTable = 'FROM opeautres.projets proj LEFT JOIN opegerer.localisations loc ON proj.uuid_proj = loc.ref_uuid_proj ';
@@ -209,7 +210,7 @@ router.get('/operations/uuid=:uuid/:mode', (req, res) => {
     where = 'where ';
     if (req.params.mode == 'lite') {
 
-        selectFields = `SELECT op.uuid_ope, concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)) as type, op.nom_mo, op.quantite, opegerer.get_libelle(op.unite) as unite_str, op.code, op.titre, op.description, op.surf, `;
+        selectFields = `SELECT op.uuid_ope, concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)) as type, op.nom_mo, op.quantite, opegerer.get_libelle(op.unite) as unite_str, op.code, op.titre, op.description, op.remarque, op.surf, `;
         selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_financeurs WHERE uuid_ope = op.uuid_ope ) AS financeurs, `;
         selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_animaux WHERE uuid_ope = op.uuid_ope ) AS animaux `;
         fromTable += 'AS op ';
@@ -519,11 +520,25 @@ router.get('/gen_fiche_travaux/uuid_proj=:uuid', async (req, res) => {
             return res.status(404).json({ error: 'Bilan not found for the given UUID.' });
         }
         const buffer = await generateFicheTravauxWord(bilan);
-        res.setHeader('Content-Disposition', `attachment; filename=fiche_travaux_${bilan.objectifs[0].obj_ope_str}-${bilan.site.nom}.docx`);
+
+        const sanitize = (str) =>
+        String(str)
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") // enlève les accents
+            .replace(/[^\w\d_\-]/g, "_");    // remplace tout sauf lettres, chiffres, _ et - par _
+
+        const nom_site_sain = sanitize(bilan.site.nom);
+
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        res.setHeader('Content-Disposition', `attachment; filename=fiche_travaux_${bilan.objectifs[0].obj_ope_str}-${nom_site_sain}.docx`);
         res.send(buffer);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error("Erreur lors de la génération du Word :", error); // Log complet côté serveur
+        res.status(500).json({
+            error: error.message,
+            stack: error.stack,
+            details: error // Pour avoir tout l'objet erreur si besoin
+        });
     }
 });
 

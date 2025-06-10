@@ -26,7 +26,7 @@ function tableCellNoBorder(options = {}) {
 
 // Création du document
 function generateFicheTravauxWord(bilan) {
-    // console.log("Génération de la fiche avec ce bilan :", bilan);
+    console.log("Génération de la fiche avec ce bilan :", bilan);
 
     const header = new Table({
                     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -58,7 +58,7 @@ function generateFicheTravauxWord(bilan) {
                                         children: [
                                             new TextRun({ text: "FICHE TRAVAUX", bold: true, size: 32 }),
                                             new TextRun({ break: 1 }),
-                                            new TextRun({ text: "Responsable : " + bilan.projet.responsable, size: 24 }),
+                                            new TextRun({ text: "Responsable : " + bilan.projet.responsable_str, size: 24 }),
                                             new TextRun({ break: 1 }),
                                             new TextRun({ text: "Année : " + bilan.projet.annee, size: 24 }),
                                         ],
@@ -272,199 +272,103 @@ function generateFicheTravauxWord(bilan) {
 
 
         sections: [
-            {properties: {
-                page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } }, // Marges de la section
-            },
+            {
+                properties: {
+                    page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } }, // Marges de la section
+                },
 
-            headers: {
-                    default: new Header({
-                        children: [header]
-                    }),
-            },
-
-            children: [
-                
-                // Séparateur d'entête
-                new Paragraph({
-                    spacing: { after: 80 }
-                }),
-
-                // Titre principal
-                new Paragraph({
-                    children: [
-                        new TextRun({ text: bilan.objectifs[0].obj_ope_str }),
-                        new TextRun({ break: 1 }), // Saut de ligne
-                        new TextRun({ text: bilan.site.nom }),
-    
-                    ],
-                    style: "TitrePrime"
-                }),
-                new Paragraph({ spacing: { after: 200 } }), // Saut de ligne
-
-                // Section LOCALISATION DU SITE
-                new Paragraph({
-                    text: "LOCALISATION DU SITE",
-                    style: "TitreColore"
-                }),
-                new Paragraph({
-                    children: [
-                        new TextRun({ text: "Site / Code site CENCA : ", bold: true }),
-                        new TextRun({ text: `${bilan.site.nom} / ${bilan.site.code}` }),
-                        new TextRun({ break: 1 }), // Saut de ligne
-                        new TextRun({ text: "Commune / Département : ", bold: true }),
-                        new TextRun({ text: `${bilan.communes.map(c => c.nom).join(", ")} / ${bilan.communes.map(c => c.departement).join(", ")}` }),
-                    ],
-                    style: "wellSpaced",
-                    spacing: { after: 200 }
-                }),
-
-                // Section OBJECTIFS OPÉRATIONNELS
-                new Paragraph({
-                    text: "OBJECTIFS OPÉRATIONNELS",
-                    style: "TitreColore"
-                }),
-                new Paragraph({
-                    children: [
-                        new TextRun({ text: "Objectif opérationnel : ", bold: true }),
-                        new TextRun({ text: bilan.objectifs[0].obj_ope_str }),
-                        new TextRun({ break: 1 }),
-                        new TextRun({ text: "Niveau d'enjeux : ", bold: true }),
-                        new TextRun({ text: bilan.objectifs[0].nv_enjeux_str }),
-                        new TextRun({ break: 1 }),
-                        new TextRun({ text: "Enjeux écologiques : ", bold: true }),
-                        new TextRun({ text: bilan.objectifs[0].enjeux_eco }),
-                        new TextRun({ break: 1 }),
-                        new TextRun({ text: "Pressions à maîtriser : ", bold: true }),
-                        new TextRun({ text: bilan.objectifs[0].pression_maitrise }),
-                    ],
-                    style: "wellSpaced",
-                    spacing: { after: 200 }
-                }),
-
-                // Section OPERATIONS
-                new Paragraph({
-                    text: "OPERATIONS",
-                    style: "TitreColore"
-                }),
-
-                // Tableau des opérations
-                new Table({
-                    width: { size: 100, type: WidthType.PERCENTAGE },
-                    rows: [
-                        // En-tête
-                        new TableRow({
-                            headers: true,
-                            children: [
-                                new TableCell({
-                                    shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
-                                    verticalAlign: "center",
-                                    children: [new Paragraph({ 
-                                                    children: [
-                                                        new TextRun({ text: "Type d'opération 1 /" }),
-                                                        new TextRun({ break: 1 }), // Saut de ligne
-                                                        new TextRun({ text: "Type d'opération 2"})
-                                                    ],
-                                                    alignment: AlignmentType.CENTER,
-                                                    style: "HeaderTable"
-                                        })]
-                                }),
-                                new TableCell({
-                                    shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
-                                    verticalAlign: "center",
-                                    children: [new Paragraph({ text: "Maître d'œuvre", style: "HeaderTable" })]
-                                }),
-                                new TableCell({
-                                    shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
-                                    verticalAlign: "center",
-                                    children: [new Paragraph({ text: "Quantité - Unité", style: "HeaderTable" })]
-                                }),
-                                new TableCell({
-                                    width: { size: 20, type: WidthType.PERCENTAGE }, // Largeur à 25%
-                                    shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
-                                    verticalAlign: "center",
-                                    children: [new Paragraph({ text: "Type Programme Finance", style: "HeaderTable" })]
-                                }),
-                            ]
+                headers: {
+                        default: new Header({
+                            children: [header]
                         }),
-                        // Lignes d'opérations
-                        ...bilan.operations.map((op, idx) =>
-                            new TableRow({
-                                children: [
-                                    new TableCell({ children: [new Paragraph(op.type)] }),
-                                    new TableCell({ children: [new Paragraph(op.nom_mo)] }),
-                                    new TableCell({ children: [new Paragraph(`${op.quantite} - ${op.unite_str.toLowerCase()}${op.quantite > 0 ? "s" : ""}`)] }),
-                                    new TableCell({ children: [new Paragraph({
-                                        children: op.financeurs.map((financeur, i) => [
-                                            new TextRun({ text: financeur, style: "HeaderTable", verticalAlign: "center" }),
-                                            i < op.financeurs.length - 1 ? new TextRun({ break: 1 }) : null
-                                        ]).flat().filter(Boolean)
-                                    })] }),
-                                ],
-                                shading: idx % 2 === 1 ? { type: ShadingType.CLEAR, color: "auto", fill: grisTablePair } : undefined
-                            })
-                        )
-                    ]
-                }),
-            ],
-            footers: {
-                default: new Footer({
-                    children: [footer]
-                }),
-            }}, // Fin de de la première section
+                },
 
-
-
-            {properties: {
-                type: SectionType.NEXT_PAGE,
-                page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } }, // Marges de la section
-            },
-            headers: {
-                    default: new Header({
-                        children: [header]
-                    }),
-            },
-            children: [
-
-                // Séparateur d'entête
-                new Paragraph({
-                    spacing: { after: 80 }
-                }),
-
-                new Paragraph({
-                    text: "DESCRIPTION DES OPERATIONS REALISEES",
-                    style: "TitreColore",
-                    spacing: { after: 80 }
-                }),
-
-                // Boucle des opérations réalisées
-                ...bilan.operations.flatMap((op, i) => [
+                children: [
+                    
+                    // Séparateur d'entête
                     new Paragraph({
-                        text: `Opération ${i + 1}`,
-                        style: "TitreColore",
                         spacing: { after: 80 }
                     }),
-                    
+
+                    // Titre principal
                     new Paragraph({
                         children: [
-                            new TextRun({ text: "Type d'opération 1 / Type d'opération 2 : ", bold: true }),
-                            new TextRun({ text: op.type }),
-                            new TextRun({ break: 1 }),
-                            new TextRun({ text: "Description (détails) : ", bold: true }),
-                            new TextRun({ text: op.description ?? "non spécifiée" }),
-                            new TextRun({ break: 1 }),
-                            new TextRun({ text: "Remarques particulières : ", bold: true }),
-                            new TextRun({ text: op.remarques ?? "non spécifiées" }),
+                            new TextRun({ text: bilan.objectifs[0].obj_ope_str }),
+                            new TextRun({ break: 1 }), // Saut de ligne
+                            new TextRun({ text: bilan.site.nom }),
+        
+                        ],
+                        style: "TitrePrime"
+                    }),
+                    new Paragraph({ spacing: { after: 200 } }), // Saut de ligne
+
+                    // Section LOCALISATION DU SITE
+                    new Paragraph({
+                        text: "LOCALISATION DU SITE",
+                        style: "TitreColore"
+                    }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({ text: "Site / Code site CENCA : ", bold: true }),
+                            new TextRun({ text: `${bilan.site.nom} / ${bilan.site.code}` }),
+                            new TextRun({ break: 1 }), // Saut de ligne
+                            new TextRun({ text: "Commune / Département : ", bold: true }),
+                            new TextRun({ text: `${bilan.communes.map(c => c.nom).join(", ")} / ${bilan.communes.map(c => c.departement).join(", ")}` }),
                         ],
                         style: "wellSpaced",
-                        spacing: { after: 80 }
+                        spacing: { after: 200 }
                     }),
 
+                    // Section OBJECTIFS OPÉRATIONNELS
+                    new Paragraph({
+                        text: "OBJECTIFS OPÉRATIONNELS",
+                        style: "TitreColore"
+                    }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({ text: "Objectif opérationnel : ", bold: true }),
+                            new TextRun({ text: String(bilan.objectifs[0].obj_ope_str || "") }),
+                            new TextRun({ break: 1 }),
+                            new TextRun({ text: "Niveau d'enjeux : ", bold: true }),
+                            new TextRun({ text: String(bilan.objectifs[0].nv_enjeux_str || "") }),
+                            new TextRun({ break: 1 }),
+                            new TextRun({ text: "Enjeux écologiques : ", bold: true }),
+                            new TextRun({ text: String(bilan.objectifs[0].enjeux_eco || "") }),
+                            new TextRun({ break: 1 }),
+                            new TextRun({ text: "Pressions à maîtriser : ", bold: true }),
+                            new TextRun({ text: String(bilan.objectifs[0].pression_maitrise || "") }),
+                        ],
+                        style: "wellSpaced",
+                        spacing: { after: 200 }
+                    }),
+
+                    // Section OPERATIONS
+                    new Paragraph({
+                        text: "OPERATIONS",
+                        style: "TitreColore"
+                    }),
+
+                    // Tableau des opérations
                     new Table({
                         width: { size: 100, type: WidthType.PERCENTAGE },
                         rows: [
+                            // En-tête
                             new TableRow({
                                 headers: true,
                                 children: [
+                                    new TableCell({
+                                        shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
+                                        verticalAlign: "center",
+                                        children: [new Paragraph({ 
+                                                        children: [
+                                                            new TextRun({ text: "Type d'opération 1 /" }),
+                                                            new TextRun({ break: 1 }), // Saut de ligne
+                                                            new TextRun({ text: "Type d'opération 2"})
+                                                        ],
+                                                        alignment: AlignmentType.CENTER,
+                                                        style: "HeaderTable"
+                                            })]
+                                    }),
                                     new TableCell({
                                         shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
                                         verticalAlign: "center",
@@ -473,130 +377,294 @@ function generateFicheTravauxWord(bilan) {
                                     new TableCell({
                                         shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
                                         verticalAlign: "center",
-                                        children: [new Paragraph({ text: "Cadre de l'intervention", style: "HeaderTable" })]
+                                        children: [new Paragraph({ text: "Quantité - Unité", style: "HeaderTable" })]
                                     }),
                                     new TableCell({
+                                        width: { size: 20, type: WidthType.PERCENTAGE }, // Largeur à 25%
                                         shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
                                         verticalAlign: "center",
-                                        children: [new Paragraph({ text: "Quantité - unité", style: "HeaderTable" })]
-                                    }),
-                                    new TableCell({
-                                        shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
-                                        verticalAlign: "center",
-                                        children: [new Paragraph({ text: "Date de début", style: "HeaderTable" })]
-                                    }),
-                                    new TableCell({
-                                        shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
-                                        verticalAlign: "center",
-                                        children: [new Paragraph({ text: "Date de fin", style: "HeaderTable" })]
+                                        children: [new Paragraph({ text: "Type Programme Finance", style: "HeaderTable" })]
                                     }),
                                 ]
                             }),
-                            new TableRow({
-                                children: [
-                                    new TableCell({
-                                        children: [new Paragraph(op.nom_mo)]
-                                    }),
-                                    new TableCell({
-                                        children: [new Paragraph(bilan.operations_full[op.uuid_ope].cadre_intervention_str)]
-                                    }),
-                                    new TableCell({
-                                        children: [new Paragraph(`${op.quantite} - ${op.unite_str.toLowerCase()}${op.quantite > 0 ? "s" : ""}`)]
-                                    }),
-                                    new TableCell({
-                                        children: [new Paragraph(bilan.operations_full[op.uuid_ope].date_debut_str)]
-                                    }),
-                                    new TableCell({
-                                        children: [new Paragraph(bilan.operations_full[op.uuid_ope].date_fin_str)]
-                                    })
-                                ]
-                            })
+                            // Lignes d'opérations
+                            ...bilan.operations.map((op, idx) =>
+                                new TableRow({
+                                    children: [
+                                        new TableCell({ children: [new Paragraph(String(op.type || ""))] }),
+                                        new TableCell({ children: [new Paragraph(String(op.nom_mo || ""))] }),
+                                        new TableCell({ children: [new Paragraph(`${String(op.quantite || "")} - ${String(op.unite_str.toLowerCase() || "")}${op.quantite > 0 ? "s" : ""}`)] }),
+                                        new TableCell({ children: [new Paragraph({
+                                            children: (op.financeurs ?? []).map((financeur, i) => [
+                                                new TextRun({ text: financeur, style: "HeaderTable", verticalAlign: "center" }),
+                                                i < (op.financeurs ?? []).length - 1 ? new TextRun({ break: 1 }) : null
+                                            ]).flat().filter(Boolean)
+                                        })] }),
+                                    ],
+                                    shading: idx % 2 === 1 ? { type: ShadingType.CLEAR, color: "auto", fill: grisTablePair } : undefined
+                                })
+                            )
                         ]
-                    }), // Fin du tableau des détails de l'opération
-
-                    // Ajoutez ici des éléments conditionnels à l'array si besoin, par exemple :
-                    ...(bilan.operations_full[op.uuid_ope].action == "028_TRAV_PAT_V2" && bilan.operations_full[op.uuid_ope].action_2 == "210"
-                        ? [
-                            new Paragraph({
-                                children: [
-                                    new TextRun({
-                                        text: "Données relatives aux travaux de paturages",
-                                        bold: true,
-                                        break: 1
-                                    })
-                                ]
-                            }),
-                            // Tableau des animaux et données de pâturage
-                            new Table({
-                                width: { size: 100, type: WidthType.PERCENTAGE },
-                                rows: [
-                                    // En-tête
-                                    new TableRow({
-                                        headers: true,
-                                        children: [
-                                            new TableCell({
-                                                shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
-                                                verticalAlign: "center",
-                                                children: [new Paragraph({ text: "Effectif", style: "HeaderTable" })]
-                                            }),
-                                            new TableCell({
-                                                shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
-                                                verticalAlign: "center",
-                                                children: [new Paragraph({ text: "Nb jours", style: "HeaderTable" })]
-                                            }),
-                                            new TableCell({
-                                                shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
-                                                verticalAlign: "center",
-                                                children: [new Paragraph({ text: "Chargement (UGB/ha)", style: "HeaderTable" })]
-                                            }),
-                                            new TableCell({
-                                                shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
-                                                verticalAlign: "center",
-                                                children: [new Paragraph({ text: "Taux abroutissement", style: "HeaderTable" })]
-                                            }),
-                                            new TableCell({
-                                                shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
-                                                verticalAlign: "center",
-                                                children: [new Paragraph({ text: "Animal pâturant", style: "HeaderTable" })]
-                                            }),
-                                        ]
-                                    }),
-                                    new TableRow({
-                                        verticalAlign: "center",
-                                        children: [
-                                            new TableCell({ children: [new Paragraph(String(bilan.operations_full[op.uuid_ope].effectif_paturage ?? ""))] }),
-                                            new TableCell({ children: [new Paragraph(String(bilan.operations_full[op.uuid_ope].nb_jours_paturage ?? ""))] }),
-                                            new TableCell({ children: [new Paragraph(String(bilan.operations_full[op.uuid_ope].chargement_paturage ?? ""))] }),
-                                            new TableCell({ children: [new Paragraph(String(bilan.operations_full[op.uuid_ope].abroutissement_paturage ?? ""))] }),
-                                            new TableCell({ children: [new Paragraph({
-                                                children: op.animaux.map((animal, i) => [
-                                                    new TextRun({ text: animal, style: "HeaderTable", verticalAlign: "center" }),
-                                                    i < op.animaux.length - 1 ? new TextRun({ break: 1 }) : null
-                                                ]).flat().filter(Boolean)
-                                            })] }),
-                                        ]
-                                    })
-                                ]
-                            }),
-                        ]
-                        : []
-                    ),
-
-                    // Séparateur de fin de boucle
-                    new Paragraph({
-                        spacing: { after: 180 }
                     }),
-                ]),// Fin de la boucle des opérations
-            ]}
-        ] // Fin de la deuxième section
-    });
-    // return Packer.toBuffer(doc); // Retourne une Promise<Buffer>
+                ],
+                footers: {
+                    default: new Footer({
+                        children: [footer]
+                    }),
+                }
+            }, // Fin de de la première section
 
-    Packer.toBuffer(doc).then((buffer) => {
-        pathDoc = path.join(__dirname, "fiche_bilan.docx");
-        // Enregistrer le document Word
-        fs.writeFileSync(path.join(__dirname, "fiche_bilan.docx"), buffer);
+
+
+            {
+                properties: {
+                    type: SectionType.NEXT_PAGE,
+                    page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } }, // Marges de la section
+                },
+                headers: {
+                        default: new Header({
+                            children: [header]
+                        }),
+                },
+                children: [
+
+                    // Séparateur d'entête
+                    new Paragraph({
+                        spacing: { after: 80 }
+                    }),
+
+                    new Paragraph({
+                        text: "DESCRIPTION DES OPERATIONS REALISEES",
+                        style: "TitreColore",
+                        spacing: { after: 80 }
+                    }),
+
+                    // Boucle des opérations réalisées
+                    ...bilan.operations.flatMap((op, i) => [
+                        new Paragraph({
+                            text: `Opération ${i + 1}`,
+                            style: "TitreColore",
+                            spacing: { after: 80 }
+                        }),
+                        
+                        new Paragraph({
+                            children: [
+                                new TextRun({ text: "Type d'opération 1 / Type d'opération 2 : ", bold: true }),
+                                new TextRun({ text: op.type }),
+                                new TextRun({ break: 1 }),
+                                new TextRun({ text: "Description (détails) : ", bold: true }),
+                                new TextRun({ text: String(op.description || "non spécifiée") }),
+                                new TextRun({ break: 1 }),
+                                new TextRun({ text: "Remarques particulières : ", bold: true }),
+                                new TextRun({ text: String(op.remarque || "non spécifiées") }),
+                            ],
+                            style: "wellSpaced",
+                            spacing: { after: 80 }
+                        }),
+
+                        new Table({
+                            width: { size: 100, type: WidthType.PERCENTAGE },
+                            rows: [
+                                new TableRow({
+                                    headers: true,
+                                    children: [
+                                        new TableCell({
+                                            shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
+                                            verticalAlign: "center",
+                                            children: [new Paragraph({ text: "Maître d'œuvre", style: "HeaderTable" })]
+                                        }),
+                                        new TableCell({
+                                            shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
+                                            verticalAlign: "center",
+                                            children: [new Paragraph({ text: "Cadre de l'intervention", style: "HeaderTable" })]
+                                        }),
+                                        new TableCell({
+                                            shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
+                                            verticalAlign: "center",
+                                            children: [new Paragraph({ text: "Quantité - unité", style: "HeaderTable" })]
+                                        }),
+                                        new TableCell({
+                                            shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
+                                            verticalAlign: "center",
+                                            children: [new Paragraph({ text: "Date de début", style: "HeaderTable" })]
+                                        }),
+                                        new TableCell({
+                                            shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
+                                            verticalAlign: "center",
+                                            children: [new Paragraph({ text: "Date de fin", style: "HeaderTable" })]
+                                        }),
+                                    ]
+                                }),
+                                new TableRow({
+                                    children: [
+                                        new TableCell({
+                                            children: [new Paragraph(String(op.nom_mo || ""))]
+                                        }),
+                                        new TableCell({
+                                            children: [new Paragraph(String(bilan.operations_full[op.uuid_ope].cadre_intervention_str || ""))]
+                                        }),
+                                        new TableCell({
+                                            children: [new Paragraph(`${String(op.quantite || "")} - ${String(op.unite_str.toLowerCase() || "")}${op.quantite > 0 ? "s" : ""}`)]
+                                        }),
+                                        new TableCell({
+                                            children: [new Paragraph(String(bilan.operations_full[op.uuid_ope].date_debut_str || ""))]
+                                        }),
+                                        new TableCell({
+                                            children: [new Paragraph(String(bilan.operations_full[op.uuid_ope].date_fin_str || ""))]
+                                        })
+                                    ]
+                                })
+                            ]
+                        }), // Fin du tableau des détails de l'opération
+
+                        // Ajoutez ici des éléments conditionnels à l'array si besoin, par exemple :
+                        ...(bilan.operations_full[op.uuid_ope].action == "028_TRAV_PAT_V2" && bilan.operations_full[op.uuid_ope].action_2 == "210"
+                            ? [
+                                new Paragraph({
+                                    children: [
+                                        new TextRun({
+                                            text: "Données relatives aux travaux de paturages",
+                                            bold: true,
+                                            break: 1
+                                        })
+                                    ]
+                                }),
+                                // Tableau des animaux et données de pâturage
+                                new Table({
+                                    width: { size: 100, type: WidthType.PERCENTAGE },
+                                    rows: [
+                                        // En-tête
+                                        new TableRow({
+                                            headers: true,
+                                            children: [
+                                                new TableCell({
+                                                    shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
+                                                    children: [new Paragraph({ text: "Effectif", style: "HeaderTable" })],
+                                                    style: "HeaderTable",
+                                                    alignment: AlignmentType.CENTER
+                                                }),
+                                                new TableCell({
+                                                    shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
+                                                    children: [new Paragraph({ text: "Nb jours", style: "HeaderTable" })],
+                                                    style: "HeaderTable",
+                                                    alignment: AlignmentType.CENTER
+                                                }),
+                                                new TableCell({
+                                                    shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
+                                                    children: [new Paragraph({ text: "Chargement (UGB/ha)", style: "HeaderTable" })],
+                                                    style: "HeaderTable",
+                                                    alignment: AlignmentType.CENTER
+                                                }),
+                                                new TableCell({
+                                                    shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
+                                                    children: [new Paragraph({ text: "Taux abroutissement", style: "HeaderTable" })],
+                                                    style: "HeaderTable",
+                                                    alignment: AlignmentType.CENTER
+                                                }),
+                                                new TableCell({
+                                                    shading: { type: ShadingType.CLEAR, color: "auto", fill: bleuClair },
+                                                    children: [new Paragraph({ text: "Animal pâturant", style: "HeaderTable" })],
+                                                    style: "HeaderTable",
+                                                    alignment: AlignmentType.CENTER
+                                                }),
+                                            ]
+                                        }),
+                                        new TableRow({
+                                            verticalAlign: "center",
+                                            children: [
+                                                new TableCell({ children: [
+                                                    new Paragraph({
+                                                        alignment: AlignmentType.CENTER,
+                                                        children: [
+                                                            new TextRun(String(bilan.operations_full[op.uuid_ope].effectif_paturage || ""))
+                                                        ]
+                                                    })]
+                                                }),
+                                                new TableCell({ children: [
+                                                    new Paragraph({
+                                                        alignment: AlignmentType.CENTER,
+                                                        children: [
+                                                            new TextRun(String(bilan.operations_full[op.uuid_ope].nb_jours_paturage || ""))
+                                                        ]
+                                                    })
+                                                ]}),
+                                                new TableCell({ children: [new Paragraph({
+                                                    alignment: AlignmentType.CENTER,
+                                                    children: [
+                                                        new TextRun(String(bilan.operations_full[op.uuid_ope].chargement_paturage || ""))
+                                                        ]
+                                                    })]
+                                                }),
+                                                new TableCell({ children: [
+                                                    new Paragraph({
+                                                        alignment: AlignmentType.CENTER,
+                                                        children: [
+                                                            new TextRun(String(bilan.operations_full[op.uuid_ope].abroutissement_paturage || ""))
+                                                        ]
+                                                    })
+                                                ]}),
+                                                new TableCell({ children: [new Paragraph({
+                                                    alignment: AlignmentType.CENTER,
+                                                    children: (op.animaux ?? []).map((animal, i) => [
+                                                        new TextRun({ text: animal, style: "HeaderTable", verticalAlign: "center" }),
+                                                        i < (op.animaux ?? []).length - 1 ? new TextRun({ break: 1 }) : null
+                                                    ]).flat().filter(Boolean)
+                                                })] }),
+                                            ]
+                                        })
+                                    ]
+                                }),
+                            ]
+                            : []
+                        ),
+
+                        // Séparateur de fin de boucle
+                        new Paragraph({
+                            spacing: { after: 180 }
+                        }),
+                    ]),// Fin de la boucle des opérations
+                ] 
+            }, // Fin de la deuxième section
+
+            {
+                properties: {
+                    type: SectionType.NEXT_PAGE,
+                    page: { 
+                        margin: { top: 720, right: 720, bottom: 720, left: 720 },
+                        size: { orientation: "landscape" }
+                    },
+                },
+                headers: {
+                        default: new Header({
+                            children: [header]
+                        }),
+                },
+                children: [
+                    // Paragraphes de séparation pour placer la cartographie au format image
+                    new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        spacing: { after: 80 }
+                    }),
+                ],
+                footers: {
+                    default: new Footer({
+                        children: [footer]
+                    }),
+                }
+            }
+        ] // Fin de la troisième section
     });
+    
+    // Exemple d'enregistrement du document Word directmeent dans le dossier du script actuel
+    // Packer.toBuffer(doc).then((buffer) => {
+    //         pathDoc = path.join(__dirname, "fiche_bilan.docx");
+    //         // Enregistrer le document Word
+    //         fs.writeFileSync(path.join(__dirname, "fiche_bilan.docx"), buffer);
+    // });
+
+        // Ficher de sortie Word passé à la sortie de la fonction
+    // en vue d'etre enregistré / téléchargé à la demande par le client
+    return Packer.toBuffer(doc); // Retourne une Promise<Buffer>
 }
 
 module.exports = {
