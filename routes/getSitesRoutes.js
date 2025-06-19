@@ -21,6 +21,7 @@ router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp",
                 // A FAIRE POUR PLUS TARD : adapter la fonction executeQueryAndRespond() (utilisée de partout sur toutes le routes) pour qu'elle puisse prendre en compte les paramètres de la requête
 
                 const queryObject = selectQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
+                console.log("Requête pour les critères de recherche de sites : " + JSON.stringify(queryObject));
 
                 ExecuteQuerySite(
                     pool,

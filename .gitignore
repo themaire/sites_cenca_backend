@@ -142,3 +142,9 @@ backend*.service
 *.sh
 
 uploads/
+migration/bkps
+
+prometheus_data/
+migration/diff_migra.sql
+migration/nohup.out
+migration/recreate_cenca_maps.sql

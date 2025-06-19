@@ -107,41 +107,48 @@ router.post('/login', async (req, res) => {
   };
   ExecuteQuerySite(
     pool,
-    { query: userQuery, message: "site/put/table=espace_site/uuid" },
+    { query: userQuery, message: "/auth/login" },
     "select",
     async ( resultats, message ) => { // On a le droit de mettre async ici sur la fonction de rappel (callback)
+      let messageError = 'Indentifiant ou mot de passe incorrect';
       if (resultats.length !== 1) {
-        return res.status(400).json({ message: 'Utilisateur non trouvé' });
-      }else if (resultats.length === 1) {
-        // console.log("---------> result.rows[0] : ");
-        // console.log(result.rows[0]);
+        return res.status(400).json({ message: messageError });
+      } else if (resultats.length === 1) {
+
         const sal_hash = resultats[0]["sal_hash"];
-
-        // Créer une nouvel objet contenant uniquement l'identifiant
-        const payload = { identifiant : resultats[0]["identifiant"] };
-
-        // Comparer le mot de passe saisi avec le mot de passe haché stocké
-        const match = await bcrypt.compare(password, sal_hash);
-      
-        if (!match) {
-          return res.status(400).json({ message: 'Mot de passe incorrect' });
-        }else{
+        
+        // Si le hachage n'est pas vide dans la base de données pour l'utilisateur
+        // alors on crée un token d'authentification
+        if (sal_hash != null && sal_hash != "") {
           // Création du token
+
+          // Créer une nouvel objet contenant uniquement l'identifiant
+          const payload = { identifiant : resultats[0]["identifiant"] };
+
+          const match = await bcrypt.compare(password, sal_hash);
           // console.log("---------> payload : ");
           // console.log(payload);
 
           // Pas necessaire puisque la bibliothèque jsonwebtoken gère cela pour vous automatiquement
           // mais au cs où nous voudrier changer d'algorithme ou de type de token plus tard
-          const header = {
-            alg: 'HS256',
-            typ: 'JWT'
-          };
-          const token = jwt.sign(payload, secretKey, { expiresIn: '1h' });
-          res.status(200).json({ message: 'Connexion réussie', 
-                                  identifiant: resultats[0]["identifiant"],
-                                  groupe: resultats[0]["gro_id"],
-                                  token: token}
-          );
+          // const header = {
+          //   alg: 'HS256',
+          //   typ: 'JWT'
+          // };
+
+          // Puis si le mot de passe correspond
+          if (match) {
+              const token = jwt.sign(payload, secretKey, { expiresIn: '1h' });
+              return res.status(200).json({ message: 'Connexion réussie', 
+                                      identifiant: resultats[0]["identifiant"],
+                                      groupe: resultats[0]["gro_id"],
+                                      token: token}
+              );
+          } else {
+          return res.status(400).json({ message: messageError });
+          }
+        } else {
+          return res.status(400).json({ message: messageError });
         }
       }    
     }
@@ -270,7 +277,7 @@ router.post('/forgot-password', async (req, res) => {
           <p>
             Cet email a été généré automatiquement, merci de ne pas répondre.<br>
             Voici votre lien de réinitialisation&nbsp;:<br><br>
-            <a href="http://si-10.cen-champagne-ardenne.org:8070/login/reset-password?token=${resetToken}">Réinitialiser le mot de passe</a>
+            <a href="http://si-10.cen-champagne-ardenne.org:8070/reset-password?token=${resetToken}">Réinitialiser le mot de passe</a>
           </p>
         </body>
       </html>
