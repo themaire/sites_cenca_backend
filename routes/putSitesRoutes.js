@@ -272,8 +272,17 @@ router.post(
             const originalname = req.files.file[0].originalname; // Nom du fichier reçu
             const fileName = originalname.split('.').slice(0, -1).join('.'); // Nom du fichier reçu avec l'extension
 
-            const extractPath = path.join(__dirname, '../uploads/extracted'); // Où les zip sont mis les zip extraits
+            const uploadPath = path.join(__dirname, '../uploads');
+            const extractPath = path.join(uploadPath, 'extracted'); // Où les zip sont mis les zip extraits
             // const extractedFolder = path.join(extractPath, fileName); // Chemin du zip extrait
+
+            if (!fs.existsSync(uploadPath)) {
+                fs.mkdirSync(uploadPath, { recursive: true });
+            }
+            if (!fs.existsSync(extractPath)) {
+                fs.mkdirSync(extractPath, { recursive: true });
+            }
+
             let workingPath = '';
             let zippedFolder = '';
 
