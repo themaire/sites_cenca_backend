@@ -95,6 +95,10 @@ router.post('/login', async (req, res) => {
   const { username, password } = req.body;
   // const hashedPassword = await bcrypt.hash(password, saltRounds);
   // console.log("---------> hashedPassword : " + hashedPassword);
+  
+  if (!username || !password) {
+    return res.status(400).json({ message: 'Nom d\'utilisateur ou mot de passe manquant.' });
+  }
 
   // Rechercher l'utilisateur par son nom d'utilisateur et si il existe
   let querySQL = 'SELECT sal.identifiant, sal.sal_hash, salgro.gro_id FROM admin.salaries sal ';
@@ -105,6 +109,7 @@ router.post('/login', async (req, res) => {
     text: querySQL,
     values: [username],
   };
+
   ExecuteQuerySite(
     pool,
     { query: userQuery, message: "/auth/login" },

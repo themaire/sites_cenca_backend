@@ -7,8 +7,7 @@ require('dotenv').config();
 const NODE_PORT = process.env.NODE_PORT;
 
 var express = require("express");
-const client = require('prom-client'); // Pour la surveillance des performances avec Proxmox*
-const promBundle = require("express-prom-bundle");
+// const client = require('prom-client'); // Pour la surveillance des performances avec Proxmox*http_request_duration_seconds_count{method="GET", path="/sites", status_code="200", client_ip="192.168.1.100", project_name="node-app-observability", project_type="expressjs"} 1
 var app = express();
 
 // PAS BESOIN de ce bloc si tu utilises express-prom-bundle :
@@ -19,6 +18,8 @@ var app = express();
 //   res.end(await register.metrics());
 // });
 
+const promBundle = require("express-prom-bundle");
+
 const metricsMiddleware = promBundle({
   includeMethod: true,
   includePath: true,
@@ -26,13 +27,22 @@ const metricsMiddleware = promBundle({
   promClient: {
     collectDefaultMetrics: {},
   },
-  customLabels: { project_name: 'node-app-observability', project_type: 'expressjs' },
+  customLabels: {
+    project_name: 'node-app-observability',
+    project_type: 'expressjs',
+    client_ip: null, // Ajout du label personnalisé pour l'IP
+  },
   normalizePath: [
-    // Regroupe les routes dynamiques pour de plus jolis graphs
     ['^/user/.*', '/user/#val'],
     ['^/order/.*', '/order/#val'],
   ],
+  transformLabels: (labels, req) => {
+    // Ajoute l'adresse IP du client dans les labels
+    labels.client_ip = req.headers['x-forwarded-for'] || req.ip;
+    return labels;
+  },
 });
+
 app.use(metricsMiddleware);
 
 const rateLimit = require("express-rate-limit");
@@ -40,7 +50,7 @@ const rateLimit = require("express-rate-limit");
 // Configuration du middleware de rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limite chaque IP à 100 requêtes par fenêtre
+  max: 500, // Limite chaque IP à 100 requêtes par fenêtre
   message: "Trop de requêtes effectuées depuis cette IP, veuillez réessayer plus tard.",
   standardHeaders: true, // Retourne les informations de rate limit dans les headers `RateLimit-*`
   legacyHeaders: false, // Désactive les headers `X-RateLimit-*`
@@ -51,7 +61,51 @@ app.use(limiter);
 
 var cors = require("cors");
 app.listen(NODE_PORT);
-app.use(cors()); // Pour permettre le cross origin
+
+// app.use(cors()); // Pour permettre le cross origin
+
+
+/**
+ * Tableau des origines autorisées pour les requêtes CORS.
+ * Seules les requêtes provenant de ces URLs seront acceptées par le serveur.
+ *
+ * @type {string[]}
+ * @const
+ */
+const allowedOrigins = [
+  'http://si-10.cen-champagne-ardenne.org',
+  'https://si-10.cen-champagne-ardenne.org',
+  'http://si-10.cen-champagne-ardenne.org:8070', // Ajout de l'origine avec le port
+  'http://si-10.cen-champagne-ardenne.org:8889', // Origine du backend
+  'http://192.168.1.227:4200', // Ajout de l'origine avec le port
+  'http://192.168.1.50:8887', // Origine du backend
+  'http://localhost:4200', // Ajout de l'origine avec le port
+  'http://localhost:8887', // Origine du backend
+];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Origine non autorisée'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Méthodes autorisées
+  allowedHeaders: ['Content-Type', 'Authorization'], // En-têtes autorisés
+  credentials: true, // Autorise les cookies et les informations d'authentification
+}));
+
+
+// debugger les requêtes entrantes
+app.use((req, res, next) => {
+  console.log(`Requête reçue : ${req.method} ${req.url}`);
+  console.log('En-têtes :', req.headers);
+  next();
+});
+
+
+// app.use(cors()); // Middleware CORS
+app.options('*', cors()); // Répond à toutes les requêtes préflight
 app.use(express.json()); // Pour traiter les requêtes JSON
 app.use(express.urlencoded({ extended: true })); // Pour traiter les requêtes encodées en URL
 
@@ -76,12 +130,14 @@ async function run() {
 
     // Middleware pour capturer les routes inconnues
     app.use((req, res, next) => {
+      const clientIp = req.headers['x-forwarded-for'] || req.ip; // Récupère l'IP du client
+      console.log(`Route non trouvée : ${req.url}, IP du client : ${clientIp}`);
       res.status(404).json({
         success: false,
         message: "Route non trouvée.",
-        req : req.url
+        req: req.url,
+        ip: clientIp // Ajoute l'IP dans la réponse JSON
       });
-      console.log("Route non trouvée : " + req.url);
     });
 
     // Middleware pour gérer les erreurs

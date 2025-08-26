@@ -17,7 +17,7 @@ confTransporter = {
     // rejectUnauthorized: false // à activer seulement si tu as des soucis de certificat
   }
 }
-console.log("Configuration du transporteur SMTP :", confTransporter);
+// console.log("Configuration du transporteur SMTP :", confTransporter);
 
 // Créer un transporteur SMTP
 const transporter = nodemailer.createTransport(confTransporter);
