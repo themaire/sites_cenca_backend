@@ -50,7 +50,7 @@ const rateLimit = require("express-rate-limit");
 // Configuration du middleware de rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Limite chaque IP à 100 requêtes par fenêtre
+  max: 500, // Limite chaque IP à 500 requêtes par fenêtre
   message: "Trop de requêtes effectuées depuis cette IP, veuillez réessayer plus tard.",
   standardHeaders: true, // Retourne les informations de rate limit dans les headers `RateLimit-*`
   legacyHeaders: false, // Désactive les headers `X-RateLimit-*`

@@ -8,7 +8,7 @@ const { authenticateToken } = require('../fonctions/fonctionsAuth.js');
 
 const pool = require('../dbPool/poolConnect.js');
 
-// Menu (Route protégée)
+// Menu (Route non protégée)
 router.get("/parent=:parent", (req, res) => {
     const SelectFields =
         "SELECT men_id as id, men_name as name, men_class_color as class_color, men_parent as parent, men_route as route, men_accueil as accueil, men_url as url , men_description as description, men_picture as picture, men_date_added as date_added, men_opened as opended ";
