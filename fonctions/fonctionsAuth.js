@@ -20,7 +20,7 @@ const authenticateToken = (req, res, next) => {
 
     if (!req.token) return res.status(401).json({ message: 'Token manquant' });
 
-    const blackedTokenReq ="SELECT exists( SELECT bla_id FROM admin.blacklist_token where bla_token = $1 );";
+    const blackedTokenReq = "SELECT exists( SELECT bla_id FROM admin.blacklist_token where bla_token = $1 );";
   
     queryObject = {
         text: blackedTokenReq,

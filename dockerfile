@@ -14,6 +14,7 @@ RUN npm install
 COPY routes/ ./routes/
 COPY dbPool/ ./dbPool/
 COPY fonctions/ ./fonctions/
+COPY scripts/ ./scripts/
 COPY .env .
 COPY node_base_sites.js .
 
