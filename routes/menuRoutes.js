@@ -20,7 +20,7 @@ router.get("/parent=:parent", (req, res) => {
     console.log("parent : ");
     console.log(parent);
 
-    if (req.params.parent == "null") {
+    if (parent == "null") {
         where = "where men_parent is null";
         queryObject = {
             text: joinQuery(
@@ -44,17 +44,25 @@ router.get("/parent=:parent", (req, res) => {
         { query: queryObject, message: "menu/parent" },
         "select",
         ( resultats, message ) => {
-            if (resultats.length > 0 || message == "ok") {
-                const json = JSON.stringify(resultats);
-                // console.log(json);
-                res.setHeader("Access-Control-Allow-Origin", "*");
-                res.setHeader("Content-Type", "application/json; charset=utf-8");
-                res.end(json);
-            } else {
-                const json = JSON.stringify([]);
-                res.setHeader("Access-Control-Allow-Origin", "*");
-                res.setHeader("Content-Type", "application/json; charset=utf-8");
-                res.end(json);
+            try {
+                if (resultats.length > 0) {
+                    const json = JSON.stringify(resultats);
+                    // console.log(json);
+                    res.setHeader("Access-Control-Allow-Origin", "*");
+                    res.setHeader("Content-Type", "application/json; charset=utf-8");
+                    res.end(json);
+                } else {
+                    const json = JSON.stringify([]);
+                    res.setHeader("Access-Control-Allow-Origin", "*");
+                    res.setHeader("Content-Type", "application/json; charset=utf-8");
+                    res.end(json);
+                }
+            } catch (error) {
+                console.error("Error in menu/parent route: ", error);
+                res.status(500).json({
+                    success: false,
+                    message: "Erreur interne du serveur."
+                });
             }
         }
     );

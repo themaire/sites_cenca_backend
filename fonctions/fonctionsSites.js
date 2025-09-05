@@ -1,3 +1,5 @@
+const shapefile = require('shapefile');
+
 function joinQuery(select, from, where = "") {
     const query = select + from + where;
 
@@ -206,8 +208,12 @@ async function updateEspaceSite(pool, res, espaceQuery, siteQuery) {
 function executeQueryAndRespond(pool, SelectFields, FromTable, where, uuid, res, message, mode = "lite") {
     const queryObject = {
         text: joinQuery(SelectFields, FromTable, where),
-        values: [uuid],
+        // values: [uuid],
     };
+    if (uuid !== "null") queryObject.values = [uuid];  // Ajoutes les valeurs si elles existent a l'objet queryObject
+
+    console.log("queryObject : ");
+    console.log(queryObject);
 
     ExecuteQuerySite(pool, {query: queryObject, "message": message}, "select",
         (resultats) => {
@@ -239,4 +245,257 @@ function reset() {
     return { SelectFields, FromTable, where, message, json };
 }
 
-module.exports = { joinQuery, ExecuteQuerySite, selectQuery, distinctSiteResearch, updateEspaceSite, executeQueryAndRespond, reset };
+function convertToWKT_origonal(coordinates) {
+    console.log('Coordonnées brutes:', coordinates);
+
+    const processPolygon = (polygon) => {
+        // Supprimer les doublons consécutifs
+        const uniqueCoords = polygon.filter((coord, index, self) =>
+            index === self.findIndex(c => 
+                c[0] === coord[0] && c[1] === coord[1]
+            )
+        );
+
+        // Ajouter le point de fermeture si nécessaire (premier point = dernier point)
+        if (uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
+            uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]) {
+            uniqueCoords.push(uniqueCoords[0]);
+        }
+
+        // Convertir les coordonnées en WKT
+        return uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+    };
+
+    let wktCoords;
+    let type;
+
+    if (coordinates.length > 1) {
+        // Multipolygon
+        type = 'MULTIPOLYGON';
+        wktCoords = coordinates.map(polygon => 
+            `(${polygon.map(ring => `(${processPolygon(ring)})`).join(',')})`
+        ).join(',');
+    } else {
+        // Simple polygon
+        type = 'POLYGON';
+        wktCoords = coordinates.map(ring => `(${processPolygon(ring)})`).join(',');
+    }
+
+    const EWKT = `SRID=2154;${type}(${wktCoords})`;
+    console.log(EWKT);
+    return EWKT;
+}
+
+/**
+ * Détecte le type de géométrie d'un shapefile (POINT, LINESTRING, POLYGON, MULTIPOLYGON, etc.)
+ * @param {string} shpPath - Chemin vers le fichier .shp
+ * @param {string} dbfPath - Chemin vers le fichier .dbf
+ * @returns {Promise<string>} - Le type de géométrie détecté (ex: 'Point', 'Polygon', ...)
+ */
+async function detectShapefileGeometryType(shpPath, dbfPath) {
+    try {
+        const source = await shapefile.open(shpPath, dbfPath);
+        const result = await source.read();
+        if (result.done) {
+            throw new Error('Aucune géométrie trouvée dans le shapefile');
+        }
+        // Le type est dans result.value.geometry.type (ex: 'Point', 'Polygon', ...)
+        return result.value.geometry.type.toUpperCase();
+    } catch (error) {
+        console.error('Erreur lors de la détection du type de géométrie :', error);
+        throw error;
+    }
+}
+
+function convertToWKT(coordinates, typeGeometry = null) {
+    console.log('Coordonnées brutes:', coordinates);
+
+    // Si le type est explicitement passé, on l'utilise, sinon on déduit
+    let type = typeGeometry ? typeGeometry.toUpperCase() : null;
+
+    // Détection automatique si type non fourni
+    // if (!type) {
+    if (1) {
+        if (typeof coordinates[0] === 'number') {
+            type = 'POINT';
+        } else if (Array.isArray(coordinates[0]) && typeof coordinates[0][0] === 'number') {
+            type = 'LINESTRING';
+        } else if (Array.isArray(coordinates[0]) && Array.isArray(coordinates[0][0])) {
+            // Polygon ou MultiPolygon
+            type = coordinates.length > 1 ? 'MULTIPOLYGON' : 'POLYGON';
+        }
+    }
+
+    if (type === 'POINT') {
+        // [x, y]
+        wktCoords = `${coordinates[0]} ${coordinates[1]}`;
+    } else if (type === 'LINESTRING') {
+        wktCoords = coordinates.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+    } else if (type === 'POLYGON') {
+        const processPolygon = (polygon) => {
+            const uniqueCoords = polygon.filter((coord, index, self) =>
+                index === self.findIndex(c => c[0] === coord[0] && c[1] === coord[1])
+            );
+            if (uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
+                uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]) {
+                uniqueCoords.push(uniqueCoords[0]);
+            }
+            return uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+        };
+        wktCoords = coordinates.map(ring => `(${processPolygon(ring)})`).join(',');
+    } else if (type === 'MULTIPOLYGON') {
+        const processPolygon = (polygon) => {
+            const uniqueCoords = polygon.filter((coord, index, self) =>
+                index === self.findIndex(c => c[0] === coord[0] && c[1] === coord[1])
+            );
+            if (uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
+                uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]) {
+                uniqueCoords.push(uniqueCoords[0]);
+            }
+            return uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+        };
+        wktCoords = coordinates.map(polygon =>
+            `(${polygon.map(ring => `(${processPolygon(ring)})`).join(',')})`
+        ).join(',');
+    } else {
+        throw new Error('Type de géométrie non supporté');
+    }
+
+    const EWKT = `SRID=2154;${type}(${wktCoords})`;
+    console.log(EWKT);
+    return {"type": type, "EWKT": EWKT};
+}
+
+const unzipper = require('unzipper');
+const fs = require('fs');
+const path = require('path');
+
+async function extractZipFile(filePath, extractPath) {
+    // Retourne true si le shapefile extrait est un dossier
+    // Retourne false si les fichiers du shapefile ont été zippé comme ça 
+    let folderToReturn = '';
+    folderToReturn = await new Promise((resolve, reject) => { 
+        // Cette promise retourne sa valeur isFolder au travers de resolve
+        fs.createReadStream(filePath)
+            .pipe(unzipper.Parse())
+            .on('entry', async (entry) => {
+            const cheminElement = entry.path;
+            // console.log('cheminElement:', cheminElement);
+            const name = path.basename(cheminElement); // Nom d'un dossier à retourner
+
+            const type = entry.type;
+            const fullPath = path.join(extractPath, cheminElement);
+
+            if (cheminElement.startsWith('__MACOSX') || 
+                cheminElement.startsWith('.DS_Store') || 
+                cheminElement.startsWith('._')) {
+                entry.autodrain();
+            } else {
+                if (type === 'Directory') {
+                    folderToReturn = name;
+                    await fs.promises.mkdir(fullPath, { recursive: true });
+                } else {
+                entry.pipe(fs.createWriteStream(fullPath));
+                }
+            }
+            })
+            .on('close', async () => {
+            try {
+                console.log('Fichier extrait à supprimer :', filePath);
+                await fs.promises.rm(filePath, { force: true });
+                resolve(folderToReturn); // Résoudre la promesse avec isFolder
+            } catch (error) {
+                reject(error);
+            }
+            })
+            .on('error', reject);
+    });
+    return folderToReturn;
+}
+
+const http = require('http');
+
+async function getBilan(uuid) {
+    console.log("getBilan() : uuid = " + uuid);
+
+    const projet = await getData("projet", uuid);
+    const site = await getData("site", projet.site);
+    const communes = await getData("commune", projet.site);
+    const objectifs = await getData("objectif", uuid);
+    const operations = await getData("operation", uuid);
+    const operations_full = {}
+    for (let op of operations) {
+        operations_full[op.uuid_ope] = await getData("operation_full", op.uuid_ope);
+    }
+
+    return { projet, site, communes, objectifs, operations, operations_full };
+}
+
+function getData(type, uuid, hostname = 'localhost', port = process.env.NODE_PORT) {
+    // ... retourne une Promise qui résout le site
+    return new Promise((resolve, reject) => {
+        let path = '';
+        if (!type || !uuid) {
+            return reject(new Error('Type et uuid sont requis'));
+        } else if (type === 'projet') {
+            path = '/sites/projets/uuid=' + uuid + '/full?type=gestion&webapp=1';
+        } else if (type === 'site') {
+            path = '/sites/uuid=' + uuid;
+        } else if (type === 'objectif') {
+            path = '/sites/objectifs/uuid=' + uuid + '/lite';
+        } else if (type === 'operation') {
+            path = '/sites/operations/uuid=' + uuid + '/lite';
+        } else if (type === 'operation_full') {
+            path = '/sites/operations/uuid=' + uuid + '/full?webapp=1';
+        } else if (type === 'commune') {
+            path = '/sites/commune/uuid=' + uuid;
+        }
+
+        const options = {
+            hostname,
+            port,
+            path,
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        };
+
+        const httpReq = http.request(options, (httpRes) => {
+            let data = '';
+            httpRes.on('data', (chunk) => { data += chunk; });
+            httpRes.on('end', () => {
+                try {
+                    resolve(JSON.parse(data));
+                } catch (e) {
+                    reject(e);
+                }
+            });
+            httpRes.on('error', reject);
+        });
+
+        // Ajout du timeout (exemple 5000 ms)
+        httpReq.setTimeout(5000, () => {
+            httpReq.abort();
+            reject(new Error(`Timeout lors de la récupération de ${type}`));
+        });
+
+        httpReq.on('error', reject);
+        httpReq.end();
+    });
+}
+
+
+
+module.exports = { 
+    joinQuery, 
+    ExecuteQuerySite, 
+    selectQuery, 
+    distinctSiteResearch, 
+    updateEspaceSite, 
+    executeQueryAndRespond, 
+    reset,
+    detectShapefileGeometryType,
+    convertToWKT,
+    extractZipFile, // Ajouter l'export de la nouvelle fonction
+    getBilan
+
+};

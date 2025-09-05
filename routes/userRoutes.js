@@ -6,6 +6,7 @@ require('dotenv').config();
 // Utiliser la clé secrète depuis le fichier .env
 const secretKey = process.env.SECRET_KEY;
 const saltRounds = process.env.SALT_ROUNDS;
+const authorizedDomains = process.env.AUTHORIZED_DOMAINS;
 
 // Fonctions et connexion à PostgreSQL
 const { joinQuery, ExecuteQuerySite } = require('../fonctions/fonctionsSites.js'); 
@@ -21,10 +22,25 @@ const jwt = require('jsonwebtoken'); // Pour créer des tokens d'authentificatio
 const pool = require('../dbPool/poolConnect.js');
 
 // Fonctions pour l'authentification
-const { authenticateToken } = require('../fonctions/fonctionsAuth.js'); 
+const { authenticateToken } = require('../fonctions/fonctionsAuth.js');
 
-let badPasswordMessage = "Le mot de passe doit contenir au moins 12 caractères, une majuscule, ";
-badPasswordMessage += "une minuscule, un chiffre et un caractère spécial.";
+// Fonction pour envoyer un email
+const { sendEmail } = require('../fonctions/fonctionsMails.js');
+
+// let badPasswordMessage = "Le mot de passe doit contenir au moins 6 caractères, une majuscule, ";
+// badPasswordMessage += "une minuscule, un chiffre et un caractère spécial.";
+const passwordSpecifications = `
+<strong>Le mot de passe n'est pas assez robuste.</strong><br>
+Il doit contenir&nbsp;:
+<ul>
+  <li>Au moins <b>6 caractères</b></li>
+  <li>Au moins <b>une lettre majuscule</b></li>
+  <li>Au moins <b>une lettre minuscule</b></li>
+  <li>Au moins <b>un chiffre</b></li>
+  <li>Au moins <b>un caractère spécial</b> parmi : @ $ ! % * ? &</li>
+</ul>
+Aucun autre caractère n'est autorisé.
+`;
 
 const errorBddCreateUser = "Erreur lors de la création de l'utilisateur au niveau de la base de données.";
 
@@ -33,7 +49,7 @@ router.post('/register', async (req, res) => {
   const { username, password } = req.body;
 
   // Vérification de la robustesse du mot de passe
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
   if (!passwordRegex.test(password)) {
     return res.status(400).json({ message: badPasswordMessage });
   }
@@ -67,6 +83,9 @@ router.post('/login', async (req, res) => {
   // et le renvoie au client
   // Si les mots de passe ne correspondent pas, renvoie un message d'erreur
   // Si l'utilisateur n'existe pas, renvoie un message d'erreur
+  // Si une erreur se produit, renvoie un message d'erreur
+  // Sinon une réponse 200 OK est renvoyée avec le token d'authentification
+  // Fin
   
   // Si une erreur se produit, renvoie un message d'erreur
 
@@ -76,7 +95,10 @@ router.post('/login', async (req, res) => {
   const { username, password } = req.body;
   // const hashedPassword = await bcrypt.hash(password, saltRounds);
   // console.log("---------> hashedPassword : " + hashedPassword);
-
+  
+  if (!username || !password) {
+    return res.status(400).json({ message: 'Nom d\'utilisateur ou mot de passe manquant.' });
+  }
 
   // Rechercher l'utilisateur par son nom d'utilisateur et si il existe
   let querySQL = 'SELECT sal.identifiant, sal.sal_hash, salgro.gro_id FROM admin.salaries sal ';
@@ -87,43 +109,51 @@ router.post('/login', async (req, res) => {
     text: querySQL,
     values: [username],
   };
+
   ExecuteQuerySite(
     pool,
-    { query: userQuery, message: "site/put/table=espace_site/uuid" },
+    { query: userQuery, message: "/auth/login" },
     "select",
     async ( resultats, message ) => { // On a le droit de mettre async ici sur la fonction de rappel (callback)
+      let messageError = 'Indentifiant ou mot de passe incorrect';
       if (resultats.length !== 1) {
-        return res.status(400).json({ message: 'Utilisateur non trouvé' });
-      }else if (resultats.length === 1) {
-        // console.log("---------> result.rows[0] : ");
-        // console.log(result.rows[0]);
+        return res.status(400).json({ message: messageError });
+      } else if (resultats.length === 1) {
+
         const sal_hash = resultats[0]["sal_hash"];
-
-        // Créer une nouvel objet contenant uniquement l'identifiant
-        const payload = { identifiant : resultats[0]["identifiant"] };
-
-        // Comparer le mot de passe saisi avec le mot de passe haché stocké
-        const match = await bcrypt.compare(password, sal_hash);
-      
-        if (!match) {
-          return res.status(400).json({ message: 'Mot de passe incorrect' });
-        }else{
+        
+        // Si le hachage n'est pas vide dans la base de données pour l'utilisateur
+        // alors on crée un token d'authentification
+        if (sal_hash != null && sal_hash != "") {
           // Création du token
+
+          // Créer une nouvel objet contenant uniquement l'identifiant
+          const payload = { identifiant : resultats[0]["identifiant"] };
+
+          const match = await bcrypt.compare(password, sal_hash);
           // console.log("---------> payload : ");
           // console.log(payload);
 
           // Pas necessaire puisque la bibliothèque jsonwebtoken gère cela pour vous automatiquement
           // mais au cs où nous voudrier changer d'algorithme ou de type de token plus tard
-          const header = {
-            alg: 'HS256',
-            typ: 'JWT'
-          };
-          const token = jwt.sign(payload, secretKey, { expiresIn: '1h' });
-          res.status(200).json({ message: 'Connexion réussie', 
-                                  identifiant: resultats[0]["identifiant"],
-                                  groupe: resultats[0]["gro_id"],
-                                  token: token}
-          );
+          // const header = {
+          //   alg: 'HS256',
+          //   typ: 'JWT'
+          // };
+
+          // Puis si le mot de passe correspond
+          if (match) {
+              const token = jwt.sign(payload, secretKey, { expiresIn: '1h' });
+              return res.status(200).json({ message: 'Connexion réussie', 
+                                      identifiant: resultats[0]["identifiant"],
+                                      groupe: resultats[0]["gro_id"],
+                                      token: token}
+              );
+          } else {
+          return res.status(400).json({ message: messageError });
+          }
+        } else {
+          return res.status(400).json({ message: messageError });
         }
       }    
     }
@@ -146,7 +176,7 @@ router.get("/me", authenticateToken, (req, res) => {
   console.log("req.tokenInfos : ");
   console.log(req.tokenInfos);
 
-  const SelectFields = "SELECT sal.nom, sal.prenom, sal.identifiant, salgro.gro_id ";
+  const SelectFields = "SELECT sal.nom, sal.prenom, sal.identifiant, sal.cd_salarie, salgro.gro_id ";
   
   let FromTable = "FROM admin.salaries sal ";
   FromTable +=    "LEFT JOIN admin.salarie_groupes salgro ON sal.cd_salarie = salgro.cd_salarie ";
@@ -209,6 +239,124 @@ router.get("/logout", authenticateToken, async (req, res) => {
         }
       }
   );
+});
+
+// Route pour demander la réinitialisation du mot de passe
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ message: "Email requis." });
+  }
+
+  // Vérifier que le domaine de l'email est autorisé
+  const domain = email.split('@')[1];
+  const allowedDomains = (authorizedDomains || '').split(',').map(d => d.trim().toLowerCase());
+  if (!domain || !allowedDomains.includes(domain.toLowerCase())) {
+    return res.status(400).json({ message: "Domaine de l'email non autorisé." });
+  }
+
+  // Vérifier si l'utilisateur existe
+  const query = {
+    text: 'SELECT email, identifiant FROM admin.salaries WHERE email = $1 and statut is true',
+    values: [email],
+  };
+  try {
+    console.log("Secret key pour le JWT : ", secretKey);
+
+    const result = await pool.query(query);
+    console.log("Résultat de la requête forgot-password :", result);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Aucun utilisateur avec cet email." });
+    }
+
+    // Générer un token de reset (ici un JWT, tu peux aussi utiliser uuid)
+    const resetToken = jwt.sign({ email }, secretKey, { expiresIn: '60m' });
+
+    // Ici tu pourrais stocker le token en base ou l'envoyer par email
+    // TODO: Envoyer l'email avec le lien de reset
+
+    const html = `
+      <html>
+        <body>
+          <p>Bonjour,</p>
+          <p>
+            Cet email a été généré automatiquement, merci de ne pas répondre.<br>
+            Voici votre lien de réinitialisation&nbsp;:<br><br>
+            <a href="http://si-10.cen-champagne-ardenne.org:8070/reset-password?token=${resetToken}">Réinitialiser le mot de passe</a>
+          </p>
+        </body>
+      </html>
+      `;
+
+    const text = "Veuillez utiliser un client mail compatible HTML pour voir ce message.";
+    
+    await sendEmail(
+      email,
+      'Réinitialisation de votre mot de passe',
+      text,
+      html
+    );
+
+    const response = {
+        message: 'Un email de réinitialisation a été envoyé si l\'adresse existe.',
+        identifiant: result.rows[0]["identifiant"],
+        email: result.rows[0]["email"],
+        token: resetToken
+    };
+
+    console.log("Une demande de mot de passe a été faite. Variable response envoyé au client : ");
+    console.log(response);
+
+    // res.setHeader("Access-Control-Allow-Origin", "*");
+    // res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.status(200).json(response);
+  } catch (err) {
+    console.error(err);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.status(500).json({ message: "Erreur serveur. " + err });
+  }
+});
+
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword) {
+    return res.status(400).json({ message: "Token et nouveau mot de passe requis." });
+  }
+
+  // Vérification de la robustesse du mot de passe
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  if (!passwordRegex.test(newPassword)) {
+    return res.status(400).json({ message: '<strong>Le mot de passe n\'est pas assez robuste.</strong><br>' + passwordSpecifications });
+  }
+
+  try {
+    // Vérifier et décoder le token
+    const decoded = jwt.verify(token, secretKey);
+    const email = decoded.email;
+
+    // Hacher le nouveau mot de passe
+    const hashedPassword = await bcrypt.hash(newPassword, Number(saltRounds));
+
+    // Mettre à jour le mot de passe dans la base
+    const query = {
+      text: 'UPDATE admin.salaries SET sal_hash = $1 WHERE email = $2 AND statut is true',
+      values: [hashedPassword, email],
+    };
+    const result = await pool.query(query);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Utilisateur non trouvé ou inactif." });
+    }
+
+    res.status(200).json({ message: "Mot de passe réinitialisé avec succès." });
+  } catch (err) {
+    console.error(err);
+    if (err.name === "TokenExpiredError") {
+      return res.status(400).json({ message: "Le lien de réinitialisation a expiré." });
+    }
+    res.status(400).json({ message: "Token invalide ou erreur serveur." });
+  }
 });
 
 module.exports = router;
