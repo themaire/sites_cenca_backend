@@ -20,6 +20,7 @@ const userRoutes = require('./routes/userRoutes');
 const siteRoutesGet = require('./routes/getSitesRoutes');
 const siteRoutesPut = require('./routes/putSitesRoutes');
 const menuRoutes = require('./routes/menuRoutes');
+const foncierRoutes = require('./routes/foncierRoutes');
 
 async function run() {
   try {
@@ -27,6 +28,7 @@ async function run() {
     app.use('/sites', siteRoutesGet);
     app.use('/sites', siteRoutesPut);
     app.use('/menu', menuRoutes);
+    app.use('/sites', foncierRoutes);
   } catch (error) {
     console.error("Error try :" + error);
     pool.end();

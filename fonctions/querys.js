@@ -45,7 +45,7 @@ function generateUpdateQuery(table, uuid, updateData) {
 function generateInsertQuery(tableName, insertData) {
     // Convertir l'objet en tableau de paires clé-valeur
     const entries = Object.entries(insertData);
-
+    console.log("entries : ", entries);
     // Ignorer le premier élément pour les placeholders
     const [firstEntry, ...filteredEntries] = entries;
 
@@ -58,7 +58,7 @@ function generateInsertQuery(tableName, insertData) {
 
     // Générer les placeholders pour les valeurs
     const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
-
+    console.log("first entry : ", firstEntry);
     // Construire la requête SQL en utilisant gen_random_uuid() pour le premier élément
     const insertQuery = `INSERT INTO ${tableName} (${firstEntry[0]}, ${columns}) VALUES (gen_random_uuid(), ${placeholders});`;
 

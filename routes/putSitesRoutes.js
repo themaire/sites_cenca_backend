@@ -139,8 +139,10 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
 // Ajouter un site, un acte...
 router.put("/put/table=:table/insert", (req, res) => {
     const TABLE = req.params.table;
+    console.log("La requête : ", req);
     const insertData = req.body; // Récupérer l'objet JSON envoyé
-
+    console.log("insertData de la requête : ", insertData);
+    
     try {
         // !!!!!!! A FAIRE PLUS TARD !!!!!!!
         if (TABLE == 'operations') {
@@ -177,6 +179,39 @@ router.put("/put/table=:table/insert", (req, res) => {
                     }
                 }
             );
+        } else if (TABLE == 'projets_mfu') {
+            console.log("data avant envoi :",insertData);
+            const queryObject = generateInsertQuery("sitcenca." + TABLE, insertData);
+            console.log(queryObject);
+
+            ExecuteQuerySite(
+                pool,
+                { query: queryObject, message: "sites/put/table=" + TABLE + "/insert" },
+                ( resultats, message ) => {
+                    res.setHeader("Access-Control-Allow-Origin", "*");
+                    res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+                    if (resultats && resultats.length > 0) {
+                        res.status(200).json({
+                            success: true,
+                            message: "Mise à jour réussie.",
+                            data: resultats
+                        });
+                        console.log("message : " + message);
+                        console.log("resultats : " + resultats);
+                    } else {
+                        const currentDateTime = new Date().toISOString();
+                        console.log(`Échec de la requête à ${currentDateTime}`);
+                        console.log(queryObject.text);
+                        console.log(queryObject.values);
+                        res.status(500).json({
+                            success: false,
+                            message: "Erreur, la requête s'est mal exécutée."
+                        });
+                    }
+                }
+            );
+
         } else {
             res.status(400).json({
                 success: false,
@@ -184,7 +219,7 @@ router.put("/put/table=:table/insert", (req, res) => {
             });
         }
     } catch (error) {
-        console.erroar("Erreur lors de la mise à jour : ", error);
+        console.error("Erreur lors de la mise à jour : ", error);
         res.status(500).json({
             success: false,
             message: "Erreur interne du serveur."
