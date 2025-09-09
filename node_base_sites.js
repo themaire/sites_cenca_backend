@@ -113,15 +113,10 @@ app.use(express.urlencoded({ extended: true })); // Pour traiter les requêtes e
 const menuRoutes = require('./routes/menuRoutes');
 const siteRoutesGet = require('./routes/getSitesRoutes');
 const siteRoutesPut = require('./routes/putSitesRoutes');
-<<<<<<< HEAD
-const menuRoutes = require('./routes/menuRoutes');
 const foncierRoutes = require('./routes/foncierRoutes');
-=======
 const siteRoutesDelete = require('./routes/deleteSitesRoutes');
-const foncierRoutes = require('./routes/foncierRoutes');
 const userRoutes = require('./routes/userRoutes');
 const processRoutes = require('./routes/processRoutes');
->>>>>>> extractions-foncières
 
 async function run() {
   try {
@@ -131,9 +126,7 @@ async function run() {
     app.use('/sites', siteRoutesDelete);
     app.use('/sites', foncierRoutes);
     app.use('/menu', menuRoutes);
-<<<<<<< HEAD
     app.use('/sites', foncierRoutes);
-=======
     app.use('/process', processRoutes);
 
     // Middleware pour capturer les routes inconnues
@@ -157,7 +150,6 @@ async function run() {
       });
     });
 
->>>>>>> extractions-foncières
   } catch (error) {
     console.error("Error try :" + error);
     pool.end();
