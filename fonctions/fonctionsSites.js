@@ -55,7 +55,16 @@ async function ExecuteQuerySite(pool, param, type, callback) {
         }
     }
 }
-
+function ExecuteQuerySitePromise(pool, param, type) {
+    return new Promise((resolve, reject) => {
+        ExecuteQuerySite(pool, param, type, (rows, msg) => {
+            if (msg.startsWith("Erreur")) {
+                return reject(new Error(msg));
+            }
+            resolve({ rows, message: msg });
+        });
+    });
+}
 function selectQuery(params) {
     // Prends en paramètre les parametres de l'url recue
     // Retourne un query objet que la bibliotheque pg acceptera
@@ -488,6 +497,7 @@ function getData(type, uuid, hostname = 'localhost', port = process.env.NODE_POR
 module.exports = { 
     joinQuery, 
     ExecuteQuerySite, 
+    ExecuteQuerySitePromise,
     selectQuery, 
     distinctSiteResearch, 
     updateEspaceSite, 

@@ -4,6 +4,7 @@ const router = express.Router();
 // Fonctions et connexion à PostgreSQL
 const {
     ExecuteQuerySite,
+    ExecuteQuerySitePromise,
     updateEspaceSite,
     convertToWKT,
     detectShapefileGeometryType,
@@ -69,9 +70,9 @@ const multerMiddlewareDoc = multer({
         }
     },
 }).fields([
-    { name: "noteBureau", maxCount: 1 },
-    { name: "decisionBureau", maxCount: 1 },
-    { name: "projetActe", maxCount: 1 },
+    { name: "noteBureau", maxCount: 5 },
+    { name: "decisionBureau", maxCount: 5 },
+    { name: "projetActe", maxCount: 5 },
     { name: "photosSite", maxCount: 10 },
 ]);
 
@@ -330,6 +331,7 @@ router.put("/put/table=:table/insert", (req, res) => {
                     query: queryObject,
                     message: "sites/put/table=" + TABLE + "/insert",
                 },
+                "insert",
                 (resultats, message) => {
                     res.setHeader("Access-Control-Allow-Origin", "*");
                     res.setHeader(
@@ -656,88 +658,70 @@ router.post(
         }
     }
 );
-router.put(
-    "/put/table=pmfu_docs",
-    (req, res, next) => {
-        multerMiddlewareDoc(req, res, (err) => {
-            if (err) {
-                console.error("Erreur Multer :", err);
-                return res
-                    .status(400)
-                    .json({ success: false, message: err.message });
-            }
-            next();
-        });
-    },
-    (req, res) => {
-        console.log("body de la requête :", req.body);
-        console.log("fichiers de la requête :", req.files);
-        const insertData = { ...req.body };
-        const pmfu_id = req.body.pmfu_id;
-        if (!pmfu_id)
-            return res
-                .status(400)
-                .json({ success: false, message: "pmfu_id manquant" });
+router.put("/put/table=pmfu_docs", multerMiddlewareDoc, (req, res) => {
+    console.log("body de la requête :", req.body);
+    console.log("fichiers de la requête :", req.files);
 
-        const filesToInsert = [];
-
-        if (req.files.noteBureau) {
-            filesToInsert.push({
-                pmfu_id,
-                doc_type: "noteBureau",
-                doc_path: req.files.noteBureau[0].path,
-            });
-        }
-        if (req.files.decisionBureau) {
-            filesToInsert.push({
-                pmfu_id,
-                doc_type: "decisionBureau",
-                doc_path: req.files.decisionBureau[0].path,
-            });
-        }
-        if (req.files.projetActe) {
-            filesToInsert.push({
-                pmfu_id,
-                doc_type: "projetActe",
-                doc_path: req.files.projetActe[0].path,
-            });
-        }
-        if (req.files.photosSite) {
-            req.files.photosSite.forEach((f) => {
-                filesToInsert.push({
-                    pmfu_id,
-                    doc_type: "photosSite",
-                    doc_path: f.path,
-                });
-            });
-        }
-
-        if (filesToInsert.length === 0) {
-            return res
-                .status(400)
-                .json({ success: false, message: "Aucun fichier à insérer" });
-        }
-
-        // Boucle pour insérer chaque fichier dans la table
-        const queries = filesToInsert.map((file) =>
-            generateInsertQuery("sitcenca.pmfu_docs", file, false)
-        );
-
-        console.log("fichiers avant envoi :", insertData);
-
-        const queryObject = generateInsertQuery(
-            "sitcenca.pmfu_docs",
-            insertData
-        );
-
-        Promise.all(queries.map((q) => ExecuteQuerySite(pool, { query: q })))
-            .then((results) =>
-                res.status(200).json({ success: true, data: results })
-            )
-            .catch((err) =>
-                res.status(500).json({ success: false, message: err.message })
-            );
+    const pmfu_id = req.body.pmfu_id;
+    if (!pmfu_id) {
+        return res
+            .status(400)
+            .json({ success: false, message: "pmfu_id manquant" });
     }
-);
+
+    const filesToInsert = [];
+
+    if (req.files.noteBureau) {
+        filesToInsert.push({
+            pmfu_id,
+            doc_type: "noteBureau",
+            doc_path: req.files.noteBureau[0].path,
+        });
+    }
+    if (req.files.decisionBureau) {
+        filesToInsert.push({
+            pmfu_id,
+            doc_type: "decisionBureau",
+            doc_path: req.files.decisionBureau[0].path,
+        });
+    }
+    if (req.files.projetActe) {
+        filesToInsert.push({
+            pmfu_id,
+            doc_type: "projetActe",
+            doc_path: req.files.projetActe[0].path,
+        });
+    }
+    if (req.files.photosSite) {
+        req.files.photosSite.forEach((f) => {
+            filesToInsert.push({
+                pmfu_id,
+                doc_type: "photosSite",
+                doc_path: f.path,
+            });
+        });
+    }
+
+    if (filesToInsert.length === 0) {
+        return res
+            .status(400)
+            .json({ success: false, message: "Aucun fichier à insérer" });
+    }
+
+    const queries = filesToInsert.map((file) =>
+        generateInsertQuery("sitcenca.pmfu_docs", file, false)
+    );
+    Promise.all(
+        queries.map((q) =>
+            ExecuteQuerySitePromise(pool, { query: q }, "insert")
+        )
+    )
+        .then((results) =>
+            res.status(200).json({ success: true, data: results })
+        )
+        .catch((err) =>
+            res.status(500).json({ success: false, message: err.message })
+        );
+});
 
 module.exports = router;

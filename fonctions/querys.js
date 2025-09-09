@@ -101,8 +101,8 @@ function generateInsertQuery(tableName, insertData, createUUID = true) {
             text: insertQuery,
             values: values
         };
-    }else{
-        console.log("mode : c'est l'appli qui créé le UUID");
+    } else {
+        console.log("mode : c'est PAS l'appli qui créé le UUID");
         
         // Reconstruire l'objet entier
         const data = Object.fromEntries(entries);
