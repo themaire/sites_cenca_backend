@@ -19,7 +19,7 @@ async function ExecuteQuerySite(pool, param, type, callback) {
      * @param {Function} callback - La fonction de rappel à exécuter avec les résultats de la requête.
      */
 
-    type = type.toLowerCase();
+    if (type === 'string') type = type.toLowerCase();
 
     try {
         // Exécute la requête SQL avec les paramètres fournis
