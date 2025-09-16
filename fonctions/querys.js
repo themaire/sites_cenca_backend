@@ -2,7 +2,7 @@
 
 function getRightId(table) {
     let pkName = '';
-    if (['espaces', 'sites', 'projets', 'operations', 'objectifs'].includes(table)) {
+    if (['espaces', 'sites', 'projets', 'operations', 'objectifs','projets_mfu'].includes(table)) {
         if(table == 'espaces'){
             pkName = 'uuid_espace';
         } else if(table == 'sites'){
@@ -13,6 +13,8 @@ function getRightId(table) {
             pkName = 'uuid_ope';
         } else if(table == 'objectifs'){
             pkName = 'uuid_objectif';
+        } else if(table == 'projets_mfu'){
+            pkName = 'pmfu_id';
         }
     } else if (table == 'localisations') {
         pkName = 'loc_id';
@@ -103,16 +105,16 @@ function generateInsertQuery(tableName, insertData, createUUID = true) {
         };
     } else {
         console.log("mode : c'est PAS l'appli qui créé le UUID");
-        
         // Reconstruire l'objet entier
         const data = Object.fromEntries(entries);
+        console.log('pmfu_id dans data: ', data.pmfu_id);
+        console.log('ref_pmfu_id dans data: ', data.ref_pmfu_id);
         // Générer les noms de colonnes et les valeurs
         const columns = Object.keys(data).join(', ');
         const values = Object.values(data);
         const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
         console.log('placeholders : ');
         console.log(placeholders);
-
         insertQuery = `INSERT INTO ${tableName} (${columns}) VALUES (${placeholders});`;
         // Retourner l'objet de requête pour pg
         return {

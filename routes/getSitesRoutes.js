@@ -597,6 +597,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         "chantier_nature",
         "unites",
         "pression_maitrise",
+        "doc_type"
     ];
 
     if (simpleTables.includes(list)) {
@@ -619,9 +620,10 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
     } else if (list == "ope.listprogrammes") {
         SelectFields +=
             "cd_programme as cd_type, cd_programme || ' - ' || libelle as libelle ";
-    } else if (list == "opegerer.libelles") {
+    } else if (list == "opegerer.libelles" || "sitcenca.libelles") {
         SelectFields += "lib_id as cd_type, lib_libelle as libelle ";
     }
+
     FromTable = "FROM " + list + " ";
 
     if (order !== undefined) {
@@ -651,13 +653,13 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
             where =
                 "where left(cd_programme,2) in ('24', '25') order by cd_programme;";
         } else if (
-            list == "opegerer.libelles" &&
+            (list == "opegerer.libelles" || "sitcenca.libelles") &&
             libelles_names.includes(option)
         ) {
             // Si l'option est dans la liste des libelles_names
             // sera dynamique en fonction de l'option choisi c'est a dire la famille de libelles.
             where =
-                "where libnom_id = (SELECT libnom_id FROM opegerer.libelles_nom where libnom_nom = '" +
+                "where libnom_id = (SELECT libnom_id FROM " + list + "_nom" + " where libnom_nom = '" +
                 option +
                 "') order by lib_ordre;";
         } else where = "order by val_tri;";
@@ -780,39 +782,45 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
     } else if (mode === "full") {
         SelectFields = `
       SELECT 
-        pmfu_id,
-        pmfu_nom,
-        pmfu_responsable,
-        pmfu_agence,
-        pmfu_associe,
-        pmfu_etapes,
-        pmfu_departement,
-        pmfu_territoire,
-        pmfu_type,
-        pmfu_commune,
-        pmfu_debut,
-        pmfu_proprietaire,
-        pmfu_appui,
-        pmfu_juridique,
-        pmfu_validation,
-        pmfu_decision,
-        pmfu_note,
-        pmfu_acte,
-        pmfu_compensatoire,
-        pmfu_cout,
-        pmfu_financements,
-        pmfu_superficie,
-        pmfu_priorite,
-        pmf_status,
-        pmfu_signature,
-        pmfu_echeances,
-        pmfu_creation,
-        pmfu_derniere_maj,
-        pmfu_photos_site,
-        pmfu_date_ajout
-    `;
-        FromTable = "FROM sitcenca.projets_mfu ";
-        where = "WHERE pmfu_id = $1;";
+        p.pmfu_id,
+        p.pmfu_nom,
+        p.pmfu_responsable,
+        p.pmfu_agence,
+        p.pmfu_associe,
+        p.pmfu_etapes,
+        p.pmfu_departement,
+        p.pmfu_territoire,
+        p.pmfu_type,
+        p.pmfu_commune,
+        p.pmfu_debut,
+        p.pmfu_proprietaire,
+        p.pmfu_appui,
+        p.pmfu_juridique,
+        p.pmfu_validation,
+        p.pmfu_decision,
+        p.pmfu_note,
+        p.pmfu_acte,
+        p.pmfu_compensatoire,
+        p.pmfu_cout,
+        p.pmfu_financements,
+        p.pmfu_superficie,
+        p.pmfu_priorite,
+        p.pmfu_status,
+        p.pmfu_signature,
+        p.pmfu_echeances,
+        p.pmfu_creation,
+        p.pmfu_derniere_maj,
+        p.pmfu_photos_site,
+        p.pmfu_date_ajout,
+        COUNT(*) FILTER (WHERE d.doc_type = 1) AS photos_site_nb,
+        COUNT(*) FILTER (WHERE d.doc_type = 2) AS projet_acte_nb,
+        COUNT(*) FILTER (WHERE d.doc_type = 3) AS decision_bureau_nb,
+        COUNT(*) FILTER (WHERE d.doc_type = 4) AS note_bureau_nb `;
+        FromTable = `FROM sitcenca.projets_mfu p
+        LEFT JOIN sitcenca.pmfu_docs d
+        ON p.pmfu_id = d.ref_pmfu_id `;
+        where = `WHERE pmfu_id = $1 
+        GROUP BY p.pmfu_id;`;
     }
 
     executeQueryAndRespond(
@@ -826,5 +834,32 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
         mode
     );
 });
+
+router.get("/pmfu_docs/ref_pmfu_id=:ref_pmfu_id/cd_type=:cd_type/:mode", (req, res) => {
+    let { SelectFields, FromTable, where, message } = reset();
+    const { ref_pmfu_id, cd_type, mode } = req.params;
+    SelectFields = `SELECT doc_id, ref_pmfu_id, doc_type, doc_path `;
+    FromTable = "FROM sitcenca.pmfu_docs ";
+    message = "pmfu_docs/ref_pmfu_id/" + mode;
+
+    if (mode === "lite") {
+        message = "pmfu_docs/id/" + mode;
+        where = 'where doc_type = ' + cd_type + ' and ref_pmfu_id = ' + ref_pmfu_id;
+    } else if (req.params.mode === "full") {
+        message = "pmfu_docs/id/" + mode;
+        where = 'where doc_id = ' + doc_id + ' and ref_pmfu_id = ' + ref_pmfu_id;
+    }
+    executeQueryAndRespond(
+        pool,
+        SelectFields,
+        FromTable,
+        where,
+        ref_pmfu_id,
+        res,
+        message,
+        mode
+    );
+});
+
 
 module.exports = router;

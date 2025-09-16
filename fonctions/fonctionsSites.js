@@ -219,7 +219,7 @@ function executeQueryAndRespond(pool, SelectFields, FromTable, where, uuid, res,
         text: joinQuery(SelectFields, FromTable, where),
         // values: [uuid],
     };
-    if (uuid !== "null") queryObject.values = [uuid];  // Ajoutes les valeurs si elles existent a l'objet queryObject
+    if (uuid !== "null" && FromTable !== "FROM sitcenca.pmfu_docs ") queryObject.values = [uuid];  // Ajoutes les valeurs si elles existent a l'objet queryObject
 
     console.log("queryObject : ");
     console.log(queryObject);

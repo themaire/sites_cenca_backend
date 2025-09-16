@@ -2,7 +2,7 @@
 
 // Charger les variables d'environnement
 require('dotenv').config();
-
+const path = require("path");
 // Utiliser la clé secrète depuis le fichier .env
 const NODE_PORT = process.env.NODE_PORT;
 
@@ -128,7 +128,8 @@ async function run() {
     app.use('/menu', menuRoutes);
     app.use('/sites', foncierRoutes);
     app.use('/process', processRoutes);
-
+    app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+    
     // Middleware pour capturer les routes inconnues
     app.use((req, res, next) => {
       const clientIp = req.headers['x-forwarded-for'] || req.ip; // Récupère l'IP du client

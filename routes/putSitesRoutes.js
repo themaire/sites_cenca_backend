@@ -24,7 +24,57 @@ const fs = require("fs");
 const path = require("path");
 const unzipper = require("unzipper");
 const { exit } = require("process");
+const { get } = require("http");
 
+// Const storage pour renommer les pmfu_docs reçus
+const storagePmfu = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, "uploads/");
+    },
+    filename: (req, file, cb) => {
+        const pmfuId = req.body.pmfu_id;
+        const timestamp = Date.now();
+        const extension = path.extname(file.originalname).toLowerCase();
+
+        // Nom personnalisé
+        const filename = `pmfu_${pmfuId}_${timestamp}${extension}`;
+        console.log("Nom de fichier généré:", filename);
+        cb(null, filename);
+    },
+});
+
+// Filtrage des fichiers
+const fileFilter = (req, file, cb) => {
+    const allowedMimeTypes = [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "image/jpg",
+        "image/jpeg",
+        "image/png",
+    ];
+
+    const allowedExtensions = [
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".png",
+        ".jpg",
+        ".jpeg",
+    ];
+
+    const ext = path.extname(file.originalname).toLowerCase();
+    console.log(" Tentative d’upload:", file.originalname, ">", file.mimetype);
+    if (
+        allowedMimeTypes.includes(file.mimetype) ||
+        allowedExtensions.includes(ext)
+    ) {
+        cb(null, true);
+    } else {
+        console.log(" Rejet du fichier:", file.originalname, ">", file.mimetype);
+        cb(new Error("Format de fichier non supporté."));
+    }
+};
 // Configuration de multer pour gérer l'upload de fichiers
 // Configuration Multer modifiée
 const multerMiddlewareZip = multer({
@@ -48,27 +98,8 @@ const multerMiddlewareZip = multer({
     { name: "type_geometry", maxCount: 1 },
 ]);
 const multerMiddlewareDoc = multer({
-    dest: "uploads/",
-    fileFilter: (req, file, cb) => {
-        const allowedMimeTypes = [
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "image/jpeg",
-            "image/png",
-        ];
-
-        const allowedExtensions = [".pdf", ".doc", ".docx", ".png", ".jpg"];
-        const ext = path.extname(file.originalname).toLowerCase();
-        if (
-            allowedMimeTypes.includes(file.mimetype) ||
-            allowedExtensions.includes(ext)
-        ) {
-            cb(null, true);
-        } else {
-            cb(new Error("Format de fichier non supporté."));
-        }
-    },
+    storage: storagePmfu,
+    fileFilter,
 }).fields([
     { name: "noteBureau", maxCount: 5 },
     { name: "decisionBureau", maxCount: 5 },
@@ -236,6 +267,33 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                     }
                 }
             );
+        } else if (TABLE === "projets_mfu") {
+            const queryObject = generateUpdateQuery(
+                "sitcenca." + TABLE,
+                UUID,
+                updateData
+            );
+            console.log("Query de pmfu : " + queryObject);
+            ExecuteQuerySitePromise(pool, {
+                query: queryObject,
+                message: "...",
+            })
+                .then(({ rows: resultats, message }) => {
+                    res.status(200).json({
+                        success: true,
+                        message: "Mise à jour réussie.",
+                        data: resultats,
+                    });
+                    console.log("message :", message);
+                    console.log("resultats :", resultats);
+                })
+                .catch((err) => {
+                    console.error(err);
+                    res.status(500).json({
+                        success: false,
+                        message: "Erreur serveur",
+                    });
+                });
         } else {
             res.status(400).json({
                 success: false,
@@ -250,7 +308,6 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
         });
     }
 });
-
 // Ajouter un site, un acte, une operation ...
 router.put("/put/table=:table/insert", (req, res) => {
     const TABLE = req.params.table;
@@ -270,11 +327,104 @@ router.put("/put/table=:table/insert", (req, res) => {
     };
 
     console.log("La requête : ", req);
-    const insertData = { ...req.body }; // Récupérer l'objet JSON envoyé
-    console.log("insertData de la requête : ", insertData);
+    console.log("INSERT_DATA de la requête : ", INSERT_DATA);
 
     try {
-        if (Object.keys(TABLES).includes(TABLE)) {
+        if (TABLE === "projets_mfu") {
+            console.log("data avant envoi :", INSERT_DATA.pmfu_id);
+            if (INSERT_DATA.pmfu_id === 0) {
+                const selectField = "SELECT MAX(pmfu_id) AS max_pmfu_id";
+                const fromTable = " FROM sitcenca.projets_mfu";
+                const queryText = selectField + fromTable;
+                console.log("queryText pour pmfu_id :", queryText);
+                ExecuteQuerySitePromise(pool, {
+                    query: queryText,
+                    message: "sites/put/table=" + TABLE + "/insert",
+                })
+                    .then(({ rows: resultats, message }) => {
+                        console.log("resultats de pmfu_id :", resultats);
+                        const maxPmfuId = resultats[0].max_pmfu_id;
+                        INSERT_DATA.pmfu_id = maxPmfuId + 1;
+                        console.log(
+                            "INSERT_DATA.pmfu_id :",
+                            INSERT_DATA.pmfu_id
+                        );
+                        const queryObject = generateInsertQuery(
+                            "sitcenca." + TABLE,
+                            INSERT_DATA,
+                            false
+                        );
+                        console.log(queryObject);
+                        ExecuteQuerySitePromise(pool, {
+                            query: queryObject,
+                            message: MESSAGE,
+                        })
+                            .then(({ rows: resultats, message }) => {
+                                res.status(200).json({
+                                    success: true,
+                                    message: "Mise à jour réussie.",
+                                    data: INSERT_DATA.pmfu_id,
+                                });
+                                console.log("message :", message);
+                                console.log("resultats :", resultats);
+                            })
+                            .catch((err) => {
+                                console.error(err);
+                                res.status(500).json({
+                                    success: false,
+                                    message: "Erreur serveur",
+                                });
+                            });
+                    })
+                    .catch((err) => {
+                        console.error(err);
+                        res.status(500).json({
+                            success: false,
+                            message: "Erreur serveur",
+                        });
+                    });
+            } else {
+                const queryObject = generateInsertQuery(
+                    "sitcenca." + TABLE,
+                    INSERT_DATA,
+                    false
+                );
+                console.log(queryObject);
+                ExecuteQuerySite(
+                    pool,
+                    { query: queryObject, message: MESSAGE },
+                    "insert",
+                    (resultats, message) => {
+                        res.setHeader("Access-Control-Allow-Origin", "*");
+                        res.setHeader(
+                            "Content-Type",
+                            "application/json; charset=utf-8"
+                        );
+                        if (resultats && resultats.length > 0) {
+                            res.status(200).json({
+                                success: true,
+                                message: "Mise à jour réussie.",
+                                data: resultats,
+                            });
+                            console.log("message : " + message);
+                            console.log("resultats : " + resultats);
+                        } else {
+                            const currentDateTime = new Date().toISOString();
+                            console.log(
+                                `Échec de la requête 1 à ${currentDateTime}`
+                            );
+                            console.log(queryObject.text);
+                            console.log(queryObject.values);
+                            res.status(500).json({
+                                success: false,
+                                message:
+                                    "Erreur, la requête s'est mal exécutée.",
+                            });
+                        }
+                    }
+                );
+            }
+        } else if (Object.keys(TABLES).includes(TABLE)) {
             const WORKING_TABLE = TABLES[TABLE] + "." + TABLE;
             console.log("WORKING_TABLE : " + WORKING_TABLE);
 
@@ -301,48 +451,6 @@ router.put("/put/table=:table/insert", (req, res) => {
                             success: true,
                             message: "Insert réussie.",
                             code: 0,
-                            data: resultats,
-                        });
-                        console.log("message : " + message);
-                        console.log("resultats : " + resultats);
-                    } else {
-                        const currentDateTime = new Date().toISOString();
-                        console.log(`Échec de la requête à ${currentDateTime}`);
-                        console.log(queryObject.text);
-                        console.log(queryObject.values);
-                        res.status(500).json({
-                            success: false,
-                            message: "Erreur, la requête s'est mal exécutée.",
-                        });
-                    }
-                }
-            );
-        } else if (TABLE == "projets_mfu") {
-            console.log("data avant envoi :", insertData);
-            const queryObject = generateInsertQuery(
-                "sitcenca." + TABLE,
-                insertData
-            );
-            console.log(queryObject);
-
-            ExecuteQuerySite(
-                pool,
-                {
-                    query: queryObject,
-                    message: "sites/put/table=" + TABLE + "/insert",
-                },
-                "insert",
-                (resultats, message) => {
-                    res.setHeader("Access-Control-Allow-Origin", "*");
-                    res.setHeader(
-                        "Content-Type",
-                        "application/json; charset=utf-8"
-                    );
-
-                    if (resultats && resultats.length > 0) {
-                        res.status(200).json({
-                            success: true,
-                            message: "Mise à jour réussie.",
                             data: resultats,
                         });
                         console.log("message : " + message);
@@ -662,8 +770,8 @@ router.put("/put/table=pmfu_docs", multerMiddlewareDoc, (req, res) => {
     console.log("body de la requête :", req.body);
     console.log("fichiers de la requête :", req.files);
 
-    const pmfu_id = req.body.pmfu_id;
-    if (!pmfu_id) {
+    const ref_pmfu_id = req.body.pmfu_id;
+    if (!ref_pmfu_id) {
         return res
             .status(400)
             .json({ success: false, message: "pmfu_id manquant" });
@@ -671,37 +779,43 @@ router.put("/put/table=pmfu_docs", multerMiddlewareDoc, (req, res) => {
 
     const filesToInsert = [];
 
-    if (req.files.noteBureau) {
-        filesToInsert.push({
-            pmfu_id,
-            doc_type: "noteBureau",
-            doc_path: req.files.noteBureau[0].path,
-        });
-    }
-    if (req.files.decisionBureau) {
-        filesToInsert.push({
-            pmfu_id,
-            doc_type: "decisionBureau",
-            doc_path: req.files.decisionBureau[0].path,
-        });
-    }
-    if (req.files.projetActe) {
-        filesToInsert.push({
-            pmfu_id,
-            doc_type: "projetActe",
-            doc_path: req.files.projetActe[0].path,
-        });
-    }
     if (req.files.photosSite) {
         req.files.photosSite.forEach((f) => {
             filesToInsert.push({
-                pmfu_id,
-                doc_type: "photosSite",
+                ref_pmfu_id,
+                doc_type: 1,
                 doc_path: f.path,
             });
         });
     }
-
+    if (req.files.decisionBureau) {
+        req.files.decisionBureau.forEach((f) => {
+            filesToInsert.push({
+                ref_pmfu_id,
+                doc_type: 2,
+                doc_path: f.path,
+            });
+        });
+    }
+    if (req.files.projetActe) {
+        req.files.projetActe.forEach((f) => {
+            filesToInsert.push({
+                ref_pmfu_id,
+                doc_type: 3,
+                doc_path: f.path,
+            });
+        });
+    }
+    if (req.files.noteBureau) {
+        req.files.noteBureau.forEach((f) => {
+            filesToInsert.push({
+                ref_pmfu_id,
+                doc_type: 4,
+                doc_path: f.path,
+            });
+        });
+    }
+    
     if (filesToInsert.length === 0) {
         return res
             .status(400)
