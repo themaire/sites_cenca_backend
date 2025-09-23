@@ -33,11 +33,18 @@ const storagePmfu = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         const pmfuId = req.body.pmfu_id;
-        const timestamp = Date.now();
+        const time = new Date().getMilliseconds();
+        const day = new Date().getDate();
+        console.log("Jour:", day);
+        const month = new Date().getMonth() + 1;
+        console.log("Mois:", month);
+        const year = new Date().getFullYear();
+        console.log("Année:", year);
+        const date = `${year}-${month}-${day}-${time}`;
         const extension = path.extname(file.originalname).toLowerCase();
 
         // Nom personnalisé
-        const filename = `pmfu_${pmfuId}_${timestamp}${extension}`;
+        const filename = `pmfu_${pmfuId}_${date}${extension}`;
         console.log("Nom de fichier généré:", filename);
         cb(null, filename);
     },

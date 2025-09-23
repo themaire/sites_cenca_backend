@@ -1,5 +1,9 @@
 const express = require("express");
 const router = express.Router();
+const app = express();
+const sharp = require("sharp");
+const fs = require("fs");
+const path = require("path");
 
 // const { authenticateToken } = require('../fonctions/fonctionsAuth.js');
 
@@ -861,5 +865,58 @@ router.get("/pmfu_docs/ref_pmfu_id=:ref_pmfu_id/cd_type=:cd_type/:mode", (req, r
     );
 });
 
+const ROOT_DIR = path.join(__dirname, "..");
+const IMAGES_DIR = path.join((ROOT_DIR.split('/routes')[0]), "uploads"); // dossier original
+console.log(IMAGES_DIR);
+const CACHE_DIR = path.join((ROOT_DIR.split('/routes')[0]), "cache");   // dossier cache
+console.log(CACHE_DIR);
+// Assure que le dossier cache existe
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
+
+app.get("/img", async (req, res) => {
+  const { file, width } = req.query;
+
+  if (!file || !width) {
+    return res.status(400).send("Paramètres 'file' et 'width' requis");
+  }
+
+  const w = parseInt(width);
+  if (isNaN(w) || w <= 0) {
+    return res.status(400).send("Largeur invalide");
+  }
+
+  const originalPath = path.join(IMAGES_DIR, file);
+  const cachePath = path.join(CACHE_DIR, `${w}-${file}`);
+
+  try {
+    // Vérifie si le fichier existe déjà en cache
+    if (fs.existsSync(cachePath)) {
+      return res.sendFile(cachePath);
+    }
+
+    // Vérifie que l'image originale existe
+    if (!fs.existsSync(originalPath)) {
+      return res.status(404).send("Image originale introuvable");
+    }
+
+    // Redimensionne et écrit en cache
+    await sharp(originalPath)
+      .resize(w) // conserve les proportions
+      .toFormat("jpeg", { quality: 80 })
+      .toFile(cachePath);
+
+    // Renvoie l'image mise en cache
+    res.sendFile(cachePath);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Erreur lors du redimensionnement de l'image");
+  }
+});
+
+app.listen(3000, () => {
+  console.log("Serveur d'images : http://localhost:3000/img?file=xxx.jpg&width=300");
+});
 
 module.exports = router;
