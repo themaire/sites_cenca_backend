@@ -222,7 +222,7 @@ router.get('/operations/uuid=:uuid/:mode', (req, res) => {
         selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, ';
         selectFields += 'charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ';
         selectFields += 'ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, financeur_description, quantite, unite, ';
-        selectFields += 'exportation_fauche, total_exporte_fauche, productivite_fauche, effectif_paturage, nb_jours_paturage, chargement_paturage, abroutissement_paturage, recouvrement_ligneux_paturage, interv_cloture, type_intervention_hydro, ';
+        selectFields += 'exportation_fauche, total_exporte_fauche, productivite_fauche, effectif_paturage, nb_jours_paturage, chargement_paturage, abroutissement_paturage, recouvrement_ligneux_paturage, nom_parc, interv_cloture, type_intervention_hydro, ';
         selectFields += 'opegerer.get_libelle(cadre_intervention) as cadre_intervention_str, opegerer.get_libelle(cadre_intervention_detail) as cadre_intervention_detail_str, to_char(date_debut, \'DD/MM/YYYY\') as date_debut_str, to_char(date_fin, \'DD/MM/YYYY\') as date_fin_str ';
         where += 'uuid_ope = $1;';
     }
@@ -442,7 +442,7 @@ router.get('/selectvalues=:list/:option?', (req, res) => {
     }else {
         // Filtrer sur des nouvelles valeurs précises
         if (list == 'opegerer.typ_objectifope') {
-            where = "where cd_type in ('CRE', 'ENT', 'RES', 'REA') order by val_filtre;";
+            where = "where cd_type in ('CRE', 'ENT', 'RES', 'REA', 'MENT', 'MRES', 'MCRE', 'IGEN', 'IGCR', 'IAEN', 'IACR') order by val_filtre;";
         } else if (list == 'ope.actions' && option == 1) { // Les actions comme Pâturage et opérations associées, Gestion hydraulique...
             where = "where cd_action like '%V2' and cd_action != '029_TRAV_SOL_V2' and cd_sup = '004_TRAV' ORDER BY val_tri ASC ;";
         } else if (list == 'ope.actions' && option == 'meca') {

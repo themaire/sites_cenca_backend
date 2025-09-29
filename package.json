@@ -1,7 +1,7 @@
 {
   "name": "nodejs-pg-example",
   "version": "1.0.0",
-  "description": "Serveru de données CENCA sur bdd Postgresql",
+  "description": "Serveur de données CENCA sur bdd Postgresql",
   "main": "index.js",
   "scripts": {
     "start": "node node_base_sites.js",

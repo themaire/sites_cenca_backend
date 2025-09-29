@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { v4: uuidv4 } = require('uuid');
+import('uuid').then(module => {
+  uuidv4 = module.v4;
+  // ... le reste de ton code qui utilise uuidv4 ...
+});
 
 // Fonctions et connexion à PostgreSQL
 const { ExecuteQuerySite, updateEspaceSite, convertToWKT, detectShapefileGeometryType, extractZipFile } = require('../fonctions/fonctionsSites.js'); 

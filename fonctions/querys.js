@@ -169,13 +169,14 @@ function getTableColums(tableSchema, tableName) {
 /**
  * Génère une requête SQL pour dupliquer une ligne d'une table en remplaçant la clé primaire.
  * @param {string} table - Nom de la table (ex: 'opegerer.operations')
- * @param {string} pkName - Nom de la clé primaire (ex: 'uuid_ope')
+ * @param {string} pkName - Nom de la clé primaire (ex: 'uuid_ope') à dupliquer
  * @param {string[]} columns - Liste des colonnes dans l'ordre, y compris la clé primaire
- * @param {string} oldId - Valeur de la clé primaire à dupliquer
+ * @param {string} id2clone - ID de la ligne à dupliquer
  * @param {string} newId - Nouvelle valeur de la clé primaire
+ * @param {string[][]} excludeFields - Liste des noms de champs à exclure de la duplication (optionnel)
  * @returns {object} - Objet { text, values } pour pg
  */
-function generateCloneQuery(table, pkName, columns, id2clone, newId = null) {
+function generateCloneQuery(table, pkName, columns, id2clone, newId = null, excludeFields = []) {
     // columns est un tableau d'objets { column_name: '...' }
     // On extrait juste les noms des colonnes grace à map qui recréé un tableau seulement les valeurs de column_name
     const columnNames = columns.map(col => col.column_name);
@@ -187,11 +188,17 @@ function generateCloneQuery(table, pkName, columns, id2clone, newId = null) {
         newId = `'${newId}'`; // Ajouter des quotes pour la requête SQL
     }
 
-    // On place la nouvelle valeur de PK en premier, puis on sélectionne toutes les autres colonnes sauf la PK
-    const columnsWithoutPk = columnNames.filter(col => col !== pkName);
+    // Aplatir la liste de listes en une seule liste de champs à exclure
+    const flatExcludeFields = excludeFields.flat();
+
+    // On place la nouvelle valeur de PK en premier, puis on sélectionne toutes les autres colonnes sauf la PK et les champs exclus
+    const columnsWithoutPk = columnNames.filter(col => 
+        col !== pkName && !flatExcludeFields.includes(col)
+    );
+    
     const insertColumns = [pkName, ...columnsWithoutPk].join(', ');
 
-    // On adapte le SELECT pour ajouter le suffixe à nom_mo
+    // On adapte le SELECT pour ajouter le suffixe à nom_mo (si pas exclu)
     const selectColumns = [
         newId,
         ...columnsWithoutPk.map(col =>
