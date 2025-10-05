@@ -1,0 +1,13 @@
+# docker-compose.prod.yml
+# Ce fichier est utilisé pour la production avec la commande :
+# docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# version: '3.8'
+
+services:
+  backend:
+    environment:
+      - NODE_ENV=production
+    volumes:
+      # Montage des certificats SSL pour HTTPS en production (lecture seule)
+      - /etc/ssl/certs/si-10.cen-champagne-ardenne.org:/etc/ssl/certs/si-10.cen-champagne-ardenne.org:ro

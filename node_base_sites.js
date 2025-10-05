@@ -3,8 +3,13 @@
 // Charger les variables d'environnement
 require('dotenv').config();
 
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
+
 // Utiliser la clé secrète depuis le fichier .env
 const NODE_PORT = process.env.NODE_PORT;
+const NODE_ENV = process.env.NODE_ENV || 'development'; // Ajouter cette variable
 
 var express = require("express");
 // const client = require('prom-client'); // Pour la surveillance des performances avec Proxmox*http_request_duration_seconds_count{method="GET", path="/sites", status_code="200", client_ip="192.168.1.100", project_name="node-app-observability", project_type="expressjs"} 1
@@ -73,14 +78,15 @@ app.listen(NODE_PORT);
  * @const
  */
 const allowedOrigins = [
-  'http://si-10.cen-champagne-ardenne.org',
-  'https://si-10.cen-champagne-ardenne.org',
-  'http://si-10.cen-champagne-ardenne.org:8070', // Ajout de l'origine avec le port
-  'http://si-10.cen-champagne-ardenne.org:8889', // Origine du backend
-  'http://192.168.1.227:4200', // Ajout de l'origine avec le port
-  'http://192.168.1.50:8887', // Origine du backend
-  'http://localhost:4200', // Ajout de l'origine avec le port
-  'http://localhost:8887', // Origine du backend
+  'https://si-10.cen-champagne-ardenne.org', // HTTPS principal
+  'https://si-10.cen-champagne-ardenne.org:8070',
+  'http://si-10.cen-champagne-ardenne.org', // Gardez HTTP pour la transition
+  'http://si-10.cen-champagne-ardenne.org:8070',
+  'http://si-10.cen-champagne-ardenne.org:8889',
+  'http://192.168.1.227:4200',
+  'http://192.168.1.50:8887',
+  'http://localhost:4200',
+  'http://localhost:8887',
 ];
 app.use(cors({
   origin: (origin, callback) => {
@@ -118,6 +124,22 @@ const foncierRoutes = require('./routes/foncierRoutes');
 const userRoutes = require('./routes/userRoutes');
 const processRoutes = require('./routes/processRoutes');
 
+// Configuration HTTPS (seulement en production)
+let httpsOptions = null;
+if (NODE_ENV === 'production') {
+  try {
+    httpsOptions = {
+      key: fs.readFileSync('/etc/ssl/certs/si-10.cen-champagne-ardenne.org/privkey.pem'),
+      cert: fs.readFileSync('/etc/ssl/certs/si-10.cen-champagne-ardenne.org/fullchain.pem')
+    };
+    console.log('🔒 Certificats HTTPS chargés pour la production');
+  } catch (error) {
+    console.error('❌ Erreur lors du chargement des certificats HTTPS:', error.message);
+    console.log('🔄 Basculement en mode HTTP');
+    httpsOptions = null;
+  }
+}
+
 async function run() {
   try {
     app.use('/auth', userRoutes);
@@ -130,13 +152,13 @@ async function run() {
 
     // Middleware pour capturer les routes inconnues
     app.use((req, res, next) => {
-      const clientIp = req.headers['x-forwarded-for'] || req.ip; // Récupère l'IP du client
+      const clientIp = req.headers['x-forwarded-for'] || req.ip;
       console.log(`Route non trouvée : ${req.url}, IP du client : ${clientIp}`);
       res.status(404).json({
         success: false,
         message: "Route non trouvée.",
         req: req.url,
-        ip: clientIp // Ajoute l'IP dans la réponse JSON
+        ip: clientIp
       });
     });
 
@@ -149,9 +171,26 @@ async function run() {
       });
     });
 
+    // Créer le serveur selon l'environnement
+    if (httpsOptions && NODE_ENV === 'production') {
+      // Mode HTTPS pour la production
+      const server = https.createServer(httpsOptions, app);
+      server.listen(NODE_PORT, () => {
+        console.log(`🔒 Serveur HTTPS démarré sur le port ${NODE_PORT}`);
+        console.log(`🚀 Backend accessible via https://si-10.cen-champagne-ardenne.org:${NODE_PORT}`);
+      });
+    } else {
+      // Mode HTTP pour le développement
+      app.listen(NODE_PORT, () => {
+        console.log(`🔓 Serveur HTTP démarré sur le port ${NODE_PORT}`);
+        console.log(`🚀 Backend accessible via http://localhost:${NODE_PORT} ou http://IP:${NODE_PORT}`);
+        console.log(`📝 Mode: ${NODE_ENV}`);
+      });
+    }
+
   } catch (error) {
     console.error("Error try :" + error);
-    pool.end();
+    // pool.end(); // Décommentez si vous avez une variable pool
   }
 }
 

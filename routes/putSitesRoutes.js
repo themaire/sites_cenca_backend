@@ -264,7 +264,7 @@ router.put("/put/table=:table/clone", (req, res) => {
 
                         // Générer la requête d'insertion avec les bons champs
                         const newUUID = uuidv4();
-                        const queryObject = generateCloneQuery(WORKING_TABLE, fields[0]['column_name'], fields, INSERT_DATA["id"], newUUID);
+                        const queryObject = generateCloneQuery(WORKING_TABLE, fields[0]['column_name'], fields, INSERT_DATA["id"], newUUID, INSERT_DATA["excludeFieldsGroups"]);
                         console.log(queryObject);
 
                         // Deuxième execution de requete pour cloner cette fois ci l'élement souhaité

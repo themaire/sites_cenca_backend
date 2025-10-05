@@ -173,11 +173,16 @@ function getTableColums(tableSchema, tableName) {
  * @param {string[]} columns - Liste des colonnes dans l'ordre, y compris la clé primaire
  * @param {string} id2clone - ID de la ligne à dupliquer
  * @param {string} newId - Nouvelle valeur de la clé primaire
- * @param {string[][]} excludeFields - Liste des noms de champs à exclure de la duplication (optionnel)
+ * @param {string[]} excludeFieldsGroups - Liste des noms de champs à exclure de la duplication (optionnel)
  * @returns {object} - Objet { text, values } pour pg
  */
-function generateCloneQuery(table, pkName, columns, id2clone, newId = null, excludeFields = []) {
-    // columns est un tableau d'objets { column_name: '...' }
+function generateCloneQuery(table, pkName, columns, id2clone, newId = null, excludeFieldsGroups) {
+    // columns est un tableau d'objets { column_name: '...' } venant de la fonction getTableColums qui sait récupérer les colonnes
+    // On doit extraire les noms des colonnes de ces objets
+    console.log('table :', table);
+    console.log('Columns received for cloning :', columns);
+    console.log('excludeFieldsGroups :', excludeFieldsGroups);
+
     // On extrait juste les noms des colonnes grace à map qui recréé un tableau seulement les valeurs de column_name
     const columnNames = columns.map(col => col.column_name);
 
@@ -188,12 +193,38 @@ function generateCloneQuery(table, pkName, columns, id2clone, newId = null, excl
         newId = `'${newId}'`; // Ajouter des quotes pour la requête SQL
     }
 
-    // Aplatir la liste de listes en une seule liste de champs à exclure
-    const flatExcludeFields = excludeFields.flat();
+    // Définir les groupes de champs à exclure. Il collecte les noms des champs à exclure en fonction des groupes spécifiés
+    const fieldsToExclude = [];
+
+    if (table === 'opegerer.operations') {
+        if (excludeFieldsGroups && Array.isArray(excludeFieldsGroups)) {
+            excludeFieldsGroups.forEach(group => {
+                switch (group) {
+                    case 'dates':
+                        fieldsToExclude.push('date_debut', 'date_fin');
+                        break;
+                    case 'quantite':
+                        fieldsToExclude.push('quantite');
+                        break;
+                    case 'unite':
+                        fieldsToExclude.push('unite');
+                        break;
+                    case 'description':
+                        fieldsToExclude.push('description');
+                        break;
+                    default:
+                        console.warn(`Groupe de champs inconnu : ${group}`);
+                        break;
+                }
+            });
+        }
+        console.log('Champs à exclure :', fieldsToExclude);
+    }
+
 
     // On place la nouvelle valeur de PK en premier, puis on sélectionne toutes les autres colonnes sauf la PK et les champs exclus
     const columnsWithoutPk = columnNames.filter(col => 
-        col !== pkName && !flatExcludeFields.includes(col)
+        col !== pkName && !fieldsToExclude.includes(col)
     );
     
     const insertColumns = [pkName, ...columnsWithoutPk].join(', ');
