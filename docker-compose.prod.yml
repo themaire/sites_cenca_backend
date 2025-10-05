@@ -5,7 +5,7 @@
 # version: '3.8'
 
 services:
-  backend:
+  node_app:
     environment:
       - NODE_ENV=production
     volumes:

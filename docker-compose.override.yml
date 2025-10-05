@@ -5,8 +5,10 @@
 # version: '3.8'
 
 services:
-  backend:
+  node_app:
     environment:
       - NODE_ENV=development
     # Pas de volume pour les certificats SSL en développement
     # Le serveur fonctionnera en HTTP sur le port configuré
+    # Override du volume SSL (on l'enlève pour le dev)
+    volumes: []

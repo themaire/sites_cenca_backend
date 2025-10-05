@@ -65,7 +65,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 var cors = require("cors");
-app.listen(NODE_PORT);
+// app.listen(NODE_PORT); // ← Déplacé dans la fonction run() pour gestion HTTPS/HTTP
 
 // app.use(cors()); // Pour permettre le cross origin
 
