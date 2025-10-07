@@ -414,6 +414,7 @@ async function extractZipFile(filePath, extractPath) {
 }
 
 const http = require('http');
+const https = require('https');
 
 async function getBilan(uuid) {
     console.log("getBilan() : uuid = " + uuid);
@@ -431,10 +432,20 @@ async function getBilan(uuid) {
     return { projet, site, communes, objectifs, operations, operations_full };
 }
 
-function getData(type, uuid, hostname = 'localhost', port = process.env.NODE_PORT) {
+function getData(type, uuid, hostname, port = process.env.NODE_PORT) {
     // ... retourne une Promise qui résout le site
     return new Promise((resolve, reject) => {
+        const isProduction = process.env.NODE_ENV === 'production';
+        if (isProduction) {
+        hostname = 'si-10.cen-champagne-ardenne.org';
+        port = 8889; // Le port exposé en prod
+    } else {
+        hostname = hostname || 'localhost';
+        port = port || process.env.NODE_PORT;
+    }
+        const protocol = isProduction ? https : http;
         let path = '';
+
         if (!type || !uuid) {
             return reject(new Error('Type et uuid sont requis'));
         } else if (type === 'projet') {
@@ -459,7 +470,7 @@ function getData(type, uuid, hostname = 'localhost', port = process.env.NODE_POR
             headers: { 'Content-Type': 'application/json' }
         };
 
-        const httpReq = http.request(options, (httpRes) => {
+        const httpReq = protocol.request(options, (httpRes) => {
             let data = '';
             httpRes.on('data', (chunk) => { data += chunk; });
             httpRes.on('end', () => {
