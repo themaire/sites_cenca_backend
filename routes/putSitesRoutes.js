@@ -25,27 +25,95 @@ const path = require("path");
 const unzipper = require("unzipper");
 const { exit } = require("process");
 const { get } = require("http");
+// Obtenir le dossier racine du projet
+const ROOT_DIR = path.join(__dirname, "..");
+console.log("Racine du projet:", ROOT_DIR);
+// 1. Définir le dossier des fichiers
+const FILES_DIR = path.resolve(ROOT_DIR, "mnt", "storage-data", "app");
+// 2. Définir le dossier des images
+const IMAGES_DIR = path.resolve(FILES_DIR, "photos");
+console.log("Dossier images:", IMAGES_DIR);
+// 3. Définir le dossier des fichiers en cache
+const CACHE_DIR = path.resolve(FILES_DIR, "cache");
+console.log("Dossier cache:", CACHE_DIR);
+
+let uploadFolders = {};
+
+async function loadUploadFolders() {
+    const rows = await ExecuteQuerySitePromise(pool, {
+        query: "SELECT lib_path, lib_field FROM files.libelles",
+    });
+
+    uploadFolders = rows.rows.reduce((acc, row) => {
+        acc[row.lib_field] = row.lib_path;
+        return acc;
+    }, {});
+    console.log("Vérification des dossiers de fichiers...");
+    Object.values(uploadFolders).forEach((folderName) => {
+        try {
+            const folderPath = path.join(FILES_DIR, folderName);
+            // Vérifier si le dossier existe déjà
+            if (!fs.existsSync(folderPath)) {
+                fs.mkdirSync(folderPath, { recursive: true });
+                console.log(`Dossier créé: ${folderPath}`);
+            } else {
+                console.log(`Dossier existe déjà: ${folderPath}`);
+            }
+        } catch (error) {
+            console.error(
+                `Erreur de création dossier ${folderName}:`,
+                error.message
+            );
+        }
+    });
+}
+// Appel au démarrage du serveur
+loadUploadFolders();
+// --- 1. Chargement dynamique des champs autorisés pour multer ---
+let multerFieldsConfig = [];
+
+async function loadMulterFieldsConfig() {
+    try {
+        const { rows } = await ExecuteQuerySitePromise(pool, {
+            query: "SELECT lib_field, max_upload_count as max_count FROM files.libelles",
+        });
+
+        multerFieldsConfig = rows.map((row) => ({
+            name: row.lib_field,
+            maxCount: row.max_count,
+        }));
+
+        console.log("Champs Multer dynamiques chargés :", multerFieldsConfig);
+    } catch (error) {
+        console.error(
+            "Erreur lors du chargement des champs Multer :",
+            error.message
+        );
+    }
+}
+loadMulterFieldsConfig();
 
 // Const storage pour renommer les pmfu_docs reçus
 const storagePmfu = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, "uploads/");
+        // Récupération du dossier correspondant au nom
+        const folderName = uploadFolders[file.fieldname] || "autres";
+        const folder = path.join(FILES_DIR, folderName);
+
+        // Vérifier si le dossier existe et le créer si nécessaire
+        fs.mkdirSync(folder, { recursive: true });
+
+        cb(null, folder);
     },
     filename: (req, file, cb) => {
-        const pmfuId = req.body.pmfu_id;
-        const time = new Date().getMilliseconds();
-        const day = new Date().getDate();
-        console.log("Jour:", day);
-        const month = new Date().getMonth() + 1;
-        console.log("Mois:", month);
-        const year = new Date().getFullYear();
-        console.log("Année:", year);
-        const date = `${year}-${month}-${day}-${time}`;
+        const refId = req.body.ref_id;
+        const now = new Date();
+        const date = `${now.getFullYear()}-${
+            now.getMonth() + 1
+        }-${now.getDate()}-${now.getMilliseconds()}`;
         const extension = path.extname(file.originalname).toLowerCase();
 
-        // Nom personnalisé
-        const filename = `pmfu_${pmfuId}_${date}${extension}`;
-        console.log("Nom de fichier généré:", filename);
+        const filename = `doc_${refId}_${date}${extension}`;
         cb(null, filename);
     },
 });
@@ -78,7 +146,12 @@ const fileFilter = (req, file, cb) => {
     ) {
         cb(null, true);
     } else {
-        console.log(" Rejet du fichier:", file.originalname, ">", file.mimetype);
+        console.log(
+            " Rejet du fichier:",
+            file.originalname,
+            ">",
+            file.mimetype
+        );
         cb(new Error("Format de fichier non supporté."));
     }
 };
@@ -104,15 +177,14 @@ const multerMiddlewareZip = multer({
     { name: "file", maxCount: 1 },
     { name: "type_geometry", maxCount: 1 },
 ]);
-const multerMiddlewareDoc = multer({
-    storage: storagePmfu,
-    fileFilter,
-}).fields([
-    { name: "noteBureau", maxCount: 5 },
-    { name: "decisionBureau", maxCount: 5 },
-    { name: "projetActe", maxCount: 5 },
-    { name: "photosSite", maxCount: 10 },
-]);
+function createMulterMiddlewareDoc() {
+    return multer({
+        storage: storagePmfu,
+        fileFilter,
+    }).fields(multerFieldsConfig);
+}
+
+let multerMiddlewareDoc = createMulterMiddlewareDoc();
 
 // Mettre à jour un site, un acte, un projet, une operation ...
 router.put("/put/table=:table/uuid=:uuid", (req, res) => {
@@ -535,8 +607,6 @@ router.post(
 
     // Handler principal
     async (req, res) => {
-        let filePath;
-
         try {
             // Variables envoyées par le client
             // Fichier reçu
@@ -773,76 +843,109 @@ router.post(
         }
     }
 );
-router.put("/put/table=pmfu_docs", multerMiddlewareDoc, (req, res) => {
-    console.log("body de la requête :", req.body);
-    console.log("fichiers de la requête :", req.files);
 
-    const ref_pmfu_id = req.body.pmfu_id;
-    if (!ref_pmfu_id) {
-        return res
-            .status(400)
-            .json({ success: false, message: "pmfu_id manquant" });
-    }
+router.put("/put/table=docs", async (req, res) => {
+    try {
+        // Charger les champs Multer dynamiques depuis la DB
+        await loadMulterFieldsConfig();
+        const multerMiddlewareDoc = createMulterMiddlewareDoc();
 
-    const filesToInsert = [];
+        // Exécuter le middleware Multer
+        multerMiddlewareDoc(req, res, async (err) => {
+            if (err) {
+                console.error("Erreur Multer :", err);
+                return res
+                    .status(400)
+                    .json({ success: false, message: err.message });
+            }
 
-    if (req.files.photosSite) {
-        req.files.photosSite.forEach((f) => {
-            filesToInsert.push({
-                ref_pmfu_id,
-                doc_type: 1,
-                doc_path: f.path,
-            });
-        });
-    }
-    if (req.files.decisionBureau) {
-        req.files.decisionBureau.forEach((f) => {
-            filesToInsert.push({
-                ref_pmfu_id,
-                doc_type: 2,
-                doc_path: f.path,
-            });
-        });
-    }
-    if (req.files.projetActe) {
-        req.files.projetActe.forEach((f) => {
-            filesToInsert.push({
-                ref_pmfu_id,
-                doc_type: 3,
-                doc_path: f.path,
-            });
-        });
-    }
-    if (req.files.noteBureau) {
-        req.files.noteBureau.forEach((f) => {
-            filesToInsert.push({
-                ref_pmfu_id,
-                doc_type: 4,
-                doc_path: f.path,
-            });
-        });
-    }
-    
-    if (filesToInsert.length === 0) {
-        return res
-            .status(400)
-            .json({ success: false, message: "Aucun fichier à insérer" });
-    }
+            console.log("Body de la requête :", req.body);
+            console.log(
+                "Champs Multer dynamiques actifs :",
+                multerFieldsConfig
+            );
+            console.log("Fichiers de la requête :", req.files);
 
-    const queries = filesToInsert.map((file) =>
-        generateInsertQuery("sitcenca.pmfu_docs", file, false)
-    );
-    Promise.all(
-        queries.map((q) =>
-            ExecuteQuerySitePromise(pool, { query: q }, "insert")
-        )
-    )
-        .then((results) =>
-            res.status(200).json({ success: true, data: results })
-        )
-        .catch((err) =>
-            res.status(500).json({ success: false, message: err.message })
-        );
+            const ref_id = req.body.ref_id;
+            if (!ref_id) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: "ref_id manquant" });
+            }
+
+            try {
+                // Récupérer le mapping champ → type
+                const typeMapping = await ExecuteQuerySitePromise(pool, {
+                    query: "SELECT lib_field, lib_id as cd_type FROM files.libelles",
+                });
+
+                const fieldToType = typeMapping.rows.reduce((acc, row) => {
+                    acc[row.lib_field] = row.cd_type;
+                    return acc;
+                }, {});
+
+                // Préparer les fichiers à insérer
+                const filesToInsert = [];
+
+                for (const [fieldName, files] of Object.entries(
+                    req.files || {}
+                )) {
+                    const docType = fieldToType[fieldName];
+                    if (!docType) {
+                        console.warn(
+                            `Champ ${fieldName} non reconnu dans files.libelles, ignoré.`
+                        );
+                        continue;
+                    }
+
+                    files.forEach((file) => {
+                        // Convertir le chemin absolu en chemin relatif à partir de "mnt"
+                        const relativePath = file.path.split("mnt")[1];
+                        const cleanedPath = path.join("mnt", relativePath);
+
+                        filesToInsert.push({
+                            ref_id,
+                            doc_type: docType,
+                            doc_path: cleanedPath,
+                        });
+                    });
+                }
+
+                if (filesToInsert.length === 0) {
+                    return res
+                        .status(400)
+                        .json({
+                            success: false,
+                            message: "Aucun fichier valide à insérer",
+                        });
+                }
+
+                // Générer et exécuter les requêtes
+                const queries = filesToInsert.map((file) =>
+                    generateInsertQuery("files.docs", file, false)
+                );
+
+                const results = await Promise.all(
+                    queries.map((q) =>
+                        ExecuteQuerySitePromise(pool, { query: q }, "insert")
+                    )
+                );
+
+                return res.status(200).json({ success: true, data: results });
+            } catch (err) {
+                console.error(
+                    "Erreur pendant l’insertion des documents :",
+                    err
+                );
+                return res
+                    .status(500)
+                    .json({ success: false, message: err.message });
+            }
+        });
+    } catch (err) {
+        console.error("Erreur serveur :", err);
+        return res.status(500).json({ success: false, message: err.message });
+    }
 });
 
 module.exports = router;

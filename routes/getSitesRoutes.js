@@ -4,6 +4,19 @@ const app = express();
 const sharp = require("sharp");
 const fs = require("fs");
 const path = require("path");
+// Obtenir le dossier racine du projet
+const ROOT_DIR = path.join(__dirname, "..");
+// 1. Définir le dossier des fichiers
+const FILES_DIR = path.resolve(ROOT_DIR, "mnt", "storage-data", "app");
+// 2. Définir le dossier des images
+const IMAGES_DIR = path.resolve(FILES_DIR, "photos");
+// 3. Définir le dossier des fichiers en cache
+const CACHE_DIR = path.resolve(FILES_DIR, "cache"); 
+// Assure que le dossier cache existe
+if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
+
 
 // const { authenticateToken } = require('../fonctions/fonctionsAuth.js');
 
@@ -19,7 +32,13 @@ const {
 } = require("../fonctions/fonctionsSites.js");
 const { generateFicheTravauxWord } = require("../scripts/gen_fiche_travaux.js");
 const pool = require("../dbPool/poolConnect.js");
+router.use("/", (req, res, next) => {
+  console.log("Requête de fichier:", path.join(FILES_DIR, req.path));
+  next();
+});
 
+// Servir les fichiers statiques
+router.use("/", express.static(FILES_DIR));
 // FONCTIONNE !
 // const paramTest = { query : 'SELECT * from esp.geometries limit 2;', message: 'Simple query test'};
 // selectSite(pool, paramTest, (message, res) => {
@@ -601,7 +620,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         "chantier_nature",
         "unites",
         "pression_maitrise",
-        "doc_type"
+        "doc_type",
     ];
 
     if (simpleTables.includes(list)) {
@@ -624,8 +643,15 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
     } else if (list == "ope.listprogrammes") {
         SelectFields +=
             "cd_programme as cd_type, cd_programme || ' - ' || libelle as libelle ";
-    } else if (list == "opegerer.libelles" || "sitcenca.libelles") {
+    } else if (
+        list == "opegerer.libelles" ||
+        list == "sitcenca.libelles"
+    ) {
         SelectFields += "lib_id as cd_type, lib_libelle as libelle ";
+    } else if (list == "files.libelles") {
+        SelectFields += "lib_id as cd_type, lib_libelle as libelle, lib_path as path, lib_field as field ";
+    } else if (list == "admin.salaries") {
+        SelectFields += "cd_salarie ";
     }
 
     FromTable = "FROM " + list + " ";
@@ -657,16 +683,27 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
             where =
                 "where left(cd_programme,2) in ('24', '25') order by cd_programme;";
         } else if (
-            (list == "opegerer.libelles" || "sitcenca.libelles") &&
+            (list == "opegerer.libelles" || list == "sitcenca.libelles") &&
             libelles_names.includes(option)
         ) {
             // Si l'option est dans la liste des libelles_names
             // sera dynamique en fonction de l'option choisi c'est a dire la famille de libelles.
             where =
-                "where libnom_id = (SELECT libnom_id FROM " + list + "_nom" + " where libnom_nom = '" +
+                "where libnom_id = (SELECT libnom_id FROM " +
+                list +
+                "_nom" +
+                " where libnom_nom = '" +
                 option +
                 "') order by lib_ordre;";
-        } else where = "order by val_tri;";
+        } else if (list == "files.libelles") {
+            where = "where libnom_id =" + option + " order by lib_ordre;";
+        } else if (list == "admin.salaries") {
+            where = "";
+        } else if (list == "files.libelles") {
+            where = "order by lib_ordre;";
+        } else {
+            where = "order by val_tri;";
+        }
     }
 
     if (libelles_names.includes(option)) {
@@ -782,7 +819,7 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
         FromTable = "FROM sitcenca.projets_mfu;";
         where = "";
         console.log("Est-ce que ça marche ?");
-        req.params.id = "null";
+        req.params.id = null;
     } else if (mode === "full") {
         SelectFields = `
       SELECT 
@@ -839,84 +876,92 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
     );
 });
 
-router.get("/pmfu_docs/ref_pmfu_id=:ref_pmfu_id/cd_type=:cd_type/:mode", (req, res) => {
-    let { SelectFields, FromTable, where, message } = reset();
-    const { ref_pmfu_id, cd_type, mode } = req.params;
-    SelectFields = `SELECT doc_id, ref_pmfu_id, doc_type, doc_path `;
-    FromTable = "FROM sitcenca.pmfu_docs ";
-    message = "pmfu_docs/ref_pmfu_id/" + mode;
+router.get(
+    "/docs/:section/cd_type=:cd_type/:mode/:ref_id?",
+    async (req, res) => {
+        let { SelectFields, FromTable, where, message } = reset();
+        const { ref_id, cd_type, mode, section } = req.params;
 
-    if (mode === "lite") {
-        message = "pmfu_docs/id/" + mode;
-        where = 'where doc_type = ' + cd_type + ' and ref_pmfu_id = ' + ref_pmfu_id;
-    } else if (req.params.mode === "full") {
-        message = "pmfu_docs/id/" + mode;
-        where = 'where doc_id = ' + doc_id + ' and ref_pmfu_id = ' + ref_pmfu_id;
+        SelectFields = `SELECT doc_id, ref_id, doc_type, doc_path, libnom_id `;
+        FromTable = "FROM files.docs ";
+        message =
+            "docs/section:" + section + "/cd_type=" + cd_type + "/" + mode;
+        let values;
+
+        if (mode === "lite") {
+            message = "docs/doc_type/" + mode;
+            where = "WHERE doc_type = $1 AND libnom_id = $2";
+            values = [cd_type, section];
+        } else if (mode === "full") {
+            message = "docs/id/" + mode;
+            if (ref_id && cd_type == 0) {
+                SelectFields = `SELECT doc_type `;
+                where = "WHERE libnom_id = $1 AND ref_id = $2";
+                values = [section, ref_id];
+            } else if (ref_id) {
+                where =
+                    "WHERE doc_type = $1 AND ref_id = $2 AND libnom_id = $3";
+                values = [cd_type, ref_id, section];
+            } else {
+                return res.status(400).send("Paramètre 'ref_id' requis");
+            }
+        }
+        executeQueryAndRespond(
+            pool,
+            SelectFields,
+            FromTable,
+            where,
+            values,
+            res,
+            message,
+            mode
+        );
     }
-    executeQueryAndRespond(
-        pool,
-        SelectFields,
-        FromTable,
-        where,
-        ref_pmfu_id,
-        res,
-        message,
-        mode
-    );
-});
-
-const ROOT_DIR = path.join(__dirname, "..");
-const IMAGES_DIR = path.join((ROOT_DIR.split('/routes')[0]), "uploads"); // dossier original
-console.log(IMAGES_DIR);
-const CACHE_DIR = path.join((ROOT_DIR.split('/routes')[0]), "cache");   // dossier cache
-console.log(CACHE_DIR);
-// Assure que le dossier cache existe
-if (!fs.existsSync(CACHE_DIR)) {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
-}
+);
 
 app.get("/img", async (req, res) => {
-  const { file, width } = req.query;
+    const { file, width } = req.query;
 
-  if (!file || !width) {
-    return res.status(400).send("Paramètres 'file' et 'width' requis");
-  }
-
-  const w = parseInt(width);
-  if (isNaN(w) || w <= 0) {
-    return res.status(400).send("Largeur invalide");
-  }
-
-  const originalPath = path.join(IMAGES_DIR, file);
-  const cachePath = path.join(CACHE_DIR, `${w}-${file}`);
-
-  try {
-    // Vérifie si le fichier existe déjà en cache
-    if (fs.existsSync(cachePath)) {
-      return res.sendFile(cachePath);
+    if (!file || !width) {
+        return res.status(400).send("Paramètres 'file' et 'width' requis");
     }
 
-    // Vérifie que l'image originale existe
-    if (!fs.existsSync(originalPath)) {
-      return res.status(404).send("Image originale introuvable");
+    const w = parseInt(width);
+    if (isNaN(w) || w <= 0) {
+        return res.status(400).send("Largeur invalide");
     }
 
-    // Redimensionne et écrit en cache
-    await sharp(originalPath)
-      .resize(w) // conserve les proportions
-      .toFormat("jpeg", { quality: 80 })
-      .toFile(cachePath);
+    const originalPath = path.join(IMAGES_DIR, file);
+    const cachePath = path.join(CACHE_DIR, `${w}-${file}`);
 
-    // Renvoie l'image mise en cache
-    res.sendFile(cachePath);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Erreur lors du redimensionnement de l'image");
-  }
+    try {
+        // Vérifie si le fichier existe déjà en cache
+        if (fs.existsSync(cachePath)) {
+            return res.sendFile(cachePath);
+        }
+
+        // Vérifie que l'image originale existe
+        if (!fs.existsSync(originalPath)) {
+            return res.status(404).send("Image originale introuvable");
+        }
+
+        // Redimensionne et écrit en cache
+        await sharp(originalPath)
+            .resize(w) // conserve les proportions
+            .toFormat("jpeg", { quality: 80 })
+            .toFile(cachePath);
+
+        // Renvoie l'image mise en cache
+        res.sendFile(cachePath);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Erreur lors du redimensionnement de l'image");
+    }
 });
-
 app.listen(3000, () => {
-  console.log("Serveur d'images : http://localhost:3000/img?file=xxx.jpg&width=300");
+    console.log(
+        "Serveur d'images : http://localhost:3000/img?file=xxx.jpg&width=xxx"
+    );
 });
 
 module.exports = router;

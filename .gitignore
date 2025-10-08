@@ -143,6 +143,7 @@ backend*.service
 
 uploads/
 cache/
+mnt/
 migration/bkps
 
 prometheus_data/

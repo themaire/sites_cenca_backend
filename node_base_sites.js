@@ -128,7 +128,7 @@ async function run() {
     app.use('/menu', menuRoutes);
     app.use('/sites', foncierRoutes);
     app.use('/process', processRoutes);
-    app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+    app.use('/app', siteRoutesGet);
     
     // Middleware pour capturer les routes inconnues
     app.use((req, res, next) => {

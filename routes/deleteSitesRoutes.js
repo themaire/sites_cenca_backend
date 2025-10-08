@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const fs = require("fs");
+const path = require("path");
 router.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*'); // autorise toutes les origines
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
@@ -93,12 +95,13 @@ router.delete(
         }
     }
 );
-// Supprimer un Docfile
+// Supprimer un fichier
 router.delete("/delete/:table", (req, res) => {
     const table = req.params.table.split(".");
     const doc_path = req.query.doc_path;
     console.log("doc_path : " + doc_path);
     console.log("table pour suppression : " + req.params.table);
+
     if (!doc_path) {
         return res.status(400).json({
             success: false,
@@ -106,14 +109,15 @@ router.delete("/delete/:table", (req, res) => {
             code: 1,
         });
     }
+
     try {
-        // Avant la gestion d'une eventuelle seconde clé primaire à utiliser pour supprimer un enregistrement
-        // const queryObject = generateDeleteQuery(req.params.table, id, programmeId);
         const queryObject = generateDeleteQuery(
             req.params.table,
             "doc_path",
             doc_path
         );
+        console.log("queryObject avant exécution : " + JSON.stringify(queryObject));
+        console.log("queryObject type : " + typeof queryObject);
         ExecuteQuerySite(
             pool,
             {
@@ -132,25 +136,65 @@ router.delete("/delete/:table", (req, res) => {
                 );
 
                 if (message === "ok") {
-                    res.status(200).json({
-                        success: true,
-                        message: "Suppression réussie de l'opération.",
-                        code: 0,
-                        data: resultats,
+                    //  suppression physique avec check path traversal
+                    const ROOT_DIR = path.join(__dirname, "..");
+                    const uploadsDir = path.resolve(ROOT_DIR, "mnt", "storage-data", "app");
+                    const cacheDir = path.resolve(uploadsDir, "cache"); 
+                    const filePath = path.resolve(uploadsDir, doc_path.split('\\').slice(-2).join('\\'));
+                    const cachePath = path.resolve(cacheDir,'200-'+ doc_path.split('\\').pop());
+                    console.log("Fichier à supprimer:", filePath);
+                    console.log("cache path:", cachePath);
+                    console.log("uploadsDir:", uploadsDir);
+                    // Vérification : le fichier doit être dans le dossier downloads
+                    if (!filePath.startsWith(uploadsDir)) {
+                        console.warn("Tentative de path traversal détectée:", doc_path);
+                        return res.status(400).json({
+                            success: false,
+                            message: "Chemin de fichier invalide",
+                            code: 3,
+                        });
+                    }
+                    if (cachePath.endsWith(".jpg") || cachePath.endsWith(".jpeg") || cachePath.endsWith(".png")) {
+                        fs.unlink(cachePath, (err) => {
+                            if (err) {
+                                console.error("Erreur suppression fichier:", err);
+                                return res.status(500).json({
+                                    success: false,
+                                    message: "Fichier introuvable ou non supprimé",
+                                    code: 2,
+                                });
+                            }
+                            console.log("Fichier supprimé:", cachePath);
+                        })
+                    }
+                    fs.unlink(filePath, (err) => {
+                        if (err) {
+                            console.error("Erreur suppression fichier:", err);
+                            return res.status(500).json({
+                                success: false,
+                                message: "Fichier introuvable ou non supprimé",
+                                code: 2,
+                            });
+                        }
+                        console.log("Fichier supprimé:", filePath);
+                        res.status(200).json({
+                            success: true,
+                            message: "Suppression réussie du fichier.",
+                            code: 0,
+                            data: resultats,
+                        });
                     });
-                    console.log("message : " + message);
                 } else {
                     res.status(500).json({
                         success: false,
-                        message: "Erreur lors de la suppression.",
+                        message: "Erreur lors de la suppression en base.",
                         code: 1,
                     });
-                    console.log("message : " + message);
                 }
             }
         );
     } catch (error) {
-        console.error("Erreur lors de la suppression de l'opération:", error);
+        console.error("Erreur lors de la suppression:", error);
         res.status(500).json({
             success: false,
             message: "Erreur interne du serveur.",
