@@ -3,195 +3,53 @@ const router = express.Router();
 
 
 // Fonctions et connexion à PostgreSQL
-const { ExecuteQuerySite, updateEspaceSite } = require('../fonctions/fonctionsSites.js'); 
+const { ExecuteQuerySite } = require('../fonctions/fonctionsSites.js'); 
 const pool = require('../dbPool/poolConnect.js');
 
 // Generateur de requetes SQL
-const { generateUpdateQuery, generateInsertQuery } = require('../fonctions/querys.js'); 
+const { generateDeleteQuery } = require('../fonctions/querys.js');
 
-// Mettre à jour un site, un acte...
-router.put("/put/table=:table/uuid=:uuid", (req, res) => {
-    const TABLE = req.params.table;
-    const UUID = req.params.uuid; // UUID du site à mettre à jour
-    const updateData = req.body; // Récupérer l'objet JSON envoyé
-
-    try {
-        if (TABLE === 'espace_site') {
-            // Séparer les champs pour les tables 'espace' et 'site' afin de les insérer dans les bonnes tables
-            // d'utiliser les bonnes fonctions de création de requetes update
-            const espaceFields = [
-                "date_crea_espace", "id_espace", "nom", "surface", 
-                "carto_hab", "zh", "typ_espace", "bassin_agence", "rgpt", 
-                "typ_geologie", "id_source", "id_crea", "url", "maj_admin"
-            ];
-            const siteFields = [
-                "code", "prem_ctr", "ref_fcen", "pourc_gere", 
-                "surf_actes", "url_cen", "validite", "espace", "typ_site", 
-                "responsable", "date_crea_site", "id_mnhn", "modif_admin", 
-                "actuel", "url_mnhn", "parties_gerees", "typ_ouverture", 
-                "description_site", "sensibilite", "remq_sensibilite", "ref_public"
-            ];
-
-            const espaceData = {};
-            const siteData = {};
-
-            Object.keys(updateData).forEach(key => {
-                if (espaceFields.includes(key)) {
-                    espaceData[key] = updateData[key];
-                } else if (siteFields.includes(key)) {
-                    siteData[key] = updateData[key];
-                }
-            });
-
-            // console.log(espaceData);
-            // console.log(siteData);
-
-            // Générer les requêtes UPDATE pour chaque table
-            // Ne PAS oublier d'ajouter l'UUID de la bonne table
-            const espaceQuery = generateUpdateQuery('esp.espaces', updateData.uuid_espace, espaceData);
-            const siteQuery = generateUpdateQuery('sitcenca.sites', UUID, siteData);
-            
-            updateEspaceSite(pool, res, espaceQuery, siteQuery);
-            
-        } else if (TABLE in ['acte']) {
-            let REQ;
-            if (TABLE == 'site') {
-                REQ = reqUpdateSite;
-            }
-
-            const queryObject = generateUpdateQuery(TABLE, UUID, updateData);
-            console.log(queryObject);
-
-            ExecuteQuerySite(
-                pool,
-                { query: queryObject, message: "sites/put/table=" + TABLE + "/uuid" },
-                ( resultats, message ) => {
-                    res.setHeader("Access-Control-Allow-Origin", "*");
-                    res.setHeader("Content-Type", "application/json; charset=utf-8");
-
-                    if (resultats && resultats.length > 0) {
-                        res.status(200).json({
-                            success: true,
-                            message: "Mise à jour réussie.",
-                            data: resultats
-                        });
-                        console.log("message : " + message);
-                        console.log("resultats : " + resultats);
-                    } else {
-                        const currentDateTime = new Date().toISOString();
-                        console.log(`Échec de la requête à ${currentDateTime}`);
-                        console.log(queryObject.text);
-                        console.log(queryObject.values);
-                        res.status(500).json({
-                            success: false,
-                            message: "Erreur, la requête s'est mal exécutée."
-                        });
-                    }
-                }
-            );
-        } else {
-            res.status(400).json({
-                success: false,
-                message: "Table invalide."
-            });
-        }
-    } catch (error) {
-        console.error("Erreur lors de la mise à jour : ", error);
-        res.status(500).json({
-            success: false,
-            message: "Erreur interne du serveur."
-        });
-    }
-});
-
-// Ajouter un site, un acte...
-router.put("/put/table=:table/insert", (req, res) => {
-    const TABLE = req.params.table;
-    const insertData = req.body; // Récupérer l'objet JSON envoyé
+// Supprimer une opération, une localisation (d'opération)
+router.delete("/delete/:table/:uuidName=:id/:idBisName?/:idBis?", (req, res) => {
+    const table = req.params.table.split('.');
+    const uuidName = req.params.uuidName; // Nom de la clé primaire
+    const id = req.params.id;
+    const idBisName = req.params.idBisName; // Nom de la clé supplémentaire (optionnel)
+    const idBis = req.params.idBis; // Valeur de la clé supplémentaire (optionnel)
 
     try {
-        // !!!!!!! A FAIRE PLUS TARD !!!!!!!
-        if (TABLE == 'operations') {
+        // Avant la gestion d'une eventuelle seconde clé primaire à utiliser pour supprimer un enregistrement
+        // const queryObject = generateDeleteQuery(req.params.table, id, programmeId);
 
-            const queryObject = generateInsertQuery("opegerer." + TABLE, insertData);
-            console.log(queryObject);
-
-            ExecuteQuerySite(
-                pool,
-                { query: queryObject, message: "sites/put/table=" + TABLE + "/insert" },
-                "insert",
-                ( resultats, message ) => {
-                    res.setHeader("Access-Control-Allow-Origin", "*");
-                    res.setHeader("Content-Type", "application/json; charset=utf-8");
-
-                    if (message === 'ok') {
-                        res.status(200).json({
-                            success: true,
-                            message: "Insert réussie.",
-                            code: 0,
-                            data: resultats
-                        });
-                        console.log("message : " + message);
-                        console.log("resultats : " + resultats);
-                    } else {
-                        const currentDateTime = new Date().toISOString();
-                        console.log(`Échec de la requête à ${currentDateTime}`);
-                        console.log(queryObject.text);
-                        console.log(queryObject.values);
-                        res.status(500).json({
-                            success: false,
-                            message: "Erreur, la requête s'est mal exécutée."
-                        });
-                    }
-                }
-            );
-        } else {
-            res.status(400).json({
-                success: false,
-                message: "Table invalide."
-            });
-        }
-    } catch (error) {
-        console.erroar("Erreur lors de la mise à jour : ", error);
-        res.status(500).json({
-            success: false,
-            message: "Erreur interne du serveur."
-        });
-    }
-});
-
-// Supprimer une opération
-router.delete("/delete/operations/uuid=:uuid", (req, res) => {
-    const operationId = req.params.id;
-
-    try {
-        const query = `DELETE FROM opegerer.operations WHERE id = $1`;
-        const values = [operationId];
+        // Si idBisName et idBis sont définis, passez-les à generateDeleteQuery
+        const queryObject = idBisName && idBis
+            ? generateDeleteQuery(req.params.table, uuidName, id, idBisName, idBis)
+            : generateDeleteQuery(req.params.table, uuidName, id);
 
         ExecuteQuerySite(
             pool,
-            { query, values, message: "operations/delete" },
+            { query: queryObject, message: table[1].charAt(0).toUpperCase() + table[1].slice(1) + "/delete" },
             "delete",
             (resultats, message) => {
-                res.setHeader("Access-Control-Allow-Origin", "*");
-                res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
 
-                if (message === 'ok') {
-                    res.status(200).json({
-                        success: true,
-                        message: "Suppression réussie.",
-                        code: 0,
-                        data: resultats
-                    });
-                    console.log("message : " + message);
-                } else {
-                    res.status(500).json({
-                        success: false,
-                        message: "Erreur lors de la suppression.",
-                        code: 1
-                    });
-                    console.log("message : " + message);
-                }
+            if (message === 'ok') {
+                res.status(200).json({
+                success: true,
+                message: "Suppression réussie de l'opération.",
+                code: 0,
+                data: resultats
+                });
+                console.log("message : " + message);
+            } else {
+                res.status(500).json({
+                success: false,
+                message: "Erreur lors de la suppression.",
+                code: 1
+                });
+                console.log("message : " + message);
+            }
             }
         );
     } catch (error) {

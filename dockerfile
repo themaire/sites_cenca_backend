@@ -14,9 +14,11 @@ RUN npm install
 COPY routes/ ./routes/
 COPY dbPool/ ./dbPool/
 COPY fonctions/ ./fonctions/
+COPY scripts/ ./scripts/
 COPY .env .
 COPY node_base_sites.js .
 
+RUN mkdir /etc/ssl/certs/si-10.cen-champagne-ardenne.org
 
 # Expose le port sur lequel l'application écoute
 EXPOSE 8889
