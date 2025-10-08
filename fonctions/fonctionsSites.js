@@ -1,4 +1,4 @@
-const shapefile = require('shapefile');
+const shapefile = require("shapefile");
 
 function joinQuery(select, from, where = "") {
     const query = select + from + where;
@@ -12,14 +12,14 @@ function joinQuery(select, from, where = "") {
 async function ExecuteQuerySite(pool, param, type, callback) {
     /**
      * Exécute une requête SQL sur la base de données et traite les résultats.
-     * 
+     *
      * @param {Object} pool - Le pool de connexions à la base de données.
      * @param {Object} param - Les paramètres de la requête, incluant la { requête SQL : message }.
      * @param {string} type - Le type de requête (select, update...).
      * @param {Function} callback - La fonction de rappel à exécuter avec les résultats de la requête.
      */
 
-    type = type.toLowerCase();
+    if (type === "string") type = type.toLowerCase();
 
     try {
         // Exécute la requête SQL avec les paramètres fournis
@@ -40,22 +40,37 @@ async function ExecuteQuerySite(pool, param, type, callback) {
             console.log("aucune condition remplie");
             console.log("nbLignes : ", nbLignes);
             console.log("type : ", type);
-            console.log('["update", "insert", "delete"].includes(type) : ', ["update", "insert", "delete"].includes(type));
+            console.log(
+                '["update", "insert", "delete"].includes(type) : ',
+                ["update", "insert", "delete"].includes(type)
+            );
 
             callback([], param["message"]);
         }
     } catch (error) {
         // En cas d'erreur, affiche l'erreur et appelle le callback avec un message d'erreur et une liste vide
-        console.error("Erreur lors de l'exécution de la requête : ", param["query"]);
+        console.error(
+            "Erreur lors de l'exécution de la requête : ",
+            param["query"]
+        );
         console.error("Erreur de PostgreSQL : ", error);
-        if (typeof callback === 'function') {
+        if (typeof callback === "function") {
             callback([], "Erreur lors de l'exécution de la requête :");
         } else {
             console.error("Callback is not a function");
         }
     }
 }
-
+function ExecuteQuerySitePromise(pool, param, type) {
+    return new Promise((resolve, reject) => {
+        ExecuteQuerySite(pool, param, type, (rows, msg) => {
+            if (msg && msg.startsWith("Erreur")) {
+                return reject(new Error(msg));
+            }
+            resolve({ rows, message: msg });
+        });
+    });
+}
 function selectQuery(params) {
     // Prends en paramètre les parametres de l'url recue
     // Retourne un query objet que la bibliotheque pg acceptera
@@ -84,7 +99,9 @@ function selectQuery(params) {
         whereFilters.push({ nom: decodeURIComponent(params.nom) });
     if (params.commune != "*") whereFilters.push({ communes: params.commune });
     if (params.milnat != "*")
-        whereFilters.push({ milieux_naturels: decodeURIComponent(params.milnat) });
+        whereFilters.push({
+            milieux_naturels: decodeURIComponent(params.milnat),
+        });
     if (params.resp != "*") whereFilters.push({ responsable: params.resp });
 
     // if(params.uuid_site != undefined) whereFilters.push({"uuid_site": params.uuid_site});
@@ -117,7 +134,7 @@ async function distinctSiteResearch(
     property,
     title,
     callback
-    ) {
+) {
     const QUERY = {
         text: "SELECT DISTINCT " + property + " FROM sitcenca.listesitescenca;",
         values: [],
@@ -126,20 +143,21 @@ async function distinctSiteResearch(
 
     const ResultValues = await pool.query(QUERY);
 
-    if (ResultValues.length === 0) selectors.push({ name: property, values: [] });
+    if (ResultValues.length === 0)
+        selectors.push({ name: property, values: [] });
     else {
         if (ResultValues !== undefined) {
-        let values = [];
-        for (let value of ResultValues.rows) {
-            if (value[property] !== null) values.push(value[property]);
-        }
-        selectors.push({
-            name: property,
-            title: title,
-            // "values": ResultValues.sort()});
-            values: values.sort(),
-        });
-        callback(selectors);
+            let values = [];
+            for (let value of ResultValues.rows) {
+                if (value[property] !== null) values.push(value[property]);
+            }
+            selectors.push({
+                name: property,
+                title: title,
+                // "values": ResultValues.sort()});
+                values: values.sort(),
+            });
+            callback(selectors);
         }
     }
 }
@@ -153,84 +171,114 @@ async function updateEspaceSite(pool, res, espaceQuery, siteQuery) {
         pool,
         { query: espaceQuery, message: "espace/put/table=espace_site/uuid" },
         "update",
-        ( resultats, message ) => {
-            console.log("resultats suite à la requete table espaces : " + resultats);
+        (resultats, message) => {
+            console.log(
+                "resultats suite à la requete table espaces : " + resultats
+            );
             // if (resultats !== false) {
-            if (message === 'ok') {
-                console.log("DEBUG PUT ESTPACE OK")
+            if (message === "ok") {
+                console.log("DEBUG PUT ESTPACE OK");
                 ExecuteQuerySite(
                     pool,
-                    { query: siteQuery, message: "site/put/table=espace_site/uuid" },
+                    {
+                        query: siteQuery,
+                        message: "site/put/table=espace_site/uuid",
+                    },
                     "update",
                     (resultats, message) => {
                         res.setHeader("Access-Control-Allow-Origin", "*");
-                        res.setHeader("Content-Type", "application/json; charset=utf-8");
+                        res.setHeader(
+                            "Content-Type",
+                            "application/json; charset=utf-8"
+                        );
 
-                        if (message === 'ok') {
+                        if (message === "ok") {
                             res.status(200).json({
                                 success: true,
                                 message: "Mise à jour réussie.",
                                 code: 0,
-                                data: resultats
+                                data: resultats,
                             });
                             console.log("message : " + message);
                             console.log("resultats : " + resultats);
                         } else {
                             const currentDateTime = new Date().toISOString();
-                            console.log(`Échec de la requête de la table sites à ${currentDateTime}`);
+                            console.log(
+                                `Échec de la requête de la table sites à ${currentDateTime}`
+                            );
                             console.log(siteQuery.text);
                             console.log(siteQuery.values);
                             res.status(500).json({
                                 success: false,
-                                message: "Erreur, la requête s'est mal exécutée.",
-                                code: 1
+                                message:
+                                    "Erreur, la requête s'est mal exécutée.",
+                                code: 1,
                             });
                         }
                     }
                 );
             } else {
-                console.log("DEBUG PUT ESPACE FAIL")
+                console.log("DEBUG PUT ESPACE FAIL");
                 console.log("message : " + message);
 
                 const currentDateTime = new Date().toISOString();
-                console.log(`Échec de la requête de la table espaces à ${currentDateTime}`);
+                console.log(
+                    `Échec de la requête de la table espaces à ${currentDateTime}`
+                );
                 console.log(espaceQuery.text);
                 console.log(espaceQuery.values);
                 res.status(500).json({
                     success: false,
-                    message: "Erreur, la requête s'est mal exécutée."
+                    message: "Erreur, la requête s'est mal exécutée.",
                 });
             }
         }
     );
 }
 
-function executeQueryAndRespond(pool, SelectFields, FromTable, where, uuid, res, message, mode = "lite") {
+function executeQueryAndRespond(
+    pool,
+    SelectFields,
+    FromTable,
+    where,
+    uuid,
+    res,
+    message,
+    mode = "lite"
+) {
     const queryObject = {
         text: joinQuery(SelectFields, FromTable, where),
         // values: [uuid],
     };
-    if (uuid !== "null") queryObject.values = [uuid];  // Ajoutes les valeurs si elles existent a l'objet queryObject
+    if (Array.isArray(uuid)) {
+        queryObject.values = uuid;
+    } else if (uuid !== null) {
+        queryObject.values = [uuid];
+    } // Ajoutes les valeurs si elles existent a l'objet queryObject
 
     console.log("queryObject : ");
     console.log(queryObject);
 
-    ExecuteQuerySite(pool, {query: queryObject, "message": message}, "select",
+    ExecuteQuerySite(
+        pool,
+        { query: queryObject, message: message },
+        "select",
         (resultats) => {
             let json;
             if (resultats.length > 0) {
                 json = JSON.stringify(resultats);
-                if (mode == "full") {
+                if (mode == "full" && message !== "docs/id/full") {
                     json = json.slice(1, -1);
                 }
             } else {
                 json = JSON.stringify([]);
             }
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
             console.log("json : " + json);
             res.end(json);
-        });
+        }
+    );
 }
 
 function reset() {
@@ -246,24 +294,28 @@ function reset() {
 }
 
 function convertToWKT_origonal(coordinates) {
-    console.log('Coordonnées brutes:', coordinates);
+    console.log("Coordonnées brutes:", coordinates);
 
     const processPolygon = (polygon) => {
         // Supprimer les doublons consécutifs
-        const uniqueCoords = polygon.filter((coord, index, self) =>
-            index === self.findIndex(c => 
-                c[0] === coord[0] && c[1] === coord[1]
-            )
+        const uniqueCoords = polygon.filter(
+            (coord, index, self) =>
+                index ===
+                self.findIndex((c) => c[0] === coord[0] && c[1] === coord[1])
         );
 
         // Ajouter le point de fermeture si nécessaire (premier point = dernier point)
-        if (uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
-            uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]) {
+        if (
+            uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
+            uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]
+        ) {
             uniqueCoords.push(uniqueCoords[0]);
         }
 
         // Convertir les coordonnées en WKT
-        return uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+        return uniqueCoords
+            .map((coord) => `${coord[0]} ${coord[1]}`)
+            .join(", ");
     };
 
     let wktCoords;
@@ -271,14 +323,21 @@ function convertToWKT_origonal(coordinates) {
 
     if (coordinates.length > 1) {
         // Multipolygon
-        type = 'MULTIPOLYGON';
-        wktCoords = coordinates.map(polygon => 
-            `(${polygon.map(ring => `(${processPolygon(ring)})`).join(',')})`
-        ).join(',');
+        type = "MULTIPOLYGON";
+        wktCoords = coordinates
+            .map(
+                (polygon) =>
+                    `(${polygon
+                        .map((ring) => `(${processPolygon(ring)})`)
+                        .join(",")})`
+            )
+            .join(",");
     } else {
         // Simple polygon
-        type = 'POLYGON';
-        wktCoords = coordinates.map(ring => `(${processPolygon(ring)})`).join(',');
+        type = "POLYGON";
+        wktCoords = coordinates
+            .map((ring) => `(${processPolygon(ring)})`)
+            .join(",");
     }
 
     const EWKT = `SRID=2154;${type}(${wktCoords})`;
@@ -297,18 +356,21 @@ async function detectShapefileGeometryType(shpPath, dbfPath) {
         const source = await shapefile.open(shpPath, dbfPath);
         const result = await source.read();
         if (result.done) {
-            throw new Error('Aucune géométrie trouvée dans le shapefile');
+            throw new Error("Aucune géométrie trouvée dans le shapefile");
         }
         // Le type est dans result.value.geometry.type (ex: 'Point', 'Polygon', ...)
         return result.value.geometry.type.toUpperCase();
     } catch (error) {
-        console.error('Erreur lors de la détection du type de géométrie :', error);
+        console.error(
+            "Erreur lors de la détection du type de géométrie :",
+            error
+        );
         throw error;
     }
 }
 
 function convertToWKT(coordinates, typeGeometry = null) {
-    console.log('Coordonnées brutes:', coordinates);
+    console.log("Coordonnées brutes:", coordinates);
 
     // Si le type est explicitement passé, on l'utilise, sinon on déduit
     let type = typeGeometry ? typeGeometry.toUpperCase() : null;
@@ -316,104 +378,140 @@ function convertToWKT(coordinates, typeGeometry = null) {
     // Détection automatique si type non fourni
     // if (!type) {
     if (1) {
-        if (typeof coordinates[0] === 'number') {
-            type = 'POINT';
-        } else if (Array.isArray(coordinates[0]) && typeof coordinates[0][0] === 'number') {
-            type = 'LINESTRING';
-        } else if (Array.isArray(coordinates[0]) && Array.isArray(coordinates[0][0])) {
+        if (typeof coordinates[0] === "number") {
+            type = "POINT";
+        } else if (
+            Array.isArray(coordinates[0]) &&
+            typeof coordinates[0][0] === "number"
+        ) {
+            type = "LINESTRING";
+        } else if (
+            Array.isArray(coordinates[0]) &&
+            Array.isArray(coordinates[0][0])
+        ) {
             // Polygon ou MultiPolygon
-            type = coordinates.length > 1 ? 'MULTIPOLYGON' : 'POLYGON';
+            type = coordinates.length > 1 ? "MULTIPOLYGON" : "POLYGON";
         }
     }
 
-    if (type === 'POINT') {
+    if (type === "POINT") {
         // [x, y]
         wktCoords = `${coordinates[0]} ${coordinates[1]}`;
-    } else if (type === 'LINESTRING') {
-        wktCoords = coordinates.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
-    } else if (type === 'POLYGON') {
+    } else if (type === "LINESTRING") {
+        wktCoords = coordinates
+            .map((coord) => `${coord[0]} ${coord[1]}`)
+            .join(", ");
+    } else if (type === "POLYGON") {
         const processPolygon = (polygon) => {
-            const uniqueCoords = polygon.filter((coord, index, self) =>
-                index === self.findIndex(c => c[0] === coord[0] && c[1] === coord[1])
+            const uniqueCoords = polygon.filter(
+                (coord, index, self) =>
+                    index ===
+                    self.findIndex(
+                        (c) => c[0] === coord[0] && c[1] === coord[1]
+                    )
             );
-            if (uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
-                uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]) {
+            if (
+                uniqueCoords[0][0] !==
+                    uniqueCoords[uniqueCoords.length - 1][0] ||
+                uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]
+            ) {
                 uniqueCoords.push(uniqueCoords[0]);
             }
-            return uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+            return uniqueCoords
+                .map((coord) => `${coord[0]} ${coord[1]}`)
+                .join(", ");
         };
-        wktCoords = coordinates.map(ring => `(${processPolygon(ring)})`).join(',');
-    } else if (type === 'MULTIPOLYGON') {
+        wktCoords = coordinates
+            .map((ring) => `(${processPolygon(ring)})`)
+            .join(",");
+    } else if (type === "MULTIPOLYGON") {
         const processPolygon = (polygon) => {
-            const uniqueCoords = polygon.filter((coord, index, self) =>
-                index === self.findIndex(c => c[0] === coord[0] && c[1] === coord[1])
+            const uniqueCoords = polygon.filter(
+                (coord, index, self) =>
+                    index ===
+                    self.findIndex(
+                        (c) => c[0] === coord[0] && c[1] === coord[1]
+                    )
             );
-            if (uniqueCoords[0][0] !== uniqueCoords[uniqueCoords.length - 1][0] ||
-                uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]) {
+            if (
+                uniqueCoords[0][0] !==
+                    uniqueCoords[uniqueCoords.length - 1][0] ||
+                uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]
+            ) {
                 uniqueCoords.push(uniqueCoords[0]);
             }
-            return uniqueCoords.map(coord => `${coord[0]} ${coord[1]}`).join(', ');
+            return uniqueCoords
+                .map((coord) => `${coord[0]} ${coord[1]}`)
+                .join(", ");
         };
-        wktCoords = coordinates.map(polygon =>
-            `(${polygon.map(ring => `(${processPolygon(ring)})`).join(',')})`
-        ).join(',');
+        wktCoords = coordinates
+            .map(
+                (polygon) =>
+                    `(${polygon
+                        .map((ring) => `(${processPolygon(ring)})`)
+                        .join(",")})`
+            )
+            .join(",");
     } else {
-        throw new Error('Type de géométrie non supporté');
+        throw new Error("Type de géométrie non supporté");
     }
 
     const EWKT = `SRID=2154;${type}(${wktCoords})`;
     console.log(EWKT);
-    return {"type": type, "EWKT": EWKT};
+    return { type: type, EWKT: EWKT };
 }
 
-const unzipper = require('unzipper');
-const fs = require('fs');
-const path = require('path');
+const unzipper = require("unzipper");
+const fs = require("fs");
+const path = require("path");
 
 async function extractZipFile(filePath, extractPath) {
     // Retourne true si le shapefile extrait est un dossier
-    // Retourne false si les fichiers du shapefile ont été zippé comme ça 
-    let folderToReturn = '';
-    folderToReturn = await new Promise((resolve, reject) => { 
+    // Retourne false si les fichiers du shapefile ont été zippé comme ça
+    let folderToReturn = "";
+    folderToReturn = await new Promise((resolve, reject) => {
         // Cette promise retourne sa valeur isFolder au travers de resolve
         fs.createReadStream(filePath)
             .pipe(unzipper.Parse())
-            .on('entry', async (entry) => {
-            const cheminElement = entry.path;
-            // console.log('cheminElement:', cheminElement);
-            const name = path.basename(cheminElement); // Nom d'un dossier à retourner
+            .on("entry", async (entry) => {
+                const cheminElement = entry.path;
+                // console.log('cheminElement:', cheminElement);
+                const name = path.basename(cheminElement); // Nom d'un dossier à retourner
 
-            const type = entry.type;
-            const fullPath = path.join(extractPath, cheminElement);
+                const type = entry.type;
+                const fullPath = path.join(extractPath, cheminElement);
 
-            if (cheminElement.startsWith('__MACOSX') || 
-                cheminElement.startsWith('.DS_Store') || 
-                cheminElement.startsWith('._')) {
-                entry.autodrain();
-            } else {
-                if (type === 'Directory') {
-                    folderToReturn = name;
-                    await fs.promises.mkdir(fullPath, { recursive: true });
+                if (
+                    cheminElement.startsWith("__MACOSX") ||
+                    cheminElement.startsWith(".DS_Store") ||
+                    cheminElement.startsWith("._")
+                ) {
+                    entry.autodrain();
                 } else {
-                entry.pipe(fs.createWriteStream(fullPath));
+                    if (type === "Directory") {
+                        folderToReturn = name;
+                        await fs.promises.mkdir(fullPath, { recursive: true });
+                    } else {
+                        entry.pipe(fs.createWriteStream(fullPath));
+                    }
                 }
-            }
             })
-            .on('close', async () => {
-            try {
-                console.log('Fichier extrait à supprimer :', filePath);
-                await fs.promises.rm(filePath, { force: true });
-                resolve(folderToReturn); // Résoudre la promesse avec isFolder
-            } catch (error) {
-                reject(error);
-            }
+            .on("close", async () => {
+                try {
+                    console.log("Fichier extrait à supprimer :", filePath);
+                    await fs.promises.rm(filePath, { force: true });
+                    resolve(folderToReturn); // Résoudre la promesse avec isFolder
+                } catch (error) {
+                    reject(error);
+                }
             })
-            .on('error', reject);
+            .on("error", reject);
     });
     return folderToReturn;
 }
 
-const http = require('http');
+const http = require("http");
+const { isArray } = require("util");
 const https = require('https');
 
 async function getBilan(uuid) {
@@ -424,9 +522,12 @@ async function getBilan(uuid) {
     const communes = await getData("commune", projet.site);
     const objectifs = await getData("objectif", uuid);
     const operations = await getData("operation", uuid);
-    const operations_full = {}
+    const operations_full = {};
     for (let op of operations) {
-        operations_full[op.uuid_ope] = await getData("operation_full", op.uuid_ope);
+        operations_full[op.uuid_ope] = await getData(
+            "operation_full",
+            op.uuid_ope
+        );
     }
 
     return { projet, site, communes, objectifs, operations, operations_full };
@@ -447,27 +548,28 @@ function getData(type, uuid, hostname, port = process.env.NODE_PORT) {
         let path = '';
 
         if (!type || !uuid) {
-            return reject(new Error('Type et uuid sont requis'));
-        } else if (type === 'projet') {
-            path = '/sites/projets/uuid=' + uuid + '/full?type=gestion&webapp=1';
-        } else if (type === 'site') {
-            path = '/sites/uuid=' + uuid;
-        } else if (type === 'objectif') {
-            path = '/sites/objectifs/uuid=' + uuid + '/lite';
-        } else if (type === 'operation') {
-            path = '/sites/operations/uuid=' + uuid + '/lite';
-        } else if (type === 'operation_full') {
-            path = '/sites/operations/uuid=' + uuid + '/full?webapp=1';
-        } else if (type === 'commune') {
-            path = '/sites/commune/uuid=' + uuid;
+            return reject(new Error("Type et uuid sont requis"));
+        } else if (type === "projet") {
+            path =
+                "/sites/projets/uuid=" + uuid + "/full?type=gestion&webapp=1";
+        } else if (type === "site") {
+            path = "/sites/uuid=" + uuid;
+        } else if (type === "objectif") {
+            path = "/sites/objectifs/uuid=" + uuid + "/lite";
+        } else if (type === "operation") {
+            path = "/sites/operations/uuid=" + uuid + "/lite";
+        } else if (type === "operation_full") {
+            path = "/sites/operations/uuid=" + uuid + "/full?webapp=1";
+        } else if (type === "commune") {
+            path = "/sites/commune/uuid=" + uuid;
         }
 
         const options = {
             hostname,
             port,
             path,
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
         };
 
         const httpReq = protocol.request(options, (httpRes) => {
@@ -480,7 +582,7 @@ function getData(type, uuid, hostname, port = process.env.NODE_PORT) {
                     reject(e);
                 }
             });
-            httpRes.on('error', reject);
+            httpRes.on("error", reject);
         });
 
         // Ajout du timeout (exemple 5000 ms)
@@ -489,24 +591,22 @@ function getData(type, uuid, hostname, port = process.env.NODE_PORT) {
             reject(new Error(`Timeout lors de la récupération de ${type}`));
         });
 
-        httpReq.on('error', reject);
+        httpReq.on("error", reject);
         httpReq.end();
     });
 }
 
-
-
-module.exports = { 
-    joinQuery, 
-    ExecuteQuerySite, 
-    selectQuery, 
-    distinctSiteResearch, 
-    updateEspaceSite, 
-    executeQueryAndRespond, 
+module.exports = {
+    joinQuery,
+    ExecuteQuerySite,
+    ExecuteQuerySitePromise,
+    selectQuery,
+    distinctSiteResearch,
+    updateEspaceSite,
+    executeQueryAndRespond,
     reset,
     detectShapefileGeometryType,
     convertToWKT,
     extractZipFile, // Ajouter l'export de la nouvelle fonction
-    getBilan
-
+    getBilan,
 };
