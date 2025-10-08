@@ -2,7 +2,7 @@
 
 // Charger les variables d'environnement
 require('dotenv').config();
-
+const path = require("path");
 // Utiliser la clé secrète depuis le fichier .env
 const NODE_PORT = process.env.NODE_PORT;
 
@@ -113,8 +113,8 @@ app.use(express.urlencoded({ extended: true })); // Pour traiter les requêtes e
 const menuRoutes = require('./routes/menuRoutes');
 const siteRoutesGet = require('./routes/getSitesRoutes');
 const siteRoutesPut = require('./routes/putSitesRoutes');
-const siteRoutesDelete = require('./routes/deleteSitesRoutes');
 const foncierRoutes = require('./routes/foncierRoutes');
+const siteRoutesDelete = require('./routes/deleteSitesRoutes');
 const userRoutes = require('./routes/userRoutes');
 const processRoutes = require('./routes/processRoutes');
 
@@ -126,8 +126,10 @@ async function run() {
     app.use('/sites', siteRoutesDelete);
     app.use('/sites', foncierRoutes);
     app.use('/menu', menuRoutes);
+    app.use('/sites', foncierRoutes);
     app.use('/process', processRoutes);
-
+    app.use('/app', siteRoutesGet);
+    
     // Middleware pour capturer les routes inconnues
     app.use((req, res, next) => {
       const clientIp = req.headers['x-forwarded-for'] || req.ip; // Récupère l'IP du client
