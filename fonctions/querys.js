@@ -1,5 +1,15 @@
 // const { get } = require("../routes/putSitesRoutes"); // Supprimer cette ligne
 
+const OperationsColumns = [
+    'uuid_ope', 'code', 'titre', 'inscrit_pdg', 'rmq_pdg', 'description', 'interv_zh', 'surf', 'lin', 'app_fourr',
+    'pression_moy', 'ugb_moy', 'nbjours', 'charge_moy', 'charge_inst', 'remarque', 'validite', 'action', 'objectif',
+    'typ_intervention', 'date_debut', 'date_fin', 'date_approx', 'ben_participants', 'ben_heures', 'ref_uuid_proj',
+    'obj_ope', 'abroutissement_paturage', 'action_2', 'cadre_intervention', 'cadre_intervention_detail',
+    'chargement_paturage', 'date_ajout', 'effectif_paturage', 'exportation_fauche', 'financeur_description',
+    'interv_cloture', 'nb_jours_paturage', 'nom_mo', 'productivite_fauche', 'quantite', 'recouvrement_ligneux_paturage',
+    'ref_loc_id', 'total_exporte_fauche', 'type_intervention_hydro', 'unite'
+];
+
 function getRightId(table) {
     let pkName = '';
     if (['espaces', 'sites', 'projets', 'operations', 'objectifs','projets_mfu'].includes(table)) {
@@ -142,4 +152,123 @@ function generateDeleteQuery(table, uuidName, id, idBisName = null, idBis = null
     };
 }
 
-module.exports = { generateUpdateQuery, generateInsertQuery, generateDeleteQuery };
+/**
+ * Génère dynamiquement une requête SQL pour obtenir les champs d'une table,
+ * @param {string} tableSchema - Schéma de la table (ex: 'opegerer')
+ * @param {string} tableName - Nom de la table (ex: 'operations')
+ */
+function getTableColums(tableSchema, tableName) {
+    // Récupérer dynamiquement la liste des colonnes dans l'ordre
+    let sql = "SELECT column_name FROM information_schema.columns ";
+    sql +=    "WHERE table_schema = $1 AND table_name = $2 ORDER BY ordinal_position";
+
+    return {
+        text: sql,
+        values: [tableSchema, tableName]
+    };
+}
+
+/**
+ * Génère une requête SQL pour dupliquer une ligne d'une table en remplaçant la clé primaire.
+ * @param {string} table - Nom de la table (ex: 'opegerer.operations')
+ * @param {string} pkName - Nom de la clé primaire (ex: 'uuid_ope') à dupliquer
+ * @param {string[]} columns - Liste des colonnes dans l'ordre, y compris la clé primaire
+ * @param {string} id2clone - ID de la ligne à dupliquer
+ * @param {string} newId - Nouvelle valeur de la clé primaire
+ * @param {string[]} excludeFieldsGroups - Liste des noms de champs à exclure de la duplication (optionnel)
+ * @returns {object} - Objet { text, values } pour pg
+ */
+function generateCloneQuery(table, pkName, columns, id2clone, newId = null, excludeFieldsGroups) {
+    // columns est un tableau d'objets { column_name: '...' } venant de la fonction getTableColums qui sait récupérer les colonnes
+    // On doit extraire les noms des colonnes de ces objets
+    console.log('table :', table);
+    console.log('Columns received for cloning :', columns);
+    console.log('excludeFieldsGroups :', excludeFieldsGroups);
+
+    // On extrait juste les noms des colonnes grace à map qui recréé un tableau seulement les valeurs de column_name
+    const columnNames = columns.map(col => col.column_name);
+
+    // Gestion de la nouvelle ID pour commencer
+    if (!newId) { // Si pas de nouvelle ID fournie, on génère un UUID dans la requête
+        newId = 'uuid_generate_v4()';
+    } else { // Si une nouvelle ID est fournie, on l'utilise telle quelle
+        newId = `'${newId}'`; // Ajouter des quotes pour la requête SQL
+    }
+
+    // Définir les groupes de champs à exclure. Il collecte les noms des champs à exclure en fonction des groupes spécifiés
+    const fieldsToExclude = [];
+
+    if (table === 'opegerer.operations') {
+        if (excludeFieldsGroups && Array.isArray(excludeFieldsGroups)) {
+            excludeFieldsGroups.forEach(group => {
+                switch (group) {
+                    case 'dates':
+                        fieldsToExclude.push('date_debut', 'date_fin');
+                        break;
+                    case 'quantite':
+                        fieldsToExclude.push('quantite');
+                        break;
+                    case 'unite':
+                        fieldsToExclude.push('unite');
+                        break;
+                    case 'description':
+                        fieldsToExclude.push('description');
+                        break;
+                    default:
+                        console.warn(`Groupe de champs inconnu : ${group}`);
+                        break;
+                }
+            });
+        }
+        console.log('Champs à exclure :', fieldsToExclude);
+    }
+
+
+    // On place la nouvelle valeur de PK en premier, puis on sélectionne toutes les autres colonnes sauf la PK et les champs exclus
+    const columnsWithoutPk = columnNames.filter(col => 
+        col !== pkName && !fieldsToExclude.includes(col)
+    );
+    
+    const insertColumns = [pkName, ...columnsWithoutPk].join(', ');
+
+    // On adapte le SELECT pour ajouter le suffixe à nom_mo (si pas exclu)
+    const selectColumns = [
+        newId,
+        ...columnsWithoutPk.map(col =>
+            col === 'nom_mo' ? `${col} || ' (cloné)'` : col
+        )
+    ].join(', ');
+
+    const query = `
+        INSERT INTO ${table} (${insertColumns})
+        SELECT ${selectColumns}
+        FROM ${table}
+        WHERE ${pkName} = $1;`;
+
+    return {
+        text: query,
+        values: [id2clone]
+    };
+}
+
+/**
+ * Génère une requête SQL pour dupliquer les financeurs ou les animaux d'une opération vers une nouvelle opération.
+ * @param {string} checkboxTable - table de checkbox (ex: 'opegerer.operation_financeurs')
+ * @param {string} oldUuidOpe - uuid_ope de l'opération à copier
+ * @param {string} newUuidOpe - uuid_ope de la nouvelle opération
+ * @returns {object} - Objet { text, values } pour pg
+ */
+function generateCloneCheckboxQuery(checkboxTable, oldUuidOpe, newUuidOpe) {
+    const query = `
+        INSERT INTO ${checkboxTable} (uuid_ope, checkbox_id)
+        SELECT $2, checkbox_id
+        FROM ${checkboxTable}
+        WHERE uuid_ope = $1;
+    `;
+    return {
+        text: query,
+        values: [oldUuidOpe, newUuidOpe]
+    };
+}
+
+module.exports = { generateUpdateQuery, generateInsertQuery, generateDeleteQuery, generateCloneQuery, getTableColums, generateCloneCheckboxQuery };

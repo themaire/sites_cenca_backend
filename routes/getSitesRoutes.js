@@ -54,32 +54,27 @@ router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
             JSON.stringify(queryObject)
     );
 
-    ExecuteQuerySite(
-        pool,
-        { message: "/sites/criteria/type/code...", query: queryObject },
-        "select",
-        (resultats, message) => {
-            if (resultats.length > 0 || message == "ok") {
-                const json = JSON.stringify(resultats);
-                // console.log(json);
-                res.setHeader("Access-Control-Allow-Origin", "*");
-                res.setHeader(
-                    "Content-Type",
-                    "application/json; charset=utf-8"
+                ExecuteQuerySite(
+                    pool,
+                    { message: "/sites/criteria/type/code...", query: queryObject },
+                    "select",
+                    ( resultats, message ) => {
+                        if (resultats.length > 0 || message == "ok") {
+                        const json = JSON.stringify(resultats);
+                        // console.log(json);
+                        res.setHeader("Access-Control-Allow-Origin", "*");
+                        res.setHeader("Content-Type", "application/json; charset=utf-8");
+                        res.end(json);
+                        } else {
+                        const json = JSON.stringify([]);
+                        res.setHeader("Access-Control-Allow-Origin", "*");
+                        res.setHeader("Content-Type", "application/json; charset=utf-8");
+                        res.end(json);
+                        }
+                    }
                 );
-                res.end(json);
-            } else {
-                const json = JSON.stringify([]);
-                res.setHeader("Access-Control-Allow-Origin", "*");
-                res.setHeader(
-                    "Content-Type",
-                    "application/json; charset=utf-8"
-                );
-                res.end(json);
             }
-        }
-    );
-});
+);
 
 // Données d'un site par son uuid
 router.get("/uuid=:uuid", (req, res) => {
@@ -320,27 +315,24 @@ router.get("/operations/uuid=:uuid/:mode", (req, res) => {
     const webapp = req.query.webapp || null; // Paramètre optionnel "webapp"
     message = "sites/operation/uuid/" + req.params.mode;
 
-    fromTable = "FROM opegerer.operations ";
-    where = "where ";
-    if (req.params.mode == "lite") {
-        selectFields = `SELECT op.uuid_ope, concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)) as type, op.nom_mo, op.quantite, opegerer.get_libelle(op.unite) as unite_str, op.code, op.titre, op.description, op.remarque, op.surf, `;
-        selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_financeurs WHERE uuid_ope = op.uuid_ope ) AS financeurs, `;
+    fromTable = 'FROM opegerer.operations ';
+    where = 'where ';
+    if (req.params.mode == 'lite') {
+
+        selectFields = `SELECT op.uuid_ope, concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)) as type, op.nom_mo, op.quantite, opegerer.get_libelle(op.unite) as unite_str, op.code, op.titre, op.description, op.remarque, op.surf, to_char(op.date_debut, 'DD/MM/YYYY') as date_debut_str, `;
+        selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_financeurs WHERE uuid_ope = op.uuid_ope ) AS financeurs, financeur_description, `;
         selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_animaux WHERE uuid_ope = op.uuid_ope ) AS animaux `;
         fromTable += "AS op ";
         where += "op.ref_uuid_proj = $1 ";
         where += "ORDER BY op.date_ajout DESC;";
-    } else if (req.params.mode == "full") {
-        selectFields =
-            "SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, ";
-        selectFields +=
-            "charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ";
-        selectFields +=
-            "ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, financeur_description, quantite, unite, ";
-        selectFields +=
-            "exportation_fauche, total_exporte_fauche, productivite_fauche, effectif_paturage, nb_jours_paturage, chargement_paturage, abroutissement_paturage, recouvrement_ligneux_paturage, interv_cloture, type_intervention_hydro, ";
-        selectFields +=
-            "opegerer.get_libelle(cadre_intervention) as cadre_intervention_str, opegerer.get_libelle(cadre_intervention_detail) as cadre_intervention_detail_str, to_char(date_debut, 'DD/MM/YYYY') as date_debut_str, to_char(date_fin, 'DD/MM/YYYY') as date_fin_str ";
-        where += "uuid_ope = $1;";
+
+    } else if (req.params.mode == 'full') {
+        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, ';
+        selectFields += 'charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ';
+        selectFields += 'ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, financeur_description, quantite, unite, ';
+        selectFields += 'exportation_fauche, total_exporte_fauche, productivite_fauche, effectif_paturage, nb_jours_paturage, chargement_paturage, abroutissement_paturage, recouvrement_ligneux_paturage, nom_parc, interv_cloture, type_intervention_hydro, ';
+        selectFields += 'opegerer.get_libelle(cadre_intervention) as cadre_intervention_str, opegerer.get_libelle(cadre_intervention_detail) as cadre_intervention_detail_str, to_char(date_debut, \'DD/MM/YYYY\') as date_debut_str, to_char(date_fin, \'DD/MM/YYYY\') as date_fin_str ';
+        where += 'uuid_ope = $1;';
     }
 
     executeQueryAndRespond(
@@ -660,14 +652,11 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         where = "order by " + order;
     } else {
         // Filtrer sur des nouvelles valeurs précises
-        if (list == "opegerer.typ_objectifope") {
-            where =
-                "where cd_type in ('CRE', 'ENT', 'RES', 'REA') order by val_filtre;";
-        } else if (list == "ope.actions" && option == 1) {
-            // Les actions comme Pâturage et opérations associées, Gestion hydraulique...
-            where =
-                "where cd_action like '%V2' and cd_action != '029_TRAV_SOL_V2' and cd_sup = '004_TRAV' ORDER BY val_tri ASC ;";
-        } else if (list == "ope.actions" && option == "meca") {
+        if (list == 'opegerer.typ_objectifope') {
+            where = "where cd_type in ('CRE', 'ENT', 'RES', 'REA', 'MENT', 'MRES', 'MCRE', 'IGEN', 'IGCR', 'IAEN', 'IACR') order by val_filtre;";
+        } else if (list == 'ope.actions' && option == 1) { // Les actions comme Pâturage et opérations associées, Gestion hydraulique...
+            where = "where cd_action like '%V2' and cd_action != '029_TRAV_SOL_V2' and cd_sup = '004_TRAV' ORDER BY val_tri ASC ;";
+        } else if (list == 'ope.actions' && option == 'meca') {
             where = "where cd_sup = '027_TRAV_MECA_V2' order by val_tri;";
         } else if (list == "ope.actions" && option == "pat") {
             where = "where cd_sup = '028_TRAV_PAT_V2' order by val_tri;";

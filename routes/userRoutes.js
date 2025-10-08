@@ -282,7 +282,7 @@ router.post('/forgot-password', async (req, res) => {
           <p>
             Cet email a été généré automatiquement, merci de ne pas répondre.<br>
             Voici votre lien de réinitialisation&nbsp;:<br><br>
-            <a href="http://si-10.cen-champagne-ardenne.org:8070/reset-password?token=${resetToken}">Réinitialiser le mot de passe</a>
+            <a href="https://si-10.cen-champagne-ardenne.org/reset-password?token=${resetToken}">Réinitialiser le mot de passe</a>
           </p>
         </body>
       </html>

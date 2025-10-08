@@ -1,0 +1,14 @@
+# docker-compose.override.yml
+# Ce fichier est automatiquement utilisé par docker-compose up en développement
+# Il override les paramètres du docker-compose.yml principal
+
+# version: '3.8'
+
+services:
+  node_app:
+    environment:
+      - NODE_ENV=development
+    # Pas de volume pour les certificats SSL en développement
+    # Le serveur fonctionnera en HTTP sur le port configuré
+    # Override du volume SSL (on l'enlève pour le dev)
+    volumes: []

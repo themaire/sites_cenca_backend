@@ -3,10 +3,13 @@ services:
   node_app:
     build: .
     # image: node_pgsql-node_app:latest
+    volumes:
+      - /etc/ssl/certs/si-10.cen-champagne-ardenne.org:/etc/ssl/certs/si-10.cen-champagne-ardenne.org:ro
     ports:
       - "8889:8887"
     networks:
       - monitoring
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
@@ -17,6 +20,7 @@ services:
       - "9090:9090"
     networks:
       - monitoring
+    restart: unless-stopped
 
 networks:
   monitoring:
