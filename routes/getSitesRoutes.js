@@ -1,17 +1,17 @@
 const express = require("express");
 const router = express.Router();
-const app = express();
+// const app = express();
 const sharp = require("sharp");
 const fs = require("fs");
 const path = require("path");
 // Obtenir le dossier racine du projet
-const ROOT_DIR = path.join(__dirname, "..");
+const ROOT_DIR = path.join("/");
 // 1. Définir le dossier des fichiers
-const FILES_DIR = path.resolve(ROOT_DIR, "mnt", "storage-data", "app");
+const FILES_DIR = path.resolve(ROOT_DIR, "mnt", "storage_data", "app");
 // 2. Définir le dossier des images
 const IMAGES_DIR = path.resolve(FILES_DIR, "photos");
 // 3. Définir le dossier des fichiers en cache
-const CACHE_DIR = path.resolve(FILES_DIR, "cache"); 
+const CACHE_DIR = path.resolve(FILES_DIR, "cache");
 // Assure que le dossier cache existe
 if (!fs.existsSync(CACHE_DIR)) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
@@ -21,29 +21,10 @@ if (!fs.existsSync(CACHE_DIR)) {
 // const { authenticateToken } = require('../fonctions/fonctionsAuth.js');
 
 // Fonctions et connexion à PostgreSQL
-const {
-    joinQuery,
-    selectQuery,
-    ExecuteQuerySite,
-    distinctSiteResearch,
-    executeQueryAndRespond,
-    reset,
-    getBilan,
-} = require("../fonctions/fonctionsSites.js");
+const {joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch,
+    executeQueryAndRespond, reset, getBilan,} = require("../fonctions/fonctionsSites.js");
 const { generateFicheTravauxWord } = require("../scripts/gen_fiche_travaux.js");
 const pool = require("../dbPool/poolConnect.js");
-router.use("/", (req, res, next) => {
-  console.log("Requête de fichier:", path.join(FILES_DIR, req.path));
-  next();
-});
-
-// Servir les fichiers statiques
-router.use("/", express.static(FILES_DIR));
-// FONCTIONNE !
-// const paramTest = { query : 'SELECT * from esp.geometries limit 2;', message: 'Simple query test'};
-// selectSite(pool, paramTest, (message, res) => {
-//   console.log(res);
-// });
 
 router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
     // A FAIRE POUR PLUS TARD : adapter la fonction executeQueryAndRespond() (utilisée de partout sur toutes le routes) pour qu'elle puisse prendre en compte les paramètres de la requête
@@ -633,8 +614,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         SelectFields +=
             "cd_type, libelle, coef_ugb, right(cd_supra,3) as code_supp, niveau ";
     } else if (list == "ope.listprogrammes") {
-        SelectFields +=
-            "cd_programme as cd_type, cd_programme || ' - ' || libelle as libelle ";
+        SelectFields += "cd_programme as cd_type, cd_programme || ' - ' || libelle as libelle ";
     } else if (
         list == "opegerer.libelles" ||
         list == "sitcenca.libelles"
@@ -643,7 +623,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
     } else if (list == "files.libelles") {
         SelectFields += "lib_id as cd_type, lib_libelle as libelle, lib_path as path, lib_field as field ";
     } else if (list == "admin.salaries") {
-        SelectFields += "cd_salarie ";
+        SelectFields += "cd_salarie as cd_type, prenom || ' ' || nom as libelle ";
     }
 
     FromTable = "FROM " + list + " ";
@@ -687,7 +667,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         } else if (list == "files.libelles") {
             where = "where libnom_id =" + option + " order by lib_ordre;";
         } else if (list == "admin.salaries") {
-            where = "";
+            where = "where statut is true order by prenom;";
         } else if (list == "files.libelles") {
             where = "order by lib_ordre;";
         } else {
@@ -807,50 +787,16 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
         SelectFields = `SELECT pmfu_id, pmfu_nom, pmfu_responsable, pmfu_commune `;
         FromTable = "FROM sitcenca.projets_mfu;";
         where = "";
-        console.log("Est-ce que ça marche ?");
         req.params.id = null;
     } else if (mode === "full") {
-        SelectFields = `
-      SELECT 
-        p.pmfu_id,
-        p.pmfu_nom,
-        p.pmfu_responsable,
-        p.pmfu_agence,
-        p.pmfu_associe,
-        p.pmfu_etapes,
-        p.pmfu_departement,
-        p.pmfu_territoire,
-        p.pmfu_type,
-        p.pmfu_commune,
-        p.pmfu_debut,
-        p.pmfu_proprietaire,
-        p.pmfu_appui,
-        p.pmfu_juridique,
-        p.pmfu_validation,
-        p.pmfu_decision,
-        p.pmfu_note,
-        p.pmfu_acte,
-        p.pmfu_compensatoire,
-        p.pmfu_cout,
-        p.pmfu_financements,
-        p.pmfu_superficie,
-        p.pmfu_priorite,
-        p.pmfu_status,
-        p.pmfu_signature,
-        p.pmfu_echeances,
-        p.pmfu_creation,
-        p.pmfu_derniere_maj,
-        p.pmfu_photos_site,
-        p.pmfu_date_ajout,
-        COUNT(*) FILTER (WHERE d.doc_type = 1) AS photos_site_nb,
-        COUNT(*) FILTER (WHERE d.doc_type = 2) AS projet_acte_nb,
-        COUNT(*) FILTER (WHERE d.doc_type = 3) AS decision_bureau_nb,
-        COUNT(*) FILTER (WHERE d.doc_type = 4) AS note_bureau_nb `;
-        FromTable = `FROM sitcenca.projets_mfu p
-        LEFT JOIN sitcenca.pmfu_docs d
-        ON p.pmfu_id = d.ref_pmfu_id `;
-        where = `WHERE pmfu_id = $1 
-        GROUP BY p.pmfu_id;`;
+        SelectFields = 'SELECT p.pmfu_id, p.pmfu_nom, p.pmfu_responsable, p.pmfu_createur, p.pmfu_agence, p.pmfu_associe, p.pmfu_etapes, p.pmfu_departement, p.pmfu_territoire, ';
+        SelectFields += 'p.pmfu_type, p.pmfu_commune, p.pmfu_debut, p.pmfu_proprietaire, p.pmfu_appui, p.pmfu_juridique, p.pmfu_validation, p.pmfu_decision, p.pmfu_note, p.pmfu_acte, ';
+        SelectFields += 'p.pmfu_compensatoire, p.pmfu_cout, p.pmfu_financements, p.pmfu_superficie, p.pmfu_priorite, p.pmfu_status, p.pmfu_signature, p.pmfu_echeances, p.pmfu_creation, ';
+        SelectFields += 'p.pmfu_derniere_maj, p.pmfu_photos_site, p.pmfu_date_ajout, COUNT(*) FILTER (WHERE d.doc_type = 1) AS photos_site_nb, ';
+        SelectFields += 'COUNT(*) FILTER (WHERE d.doc_type = 2) AS projet_acte_nb, COUNT(*) FILTER (WHERE d.doc_type = 3) AS decision_bureau_nb, COUNT(*) FILTER (WHERE d.doc_type = 4) AS note_bureau_nb ';
+        FromTable = `FROM sitcenca.projets_mfu p LEFT JOIN files.docs d ON p.pmfu_id::character varying = d.ref_id `;
+        where = `WHERE pmfu_id = $1 GROUP BY p.pmfu_id;`;
+        req.params.id = parseInt(req.params.id);
     }
 
     executeQueryAndRespond(
@@ -865,8 +811,7 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
     );
 });
 
-router.get(
-    "/docs/:section/cd_type=:cd_type/:mode/:ref_id?",
+router.get("/docs/:section/cd_type=:cd_type/:mode/:ref_id?",
     async (req, res) => {
         let { SelectFields, FromTable, where, message } = reset();
         const { ref_id, cd_type, mode, section } = req.params;
@@ -907,50 +852,5 @@ router.get(
         );
     }
 );
-
-app.get("/img", async (req, res) => {
-    const { file, width } = req.query;
-
-    if (!file || !width) {
-        return res.status(400).send("Paramètres 'file' et 'width' requis");
-    }
-
-    const w = parseInt(width);
-    if (isNaN(w) || w <= 0) {
-        return res.status(400).send("Largeur invalide");
-    }
-
-    const originalPath = path.join(IMAGES_DIR, file);
-    const cachePath = path.join(CACHE_DIR, `${w}-${file}`);
-
-    try {
-        // Vérifie si le fichier existe déjà en cache
-        if (fs.existsSync(cachePath)) {
-            return res.sendFile(cachePath);
-        }
-
-        // Vérifie que l'image originale existe
-        if (!fs.existsSync(originalPath)) {
-            return res.status(404).send("Image originale introuvable");
-        }
-
-        // Redimensionne et écrit en cache
-        await sharp(originalPath)
-            .resize(w) // conserve les proportions
-            .toFormat("jpeg", { quality: 80 })
-            .toFile(cachePath);
-
-        // Renvoie l'image mise en cache
-        res.sendFile(cachePath);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send("Erreur lors du redimensionnement de l'image");
-    }
-});
-app.listen(3000, () => {
-    console.log(
-        "Serveur d'images : http://localhost:3000/img?file=xxx.jpg&width=xxx"
-    );
-});
 
 module.exports = router;

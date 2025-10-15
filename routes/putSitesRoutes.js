@@ -24,13 +24,13 @@ const shapefile = require("shapefile");
 const fs = require("fs");
 const path = require("path");
 const unzipper = require("unzipper");
-const { exit } = require("process");
-const { get } = require("http");
+// const { exit } = require("process");
+// const { get } = require("http");
 // Obtenir le dossier racine du projet
-const ROOT_DIR = path.join(__dirname, "..");
+const ROOT_DIR = path.join("/");
 console.log("Racine du projet:", ROOT_DIR);
 // 1. Définir le dossier des fichiers
-const FILES_DIR = path.resolve(ROOT_DIR, "mnt", "storage-data", "app");
+const FILES_DIR = path.resolve(ROOT_DIR, "mnt", "storage_data", "app");
 // 2. Définir le dossier des images
 const IMAGES_DIR = path.resolve(FILES_DIR, "photos");
 console.log("Dossier images:", IMAGES_DIR);
@@ -390,8 +390,11 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
 });
 // Ajouter un site, un acte, une operation ...
 router.put("/put/table=:table/insert", (req, res) => {
+    // console.log("La requête : ", req);
     const TABLE = req.params.table;
     const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
+    console.log("INSERT_DATA de la requête : ", INSERT_DATA);
+    
     const MESSAGE = "sites/put/table=" + TABLE + "/insert";
     // Tables possibles pour des differents insert. En clé le nom de la table, en valeur son schema
     const TABLES = {
@@ -406,8 +409,6 @@ router.put("/put/table=:table/insert", (req, res) => {
         operation_animaux: "opegerer",
     };
 
-    console.log("La requête : ", req);
-    console.log("INSERT_DATA de la requête : ", INSERT_DATA);
 
     try {
         if (TABLE === "projets_mfu") {
@@ -1173,8 +1174,10 @@ router.put("/put/table=docs", async (req, res) => {
 
                     files.forEach((file) => {
                         // Convertir le chemin absolu en chemin relatif à partir de "mnt"
-                        const relativePath = file.path.split("mnt")[1];
-                        const cleanedPath = path.join("mnt", relativePath);
+                        console.log("Chemin complet du fichier :", file.path);
+
+                        const cleanedPath = file.path.split('/').slice(-2).join('/'); // garde les deux derniers segments
+                        console.log("Chemin relatif :", cleanedPath);
 
                         filesToInsert.push({
                             ref_id,

@@ -95,6 +95,7 @@ router.delete(
         }
     }
 );
+
 // Supprimer un fichier
 router.delete("/delete/:table", (req, res) => {
     const table = req.params.table.split(".");
@@ -112,10 +113,10 @@ router.delete("/delete/:table", (req, res) => {
 
     try {
         const queryObject = generateDeleteQuery(
-            req.params.table,
-            "doc_path",
-            doc_path
-        );
+                                            req.params.table,
+                                            "doc_path",
+                                            doc_path
+                                        );
         console.log("queryObject avant exécution : " + JSON.stringify(queryObject));
         console.log("queryObject type : " + typeof queryObject);
         ExecuteQuerySite(
@@ -137,14 +138,17 @@ router.delete("/delete/:table", (req, res) => {
 
                 if (message === "ok") {
                     //  suppression physique avec check path traversal
-                    const ROOT_DIR = path.join(__dirname, "..");
-                    const uploadsDir = path.resolve(ROOT_DIR, "mnt", "storage-data", "app");
-                    const cacheDir = path.resolve(uploadsDir, "cache"); 
-                    const filePath = path.resolve(uploadsDir, doc_path.split('\\').slice(-2).join('\\'));
-                    const cachePath = path.resolve(cacheDir,'200-'+ doc_path.split('\\').pop());
-                    console.log("Fichier à supprimer:", filePath);
-                    console.log("cache path:", cachePath);
+                    const uploadsDir = path.join('/mnt/storage_data/app');
                     console.log("uploadsDir:", uploadsDir);
+
+                    const cacheDir = path.resolve(uploadsDir, "cache");
+                    
+                    const filePath = path.resolve(uploadsDir, doc_path.split('/').slice(-2).join('/'));
+                    console.log("Fichier à supprimer:", filePath);
+                    
+                    const cachePath = path.resolve(cacheDir, '200-' + doc_path.split('/').pop());
+                    console.log("cache path:", cachePath);
+                    
                     // Vérification : le fichier doit être dans le dossier downloads
                     if (!filePath.startsWith(uploadsDir)) {
                         console.warn("Tentative de path traversal détectée:", doc_path);

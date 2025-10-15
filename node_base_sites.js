@@ -11,6 +11,12 @@ const path = require('path');
 const NODE_PORT = process.env.NODE_PORT;
 const NODE_ENV = process.env.NODE_ENV || 'development'; // Ajouter cette variable
 
+/**
+ * Répertoire des fichiers, défini dans le fichier .env ou par défaut dans un dossier 'files' au même niveau que ce script.
+ * Assurez-vous que ce répertoire existe et que le serveur a les permissions nécessaires pour y accéder.
+ */
+const FILES_DIR_ENV = process.env.FILES_DIR_ENV || path.join(__dirname, 'files');
+
 var express = require("express");
 // const client = require('prom-client'); // Pour la surveillance des performances avec Proxmox*http_request_duration_seconds_count{method="GET", path="/sites", status_code="200", client_ip="192.168.1.100", project_name="node-app-observability", project_type="expressjs"} 1
 var app = express();
@@ -103,11 +109,11 @@ app.use(cors({
 
 
 // debugger les requêtes entrantes
-app.use((req, res, next) => {
-  console.log(`Requête reçue : ${req.method} ${req.url}`);
-  console.log('En-têtes :', req.headers);
-  next();
-});
+// app.use((req, res, next) => {
+//   console.log(`Requête reçue : ${req.method} ${req.url}`);
+//   console.log('En-têtes :', req.headers);
+//   next();
+// });
 
 
 // app.use(cors()); // Middleware CORS
@@ -123,6 +129,7 @@ const foncierRoutes = require('./routes/foncierRoutes');
 const siteRoutesDelete = require('./routes/deleteSitesRoutes');
 const userRoutes = require('./routes/userRoutes');
 const processRoutes = require('./routes/processRoutes');
+const pictureRoute = require('./routes/pictureRoute');
 
 // Configuration HTTPS (seulement en production)
 let httpsOptions = null;
@@ -142,15 +149,22 @@ if (NODE_ENV === 'production') {
 
 async function run() {
   try {
+    app.use('/menu', menuRoutes);
     app.use('/auth', userRoutes);
+
     app.use('/sites', siteRoutesGet);
     app.use('/sites', siteRoutesPut);
     app.use('/sites', siteRoutesDelete);
+
     app.use('/sites', foncierRoutes);
-    app.use('/menu', menuRoutes);
-    app.use('/sites', foncierRoutes);
+
     app.use('/process', processRoutes);
-    app.use('/app', siteRoutesGet);
+    app.use('/picts', pictureRoute); // Monté le routeur pictureRoute.js sur /picts
+
+    // Servir les fichiers statiques
+    console.log("🗂️  Static files served from:", FILES_DIR_ENV);
+    app.use("/files", express.static(FILES_DIR_ENV))
+
     
     // Middleware pour capturer les routes inconnues
     app.use((req, res, next) => {
@@ -185,7 +199,7 @@ async function run() {
       // Mode HTTP pour le développement
       app.listen(NODE_PORT, () => {
         console.log(`🔓 Serveur HTTP démarré sur le port ${NODE_PORT}`);
-        console.log(`🚀 Backend accessible via http://localhost:${NODE_PORT} ou http://IP:${NODE_PORT}`);
+        console.log(`🚀 Backend accessible via http://192.168.1.50:${NODE_PORT} ou http://IP:${NODE_PORT}`);
         console.log(`📝 Mode: ${NODE_ENV}`);
       });
     }
