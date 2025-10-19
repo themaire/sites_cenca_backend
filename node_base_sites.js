@@ -180,6 +180,29 @@ async function run() {
       });
     });
 
+    app.get('/debug/routes', (req, res) => {
+        const routes = [];
+        app._router.stack.forEach(middleware => {
+            if (middleware.route) {
+                routes.push({
+                    path: middleware.route.path,
+                    method: Object.keys(middleware.route.methods)[0].toUpperCase()
+                });
+            } else if (middleware.name === 'router') {
+                middleware.handle.stack.forEach(handler => {
+                    if (handler.route) {
+                        const basePath = middleware.regexp.source.replace('\\/?(?=\\/|$)', '').replace('^', '').replace('\\', '');
+                        routes.push({
+                            path: basePath + handler.route.path,
+                            method: Object.keys(handler.route.methods)[0].toUpperCase()
+                        });
+                    }
+                });
+            }
+        });
+        res.json({ routes });
+    });
+
     // Middleware pour gérer les erreurs
     app.use((err, req, res, next) => {
       console.error(err.stack);

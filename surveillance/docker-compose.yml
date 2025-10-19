@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  surveillance:
+    build:
+      context: ../
+      dockerfile: surveillance/Dockerfile
+    container_name: cenca_surveillance
+    restart: unless-stopped
+    depends_on:
+      - node_app
+    networks:
+      - monitoring
+    volumes:
+      - ../routes:/app/routes:ro
+      - ./routes-config.json:/app/surveillance/routes-config.json
+      - ../.env:/app/.env:ro
+    environment:
+      - NODE_ENV=production
+      - MONITORING_INTERVAL=300000
+      - MONITORING_TIMEOUT=15000
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('surveillance ok')"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+networks:
+  monitoring:
+    external: true

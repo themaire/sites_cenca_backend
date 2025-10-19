@@ -487,26 +487,6 @@ router.get("/objectifs/uuid=:uuid/:mode", (req, res) => {
     ); // Retourne un ou plusieurs résultats
 });
 
-// Récuperation de l'IP publique
-router.get("/getip", async (req, res) => {
-    try {
-        const response = await axios.get("https://api.ipify.org?format=json");
-        const ipData = response.data;
-
-        console.log("Votre IP : " + ipData.ip); // Récupère l'IP publique du client
-
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        res.json(ipData); // Envoie la réponse en JSON
-    } catch (error) {
-        console.error(
-            "Erreur lors de la récupération de l'IP publique :",
-            error
-        );
-        res.status(500).send("Erreur lors de la récupération de l'IP publique");
-    }
-});
-
 // Selectors de la barre de recherche de sites par critères
 router.get("/selectors", (req, res) => {
     distinctSiteResearch(

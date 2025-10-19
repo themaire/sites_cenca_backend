@@ -1,0 +1,482 @@
+{
+  "metadata": {
+    "description": "Configuration complète des routes CENCA avec paramètres",
+    "generated": "2025-10-19T23:28:33.429Z",
+    "version": "2.1.0",
+    "stats": {
+      "totalRoutes": 45,
+      "routesWithParams": 30,
+      "enabledRoutes": 1
+    },
+    "lastUpdate": "2025-10-19T23:28:33.435Z"
+  },
+  "settings": {
+    "defaultTimeout": 15000,
+    "retryCount": 2,
+    "notificationThreshold": 80,
+    "testInterval": 300000
+  },
+  "routes": {
+    "/menu/parent=:parent": {
+      "method": "GET",
+      "file": "menuRoutes.js",
+      "enabled": true,
+      "parameters": {
+        "parent": [
+          "null",
+          "1",
+          "2"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Navigation",
+      "note": "Informations utilisateur connecté"
+    },
+    "/menu/tokenparent=:parent": {
+      "method": "GET",
+      "file": "menuRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "parent": [
+          "null",
+          "1",
+          "2"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Navigation",
+      "note": "Informations utilisateur connecté"
+    },
+    "/sites/criteria/:type/:code/:nom/:commune/:milnat/:resp": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": true,
+      "parameters": {
+        "type": [
+          "*"
+        ],
+        "code": [
+          "52003"
+        ],
+        "nom": [
+          "*"
+        ],
+        "commune": [
+          "*"
+        ],
+        "milnat": [
+          "*"
+        ],
+        "resp": [
+          "*"
+        ]
+      },
+      "priority": "HIGH",
+      "category": "Sites Management",
+      "note": "Recherche multicritères dans les sites"
+    },
+    "/sites/uuid=:uuid": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": true,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/commune/uuid=:uuid": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": true,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/pgestion/uuid=:uuid": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": true,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/milnat/uuid=:uuid": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": true,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/mfu/uuid=:uuid/:mode": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": true,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ],
+        "mode": [
+          "valeur_exemple"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/projets/uuid=:uuid/:mode": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": true,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ],
+        "mode": [
+          "valeur_exemple"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/operations/uuid=:uuid/:mode": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": true,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc",
+          "12345678-1234-1234-1234-123456789abc"
+        ],
+        "mode": [
+          "full",
+          "lite"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/ope-financeurs/uuid=:uuid?": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/ope-animaux/uuid=:uuid?": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/localisations/uuid=:uuid/:mode": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ],
+        "mode": [
+          "valeur_exemple"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/objectifs/uuid=:uuid/:mode": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ],
+        "mode": [
+          "valeur_exemple"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/selectvalues=:list/:option?": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "list": [
+          "valeur_exemple"
+        ],
+        "option": [
+          "communes",
+          "milieux",
+          "responsables"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Sites Management",
+      "note": "Route GET avec paramètres - À configurer selon les besoins"
+    },
+    "/sites/bilan_exe/uuid_proj=:uuid": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/gen_fiche_travaux/uuid_proj=:uuid": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/pmfu/id=:id/:mode": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "id": [
+          "1",
+          "123"
+        ],
+        "mode": [
+          "valeur_exemple"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Sites Management",
+      "note": "Route GET avec paramètres - À configurer selon les besoins"
+    },
+    "/sites/docs/:section/cd_type=:cd_type/:mode/:ref_id?": {
+      "method": "GET",
+      "file": "getSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "section": [
+          "valeur_exemple"
+        ],
+        "cd_type": [
+          "valeur_exemple"
+        ],
+        "mode": [
+          "valeur_exemple"
+        ],
+        "ref_id": [
+          "valeur_exemple"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Sites Management",
+      "note": "Route GET avec paramètres - À configurer selon les besoins"
+    },
+    "/sites/put/table=:table/uuid=:uuid": {
+      "method": "PUT",
+      "file": "putSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "table": [
+          "sites",
+          "operations",
+          "actes"
+        ],
+        "uuid": [
+          "12345678-1234-1234-1234-123456789abc"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/put/table=:table/insert": {
+      "method": "PUT",
+      "file": "putSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "table": [
+          "sites",
+          "operations",
+          "actes"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Sites Management",
+      "note": "Route PUT avec paramètres - À configurer selon les besoins"
+    },
+    "/sites/put/table=:table/clone": {
+      "method": "PUT",
+      "file": "putSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "table": [
+          "sites",
+          "operations",
+          "actes"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Sites Management",
+      "note": "Route PUT avec paramètres - À configurer selon les besoins"
+    },
+    "/sites/delete/:table/:uuidName=:id/:idBisName?/:idBis?": {
+      "method": "DELETE",
+      "file": "deleteSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "table": [
+          "sites",
+          "operations",
+          "actes"
+        ],
+        "uuidName": [
+          "valeur_exemple"
+        ],
+        "id": [
+          "1",
+          "123"
+        ],
+        "idBisName": [
+          "valeur_exemple"
+        ],
+        "idBis": [
+          "valeur_exemple"
+        ]
+      },
+      "priority": "MEDIUM",
+      "category": "Sites Management",
+      "note": "Accès par identifiant unique"
+    },
+    "/sites/delete/:table": {
+      "method": "DELETE",
+      "file": "deleteSitesRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "table": [
+          "sites",
+          "operations",
+          "actes"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Sites Management",
+      "note": "Route DELETE avec paramètres - À configurer selon les besoins"
+    },
+    "/sites/foncier/extraction=:id": {
+      "method": "GET",
+      "file": "foncierRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "id": [
+          "1",
+          "123"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Sites Management",
+      "note": "Route GET avec paramètres - À configurer selon les besoins"
+    },
+    "/sites/foncier/parc_extraction=:id": {
+      "method": "GET",
+      "file": "foncierRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "id": [
+          "1",
+          "123"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Sites Management",
+      "note": "Route GET avec paramètres - À configurer selon les besoins"
+    },
+    "/sites/foncier/put/table=:table/insert": {
+      "method": "PUT",
+      "file": "foncierRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "table": [
+          "sites",
+          "operations",
+          "actes"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Sites Management",
+      "note": "Route PUT avec paramètres - À configurer selon les besoins"
+    },
+    "/api-geo/parcelles/commune/:codeInsee": {
+      "method": "GET",
+      "file": "apiGeoRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "codeInsee": [
+          "valeur_exemple"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Geographic API",
+      "note": "Route GET avec paramètres - À configurer selon les besoins"
+    },
+    "/api-geo/lizmap/layer/:layerName": {
+      "method": "GET",
+      "file": "apiGeoRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "layerName": [
+          "valeur_exemple"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Geographic API",
+      "note": "Informations utilisateur connecté"
+    }
+  }
+}
