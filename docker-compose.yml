@@ -23,6 +23,30 @@ services:
       - monitoring
     restart: unless-stopped
 
+  # Service de monitoring automatique intelligent
+  health-check:
+    build: ./monitoring
+    command: ["node", "health-check.js"]
+    environment:
+      - MONITORING_API_URL=http://node_app:8887
+      - MONITORING_USERNAME=${MONITORING_USERNAME:-nelie}
+      - MONITORING_PASSWORD=${MONITORING_PASSWORD:-password}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - MONITORING_INTERVAL=${MONITORING_INTERVAL:-300000}
+      - MONITORING_TIMEOUT=${MONITORING_TIMEOUT:-15000}
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+    depends_on:
+      - node_app
+    networks:
+      - monitoring
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/logs:/app/logs
+      - ./routes:/app/routes:ro
+      - ./monitoring/routes-config.json:/app/routes-config.json
+      - /etc/ssl/certs/si-10.cen-champagne-ardenne.org:/etc/ssl/certs/si-10.cen-champagne-ardenne.org:ro
+
 networks:
   monitoring:
     driver: bridge

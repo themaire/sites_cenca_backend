@@ -151,3 +151,6 @@ migration/diff_migra.sql
 migration/nohup.out
 migration/recreate_cenca_maps.sql
 migration/diff_migra_pmfu.sql
+
+# Monitoring - Configuration sensible auto-générée
+monitoring/routes-config.json

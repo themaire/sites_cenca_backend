@@ -343,10 +343,10 @@ router.get("/ope-financeurs/uuid=:uuid?", (req, res) => {
             selectFields,
             fromTable,
             where,
-            "null",
+            null, // ← Changé de "null" à null
             res,
             message,
-            req.params.mode
+            "lite" // ← Mode par défaut au lieu de req.params.mode
         ); // Retourne un ou plusieurs résultats
     } else {
         // Sinon, on récupère les financeurs qui ont été saisi d'une opération
@@ -382,10 +382,10 @@ router.get("/ope-animaux/uuid=:uuid?", (req, res) => {
             selectFields,
             fromTable,
             where,
-            "null",
+            null, // ← Changé de "null" à null
             res,
             message,
-            req.params.mode
+            "lite" // ← Mode par défaut au lieu de req.params.mode
         ); // Retourne un ou plusieurs résultats
     } else {
         // Sinon, on récupère les animaux qui ont été saisi d'une opération

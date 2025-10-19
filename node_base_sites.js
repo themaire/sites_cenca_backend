@@ -130,6 +130,7 @@ const siteRoutesDelete = require('./routes/deleteSitesRoutes');
 const userRoutes = require('./routes/userRoutes');
 const processRoutes = require('./routes/processRoutes');
 const pictureRoute = require('./routes/pictureRoute');
+const apiGeoRoutes = require('./routes/apiGeoRoutes');
 
 // Configuration HTTPS (seulement en production)
 let httpsOptions = null;
@@ -160,6 +161,7 @@ async function run() {
 
     app.use('/process', processRoutes);
     app.use('/picts', pictureRoute); // Monté le routeur pictureRoute.js sur /picts
+    app.use('/api-geo', apiGeoRoutes); // Routes pour les API géographiques (IGN + Lizmap)
 
     // Servir les fichiers statiques
     console.log("🗂️  Static files served from:", FILES_DIR_ENV);
