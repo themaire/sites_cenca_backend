@@ -125,6 +125,10 @@ app.use(express.urlencoded({ extended: true })); // Pour traiter les requêtes e
 const menuRoutes = require('./routes/menuRoutes');
 const siteRoutesGet = require('./routes/getSitesRoutes');
 const siteRoutesPut = require('./routes/putSitesRoutes');
+
+// Import du middleware d'authentification
+const { authenticateToken } = require('./fonctions/fonctionsAuth.js');
+
 const foncierRoutes = require('./routes/foncierRoutes');
 const siteRoutesDelete = require('./routes/deleteSitesRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -180,7 +184,7 @@ async function run() {
       });
     });
 
-    app.get('/debug/routes', (req, res) => {
+    app.get('/debug/routes', authenticateToken, (req, res) => {
         const routes = [];
         app._router.stack.forEach(middleware => {
             if (middleware.route) {

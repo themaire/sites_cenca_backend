@@ -154,3 +154,4 @@ migration/diff_migra_pmfu.sql
 
 # Monitoring - Configuration sensible auto-générée
 monitoring/routes-config.json
+surveillance/routes-config.json
