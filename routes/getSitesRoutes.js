@@ -613,7 +613,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
     } else {
         // Filtrer sur des nouvelles valeurs précises
         if (list == 'opegerer.typ_objectifope') {
-            where = "where cd_type in ('CRE', 'ENT', 'RES', 'REA', 'MENT', 'MRES', 'MCRE', 'IGEN', 'IGCR', 'IAEN', 'IACR') order by val_filtre;";
+            where = "where cd_type in ('MENT', 'MRES', 'MCRE', 'IGEN', 'IGCR', 'IAEN', 'IACR') order by val_filtre;";
         } else if (list == 'ope.actions' && option == 1) { // Les actions comme Pâturage et opérations associées, Gestion hydraulique...
             where = "where cd_action like '%V2' and cd_action != '029_TRAV_SOL_V2' and cd_sup = '004_TRAV' ORDER BY val_tri ASC ;";
         } else if (list == 'ope.actions' && option == 'meca') {
@@ -773,7 +773,7 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
         SelectFields += 'p.pmfu_type, p.pmfu_commune, p.pmfu_debut, p.pmfu_proprietaire, p.pmfu_appui, p.pmfu_juridique, p.pmfu_validation, p.pmfu_decision, p.pmfu_note, p.pmfu_acte, ';
         SelectFields += 'p.pmfu_compensatoire, p.pmfu_cout, p.pmfu_financements, p.pmfu_superficie, p.pmfu_priorite, p.pmfu_status, p.pmfu_signature, p.pmfu_echeances, p.pmfu_creation, ';
         SelectFields += 'p.pmfu_derniere_maj, p.pmfu_photos_site, p.pmfu_date_ajout, COUNT(*) FILTER (WHERE d.doc_type = 1) AS photos_site_nb, ';
-        SelectFields += 'COUNT(*) FILTER (WHERE d.doc_type = 2) AS projet_acte_nb, COUNT(*) FILTER (WHERE d.doc_type = 3) AS decision_bureau_nb, COUNT(*) FILTER (WHERE d.doc_type = 4) AS note_bureau_nb ';
+        SelectFields += 'COUNT(*) FILTER (WHERE d.doc_type = 2) AS projet_acte_nb, COUNT(*) FILTER (WHERE d.doc_type = 3) AS decision_bureau_nb, COUNT(*) FILTER (WHERE d.doc_type = 4) AS note_bureau_nb, pmfu_parc_list ';
         FromTable = `FROM sitcenca.projets_mfu p LEFT JOIN files.docs d ON p.pmfu_id::character varying = d.ref_id `;
         where = `WHERE pmfu_id = $1 GROUP BY p.pmfu_id;`;
         req.params.id = parseInt(req.params.id);

@@ -79,8 +79,48 @@ const {
     // Fonctions Lizmap
     getLizmapData,
     getLizmapLayerData,
-    getLizmapCapabilities
+    getLizmapCapabilities,
+    getInfosParcellesByIdus
 } = require("../fonctions/geo_api.js");
+
+/**
+ * Route pour récupérer les infos principales d'une liste de parcelles (idu/code_parcelle)
+ * POST /api-geo/parcelles/infos-by-idus
+ * Body JSON : { idus: ["080010000A0012", "080010000A0013", ...] }
+ * Query optionnels : srs, maxFeatures
+ */
+router.post("/parcelles/infos-by-idus", async (req, res) => {
+    try {
+        const idus = req.body.idus;
+        if (!Array.isArray(idus) || idus.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Le body doit contenir un tableau 'idus' non vide."
+            });
+        }
+        const options = {
+            srs: req.query.srs || 'EPSG:4326',
+            maxFeatures: parseInt(req.query.maxFeatures) || Math.max(idus.length, 100)
+        };
+        const infos = await getInfosParcellesByIdus(idus, options);
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.status(200).json({
+            success: true,
+            count: infos.length,
+            data: infos
+        });
+    } catch (error) {
+        console.error("[API-GEO] Erreur infos-by-idus:", error);
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.status(500).json({
+            success: false,
+            message: "Erreur lors de la récupération des infos parcelles",
+            error: error.message
+        });
+    }
+});
 
 /**
  * Route pour récupérer la liste des communes des départements configurés

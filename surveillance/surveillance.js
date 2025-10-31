@@ -520,13 +520,12 @@ class CencaSurveillance {
         // Préparer les détails pour Telegram
         const telegramDetails = this.buildTelegramReport(results, routeAnalysis, activeRoutes.length);
 
-        // Notification Telegram si nécessaire
+        // Notification Telegram uniquement en cas d'échec d'une route
         if (successRate < 100) {
             const failedRoutes = results.filter(r => !r.result.success).map(r => r.path);
             const failedDetails = results.filter(r => !r.result.success)
                 .map(r => `• ${r.path}: ${r.result.error || `Status ${r.result.status}`}`)
                 .join('\n');
-            
             await this.sendTelegram(
                 `⚠️  **PROBLÈMES DÉTECTÉS**\n\n` +
                 `📊 Taux de réussite: ${successRate}%\n` +
@@ -534,12 +533,6 @@ class CencaSurveillance {
                 `🔍 ${totalCount} routes testées\n\n` +
                 `**Routes en défaut:**\n${failedDetails}`,
                 true,
-                telegramDetails
-            );
-        } else if (this.stats.totalTests % 10 === 0) { // Notification périodique
-            await this.sendTelegram(
-                `✅ **Surveillance OK**\n\n${successCount}/${totalCount} routes fonctionnelles`,
-                false,
                 telegramDetails
             );
         }
@@ -622,14 +615,17 @@ class CencaSurveillance {
 
     async start() {
         this.log('info', '🔍 Démarrage du système de surveillance CENCA');
-        
+
         // Régénérer la configuration au démarrage pour inclure toutes les routes
         this.log('info', '🔄 Lancement de la régénération...');
         await this.regenerateConfig();
-        
+
         // Première exécution
         await this.runSurveillance();
-        
+
+        // Notification Telegram de démarrage
+        await this.sendTelegram('✅ **Surveillance CENCA démarrée**\n\nToutes les routes configurées vont être surveillées. Une notification ne sera envoyée que si une route échoue.', false);
+
         // Programmation périodique
         setInterval(async () => {
             await this.runSurveillance();

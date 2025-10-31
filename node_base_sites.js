@@ -85,9 +85,8 @@ var cors = require("cors");
  */
 const allowedOrigins = [
   'https://si-10.cen-champagne-ardenne.org', // HTTPS principal
-  'https://si-10.cen-champagne-ardenne.org:8070',
+  'https://si-10.cen-champagne-ardenne.org:444',
   'http://si-10.cen-champagne-ardenne.org', // Gardez HTTP pour la transition
-  'http://si-10.cen-champagne-ardenne.org:8070',
   'http://si-10.cen-champagne-ardenne.org:8889',
   'http://192.168.1.227:4200',
   'http://192.168.1.50:8887',
@@ -167,22 +166,13 @@ async function run() {
     app.use('/picts', pictureRoute); // Monté le routeur pictureRoute.js sur /picts
     app.use('/api-geo', apiGeoRoutes); // Routes pour les API géographiques (IGN + Lizmap)
 
+    // Routeur pour la documentation Markdown
+    const docsRoutes = require('./routes/docsRoutes');
+    app.use('/docs', docsRoutes);
+
     // Servir les fichiers statiques
     console.log("🗂️  Static files served from:", FILES_DIR_ENV);
-    app.use("/files", express.static(FILES_DIR_ENV))
-
-    
-    // Middleware pour capturer les routes inconnues
-    app.use((req, res, next) => {
-      const clientIp = req.headers['x-forwarded-for'] || req.ip;
-      console.log(`Route non trouvée : ${req.url}, IP du client : ${clientIp}`);
-      res.status(404).json({
-        success: false,
-        message: "Route non trouvée.",
-        req: req.url,
-        ip: clientIp
-      });
-    });
+    app.use("/files", express.static(FILES_DIR_ENV));
 
     app.get('/debug/routes', authenticateToken, (req, res) => {
         const routes = [];
@@ -205,6 +195,18 @@ async function run() {
             }
         });
         res.json({ routes });
+    });
+
+    // Middleware pour capturer les routes inconnues
+    app.use((req, res, next) => {
+      const clientIp = req.headers['x-forwarded-for'] || req.ip;
+      console.log(`Route non trouvée : ${req.url}, IP du client : ${clientIp}`);
+      res.status(404).json({
+        success: false,
+        message: "Route non trouvée.",
+        req: req.url,
+        ip: clientIp
+      });
     });
 
     // Middleware pour gérer les erreurs
@@ -232,6 +234,28 @@ async function run() {
         console.log(`📝 Mode: ${NODE_ENV}`);
       });
     }
+
+    process.on('SIGTERM', async () => {
+    console.log('🛑 Signal SIGTERM reçu, arrêt du serveur...');
+    // Fermer proprement la connexion à la base si elle existe
+    if (typeof pool !== 'undefined' && pool.end) {
+      try {
+        await pool.end();
+        console.log('✅ Connexion à la base fermée');
+      } catch (err) {
+        console.error('Erreur lors de la fermeture de la base :', err);
+      }
+    }
+    // Arrêter le serveur Express si besoin
+    if (typeof server !== 'undefined' && server.close) {
+      server.close(() => {
+        console.log('✅ Serveur Express arrêté');
+        process.exit(0);
+      });
+    } else {
+      process.exit(0);
+    }
+  });
 
   } catch (error) {
     console.error("Error try :" + error);

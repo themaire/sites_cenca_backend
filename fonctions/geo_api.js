@@ -305,6 +305,119 @@ async function getParcellesByCommune(codeInsee, options = {}) {
 }
 
 /**
+ * Parse un identifiant de parcelle (idu) flexible en ses composants
+ * @param {string} idu - Identifiant de parcelle (idu/code_parcelle)
+ */
+function parseIduFlexible(idu) {
+    // idu = [code_insee][préfixe][section][numero]
+    // code_insee : 5 chiffres
+    // préfixe : 3 ou 4 chiffres (souvent, mais variable)
+    // section : 1 ou 2 lettres
+    // numero : 3 ou 4 chiffres (à compléter à gauche si besoin)
+    const iduStr = typeof idu === 'string' ? idu.trim() : String(idu);
+
+    // code_insee = 5 premiers caractères
+    const code_insee = iduStr.substring(0, 5);
+
+    // On cherche la section (lettres) et le numéro (chiffres) à la fin
+    // On part du principe que le numéro est toujours à la fin
+    const match = iduStr.match(/^(\d{5})(\d+)([A-Z]{1,2})(\d{3,4})$/i);
+    if (!match) {
+        console.warn(`[parseIduFlexible] Format idu inattendu : ${iduStr}`);
+        return null;
+    }
+    // match[1] = code_insee, match[2] = préfixe, match[3] = section, match[4] = numero
+    let section;
+    if (match[3].length === 2) {
+        section = match[3];
+    } else if (match[3].length === 1) {
+        section = '0' + match[3];
+    }
+    let numero = match[4];
+    // Compléter le numéro à gauche si < 4 chiffres
+    if (numero.length < 4) {
+        numero = numero.padStart(4, '0');
+    }
+    return { code_insee, section, numero };
+}
+
+/**
+ * Récupère les infos principales pour une liste de parcelles (idu/code_parcelle)
+ * Pour chaque idu, retourne : nom de la commune, surface, section, numéro, bbox
+ * @param {Array<string>} idus - Tableau des identifiants de parcelle (idu/code_parcelle)
+ * @param {Object} options - Options de configuration (srs, etc)
+ * @returns {Promise<Array<Object>>} - Tableau d'objets { idu, nom_com, contenance, section, numero, bbox }
+ */
+async function getInfosParcellesByIdus(idus = [], options = {}) {
+    if (!Array.isArray(idus) || idus.length === 0) {
+        throw new Error('La liste des idu (code_parcelle) est vide ou invalide');
+    }
+    
+    const results = [];
+    for (const idu of idus) {
+        const { code_insee, section, numero } = parseIduFlexible(idu);
+        const url = `https://apicarto.ign.fr/api/cadastre/parcelle?code_insee=${encodeURIComponent(code_insee)}&section=${encodeURIComponent(section)}&numero=${encodeURIComponent(numero)}`;
+        console.log(`[API_CARTO_IGN] Requête API Carto REST pour idu: ${idu}`);
+        console.log(`[API_CARTO_IGN] URL: ${url}`);
+        // eslint-disable-next-line no-await-in-loop
+        const info = await new Promise((resolve) => {
+            https.get(url, (response) => {
+                let data = '';
+                response.on('data', (chunk) => { data += chunk; });
+                response.on('end', () => {
+                    const contentType = response.headers['content-type'] || '';
+                    if (contentType.includes('text/html')) {
+                        console.warn(`[API_CARTO_IGN] Réponse HTML reçue pour idu ${idu} (probablement non trouvé)`);
+                        return resolve(null);
+                    }
+                    try {
+                        const obj = JSON.parse(data);
+                        if (!obj || obj.type !== 'FeatureCollection' || !Array.isArray(obj.features) || obj.features.length === 0) {
+                            return resolve(null);
+                        }
+                        const feature = obj.features[0];
+                        const props = feature.properties || {};
+                        let bboxStr = null;
+                        let coords = null;
+                        if (feature.geometry && feature.geometry.type === 'Polygon') {
+                            coords = feature.geometry.coordinates[0];
+                        } else if (feature.geometry && feature.geometry.type === 'MultiPolygon') {
+                            coords = feature.geometry.coordinates[0][0];
+                        }
+                        if (coords) {
+                            let xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
+                            coords.forEach(([x, y]) => {
+                                xmin = Math.min(xmin, x);
+                                ymin = Math.min(ymin, y);
+                                xmax = Math.max(xmax, x);
+                                ymax = Math.max(ymax, y);
+                            });
+                            bboxStr = `${xmin},${ymin},${xmax},${ymax}`;
+                        }
+                        resolve({
+                            idu: props.idu || props.code_parcelle,
+                            nom_com: props.nom_com || props.nom_commune,
+                            contenance: props.contenance,
+                            section: props.section,
+                            numero: props.numero,
+                            bbox: bboxStr
+                        });
+                    } catch (err) {
+                        console.warn(`[API_CARTO_IGN] Erreur de parsing JSON pour idu ${idu}`);
+                        resolve(null);
+                    }
+                });
+            }).on('error', () => {
+                console.warn(`[API_CARTO_IGN] Erreur réseau pour idu ${idu}`);
+                resolve(null);
+            });
+        });
+        if (info) results.push(info);
+    }
+    return results;
+}
+
+/**
  * Fonction utilitaire pour convertir une bounding box de string vers objet
  * @param {string} bboxString - Bounding box au format "minX,minY,maxX,maxY"
  * @returns {Object} - Objet bbox avec propriétés minX, minY, maxX, maxY
@@ -664,4 +777,5 @@ module.exports = {
     getLizmapLayerData,
     getLizmapCapabilities,
     createBasicAuth
+    ,getInfosParcellesByIdus
 };
