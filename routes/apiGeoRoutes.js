@@ -53,8 +53,6 @@ http://localhost:8887/api-geo/
 
 --- 🏆 Fonctionnalités intégrées ---
 
-✅ Migration réussie : api_ign.js → geo_api.js
-✅ Routes unifiées : /api-ign → /api-geo  
 ✅ Authentification Lizmap : LIZMAP_USER/LIZMAP_PASSWORD
 ✅ Format GeoJSON compatible Leaflet
 ✅ Filtrage avancé : bbox, codesite, maxFeatures
@@ -122,6 +120,17 @@ router.post("/parcelles/infos-by-idus", async (req, res) => {
     }
 });
 
+
+/**
+ * Vérifie si le cache des communes est vide pour un département donné
+ * @param dep : string code département
+ * @returns boolean
+ */
+function isCommCacheEmpty(dep) {
+    return comm[`com${dep}`].length === 0;
+}
+
+
 /**
  * Route pour récupérer la liste des communes des départements configurés
  * GET /api-geo/communes
@@ -130,6 +139,8 @@ router.post("/parcelles/infos-by-idus", async (req, res) => {
  * - population: true pour inclure la population
  * - codesPostaux: true pour inclure les codes postaux
  */
+let comm = {'08': [], '10': [], '51': [], '52': []};
+
 router.get("/communes", async (req, res) => {
     try {
         console.log("[API-GEO] Demande de récupération des communes");
@@ -146,14 +157,27 @@ router.get("/communes", async (req, res) => {
         console.log(`[API-GEO] Départements demandés: ${departements.join(', ')}`);
         console.log(`[API-GEO] Options: ${JSON.stringify(options)}`);
         
-        const communes = await getCommunesByDepartements(departements, options);
-        
+        // Demander à l'API les commune du département demandé si on ne les a pas déjà
+        let communes = [];
+        let message = '';
+        for (const dep of departements) {
+            if (comm[dep] && comm[dep].length === 0) {
+                const communesDep = await getCommunesByDepartements([dep], options);
+                comm[dep] = communesDep;
+                communes = communes.concat(communesDep);
+                message += `${communesDep.length} communes récupérées pour le département ${dep}. `;
+            } else if (comm[dep]) {
+                communes = communes.concat(comm[dep]);
+                message += `${comm[dep].length} communes récupérées depuis le cache pour le département ${dep}. `;
+            }
+        }
+
         res.setHeader("Access-Control-Allow-Origin", "*");
         res.setHeader("Content-Type", "application/json; charset=utf-8");
         res.status(200).json({
             success: true,
-            message: `${communes.length} communes récupérées avec succès`,
-            departements: departements,
+            message: message,
+            // departements: departements,
             data: communes
         });
         
@@ -164,6 +188,28 @@ router.get("/communes", async (req, res) => {
         res.status(500).json({
             success: false,
             message: "Erreur lors de la récupération des communes",
+            error: error.message
+        });
+    }
+});
+
+/**
+ * Route pour récupérer le détail d'une commune par code INSEE
+ * GET /api-geo/commune/:codeInsee
+ */
+router.get("/commune/:codeInsee", async (req, res) => {
+    try {
+        const codeInsee = req.params.codeInsee;
+        const commune = await getCommuneDetails(codeInsee);
+        res.status(200).json({
+            success: true,
+            data: commune
+        });
+    } catch (error) {
+        console.error("[API-GEO] Erreur lors de la récupération de la commune:", error);
+        res.status(500).json({
+            success: false,
+            message: "Erreur lors de la récupération de la commune",
             error: error.message
         });
     }

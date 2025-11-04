@@ -31,8 +31,8 @@ async function getCommunesByDepartements(departements = ['08', '10', '51', '52']
             const fieldsStr = fields.join(',');
             const url = `https://geo.api.gouv.fr/communes?codeDepartement=${departementsStr}&fields=${fieldsStr}&format=json`;
             
-            console.log(`[API_IGN] Récupération des communes pour les départements: ${departementsStr}`);
-            console.log(`[API_IGN] URL: ${url}`);
+            // console.log(`[API_IGN] Récupération des communes pour les départements: ${departementsStr}`);
+            // console.log(`[API_IGN] URL: ${url}`);
             
             const request = https.get(url, (response) => {
                 let data = '';
@@ -46,7 +46,7 @@ async function getCommunesByDepartements(departements = ['08', '10', '51', '52']
                         const communes = JSON.parse(data);
                         
                         if (Array.isArray(communes)) {
-                            console.log(`[API_IGN] ${communes.length} communes récupérées avec succès`);
+                            // console.log(`[API_IGN] ${communes.length} communes récupérées avec succès`);
                             
                             // Tri par nom de commune
                             communes.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
@@ -80,6 +80,55 @@ async function getCommunesByDepartements(departements = ['08', '10', '51', '52']
         }
     });
 }
+
+// /**
+//  * Récupère la liste des communes pour un département donné via l'API geo.api.gouv.fr
+//  * @param {number|string} departement - Code du département (ex: 10, 51, 52)
+//  * @returns {Promise<Array>} - Liste des communes avec nom et code INSEE
+//  */
+// async function getCommune(departement) {
+//     return new Promise((resolve, reject) => {
+//         try {
+//             // S'assure que le code département est une chaîne de 2 chiffres
+//             const depStr = String(departement).padStart(2, '0');
+//             const url = `https://geo.api.gouv.fr/communes?codeDepartement=${depStr}&fields=nom,code&format=json`;
+//             console.log(`[API_IGN] Récupération des communes pour le département: ${depStr}`);
+//             console.log(`[API_IGN] URL: ${url}`);
+//             const request = require('https').get(url, (response) => {
+//                 let data = '';
+//                 response.on('data', (chunk) => { data += chunk; });
+//                 response.on('end', () => {
+//                     try {
+//                         const communes = JSON.parse(data);
+//                         if (Array.isArray(communes)) {
+//                             // Tri par nom de commune
+//                             communes.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
+//                             resolve(communes);
+//                         } else {
+//                             console.error('[API_IGN] Réponse inattendue de l\'API:', communes);
+//                             reject(new Error('Format de réponse inattendu de l\'API geo.api.gouv.fr'));
+//                         }
+//                     } catch (parseError) {
+//                         console.error('[API_IGN] Erreur lors du parsing JSON:', parseError);
+//                         reject(new Error(`Erreur lors du parsing de la réponse: ${parseError.message}`));
+//                     }
+//                 });
+//             });
+//             request.on('error', (error) => {
+//                 console.error('[API_IGN] Erreur lors de la requête vers geo.api.gouv.fr:', error);
+//                 reject(new Error(`Erreur réseau: ${error.message}`));
+//             });
+//             // Timeout de 10 secondes
+//             request.setTimeout(10000, () => {
+//                 request.abort();
+//                 reject(new Error('Timeout lors de la récupération des communes'));
+//             });
+//         } catch (error) {
+//             console.error('[API_IGN] Erreur dans getCommune:', error);
+//             reject(error);
+//         }
+//     });
+// }
 
 /**
  * Récupère les parcelles cadastrales via le service WFS de l'IGN dans une bounding box
@@ -766,16 +815,62 @@ function createBasicAuth(username, password) {
     return Buffer.from(`${username}:${password}`).toString('base64');
 }
 
+/**
+ * Récupère toutes les infos principales d'une commune à partir de son code INSEE
+ * @param {string} codeInsee - Code INSEE de la commune
+ * @returns {Promise<Object>} - Objet contenant toutes les propriétés principales de la commune
+ */
+async function getCommuneDetails(codeInsee) {
+    return new Promise((resolve, reject) => {
+        if (!codeInsee || typeof codeInsee !== 'string') {
+            return reject(new Error('Code INSEE invalide'));
+        }
+        // Champs principaux à récupérer
+        const fields = [
+            'nom', 'code', 'codesPostaux', 'population', 'surface', 'centre', 'contour',
+            'codeDepartement', 'departement', 'codeRegion', 'region', 'siren', 'epci', 'arrondissement', 'type', 'intercommunalite', 'ancienCode', 'ancienNom'
+        ];
+        const url = `https://geo.api.gouv.fr/communes/${codeInsee}?fields=${fields.join(',')}&format=json`;
+        console.log(`[API_IGN] Récupération des détails pour la commune ${codeInsee}`);
+        console.log(`[API_IGN] URL: ${url}`);
+        https.get(url, (response) => {
+            let data = '';
+            response.on('data', (chunk) => { data += chunk; });
+            response.on('end', () => {
+                try {
+                    const commune = JSON.parse(data);
+                    if (commune && commune.code === codeInsee) {
+                        resolve(commune);
+                    } else {
+                        console.error('[API_IGN] Commune non trouvée ou réponse inattendue:', commune);
+                        reject(new Error('Commune non trouvée ou réponse inattendue'));
+                    }
+                } catch (err) {
+                    console.error('[API_IGN] Erreur lors du parsing JSON:', err);
+                    reject(new Error(`Erreur lors du parsing de la réponse: ${err.message}`));
+                }
+            });
+        }).on('error', (error) => {
+            console.error('[API_IGN] Erreur lors de la requête:', error);
+            reject(new Error(`Erreur réseau: ${error.message}`));
+        });
+    });
+}
+
 module.exports = {
     getCommunesByDepartements,
+    getCommuneDetails,
+
     getParcellesCadastrales,
+    getInfosParcellesByIdus,
     getParcellesByCommune,
     parseBboxString,
+
     validateAndAdjustBbox,
     // Nouvelles fonctions Lizmap
     getLizmapData,
     getLizmapLayerData,
     getLizmapCapabilities,
+
     createBasicAuth
-    ,getInfosParcellesByIdus
 };

@@ -16,6 +16,7 @@ COPY routes/ ./routes/
 COPY dbPool/ ./dbPool/
 COPY fonctions/ ./fonctions/
 COPY scripts/ ./scripts/
+COPY documentation/ ./documentation/
 COPY .env .
 COPY node_base_sites.js .
 

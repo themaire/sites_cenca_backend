@@ -764,17 +764,18 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
     message = "projets/pmfu/id/" + req.params.mode;
     const mode = req.params.mode;
     if (mode === "lite") {
-        SelectFields = `SELECT pmfu_id, pmfu_nom, pmfu_responsable, pmfu_commune `;
+        SelectFields = `SELECT pmfu_id, pmfu_nom, pmfu_responsable, pmfu_commune, pmfu_type_acte `;
         FromTable = "FROM sitcenca.projets_mfu;";
         where = "";
         req.params.id = null;
     } else if (mode === "full") {
-        SelectFields = 'SELECT p.pmfu_id, p.pmfu_nom, p.pmfu_responsable, p.pmfu_createur, p.pmfu_agence, p.pmfu_associe, p.pmfu_etapes, p.pmfu_departement, p.pmfu_territoire, ';
-        SelectFields += 'p.pmfu_type, p.pmfu_commune, p.pmfu_debut, p.pmfu_proprietaire, p.pmfu_appui, p.pmfu_juridique, p.pmfu_validation, p.pmfu_decision, p.pmfu_note, p.pmfu_acte, ';
-        SelectFields += 'p.pmfu_compensatoire, p.pmfu_cout, p.pmfu_financements, p.pmfu_superficie, p.pmfu_priorite, p.pmfu_status, p.pmfu_signature, p.pmfu_echeances, p.pmfu_creation, ';
-        SelectFields += 'p.pmfu_derniere_maj, p.pmfu_photos_site, p.pmfu_date_ajout, COUNT(*) FILTER (WHERE d.doc_type = 1) AS photos_site_nb, ';
+        SelectFields = 'SELECT p.pmfu_id, p.pmfu_nom, p.pmfu_responsable, p.pmfu_createur, p.pmfu_agence, p.pmfu_associe, p.pmfu_proch_etape, p.pmfu_dep, p.pmfu_territoire, ';
+        SelectFields += 'p.pmfu_type_acte, p.pmfu_commune, p.pmfu_annee_debut, p.pmfu_proprietaire, p.pmfu_appui, p.appui_desc, p.pmfu_quest_juri, p.pmfu_validation, ';
+        SelectFields += 'p.pmfu_mes_comp, p.pmfu_cout, p.pmfu_financements, p.pmfu_superficie, p.pmfu_priorite, p.pmfu_status, p.pmfu_annee_signature, p.pmfu_echeances, p.pmfu_creation, ';
+        SelectFields += 'p.pmfu_derniere_maj, COUNT(*) FILTER (WHERE d.doc_type = 1) AS photos_site_nb, ';
         SelectFields += 'COUNT(*) FILTER (WHERE d.doc_type = 2) AS projet_acte_nb, COUNT(*) FILTER (WHERE d.doc_type = 3) AS decision_bureau_nb, COUNT(*) FILTER (WHERE d.doc_type = 4) AS note_bureau_nb, pmfu_parc_list ';
-        FromTable = `FROM sitcenca.projets_mfu p LEFT JOIN files.docs d ON p.pmfu_id::character varying = d.ref_id `;
+        FromTable = `FROM sitcenca.projets_mfu p `
+        FromTable += `LEFT JOIN files.docs d ON p.pmfu_id::character varying = d.ref_id `;
         where = `WHERE pmfu_id = $1 GROUP BY p.pmfu_id;`;
         req.params.id = parseInt(req.params.id);
     }

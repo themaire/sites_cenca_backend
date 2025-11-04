@@ -162,6 +162,13 @@ async function distinctSiteResearch(
     }
 }
 
+/**
+ * Fonction pour mettre à jour les informations d'un espace et d'un site d'un seul coup.
+ * @param {*} pool La connexion à la base de données
+ * @param {*} res La réponse HTTP
+ * @param {*} espaceQuery La requête pour mettre à jour l'espace
+ * @param {*} siteQuery La requête pour mettre à jour le site
+ */
 async function updateEspaceSite(pool, res, espaceQuery, siteQuery) {
     // console.log(espaceQuery);
     // console.log(siteQuery);
