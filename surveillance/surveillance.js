@@ -239,7 +239,7 @@ class CencaSurveillance {
     getParameterExamples(paramName) {
         const examples = {
             // IDs et UUIDs
-            'uuid': ['12345678-1234-1234-1234-123456789abc'],
+            'uuid': ['49A976B1-072A-4513-80CC-27B43A2619B4'],
             'id': ['1', '123'],
             
             // Critères de recherche

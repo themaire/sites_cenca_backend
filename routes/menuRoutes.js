@@ -9,7 +9,7 @@ const { authenticateToken } = require('../fonctions/fonctionsAuth.js');
 const pool = require('../dbPool/poolConnect.js');
 
 // Menu (Route non protégée)
-router.get("/parent=:parent", (req, res) => {
+router.get("/parent=:parent/:pref?", (req, res) => {
 
     const SelectFields = "SELECT * ";
     const FromTable = "FROM gestint.m_menu_header ";
@@ -17,11 +17,12 @@ router.get("/parent=:parent", (req, res) => {
     let queryObject;
 
     const parent = req.params.parent;
-    console.log("parent : ");
-    console.log(parent);
+    const pref = req.params.pref;
+    // console.log("parent : ");
+    // console.log(parent);
 
     if (parent == "null") {
-        where = "where parent is null";
+        where = pref != null && pref == "admin" ? "where parent is null" : "where parent is null and id != 28";
         queryObject = {
             text: joinQuery(
                 SelectFields,

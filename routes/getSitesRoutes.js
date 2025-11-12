@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-// const app = express();
+
 const sharp = require("sharp");
 const fs = require("fs");
 const path = require("path");
@@ -188,8 +188,8 @@ router.get("/milnat/uuid=:uuid", (req, res) => {
 // MFU
 router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
     let { SelectFields, FromTable, where, message } = reset();
-    message = "sites/mfu/uuid/" + req.params.mode;
     mode = req.params.mode;
+    message = "sites/mfu/uuid/" + mode;
 
     if (req.params.mode == "lite") {
         SelectFields =
