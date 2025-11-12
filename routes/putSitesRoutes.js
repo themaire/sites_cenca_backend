@@ -101,8 +101,10 @@ const storagePmfu = multer.diskStorage({
         const folderName = uploadFolders[file.fieldname] || "autres";
         const folder = path.join(FILES_DIR, folderName);
 
-        // Vérifier si le dossier existe et le créer si nécessaire
+        // Changer temporairement le umask à 002
+        const oldUmask = process.umask(0o002);
         fs.mkdirSync(folder, { recursive: true });
+        process.umask(oldUmask);
 
         cb(null, folder);
     },
@@ -178,6 +180,11 @@ const multerMiddlewareZip = multer({
     { name: "file", maxCount: 1 },
     { name: "type_geometry", maxCount: 1 },
 ]);
+
+/**
+ * Middleware Multer pour l'upload de documents
+ * @returns {import("multer").Multer}
+ */
 function createMulterMiddlewareDoc() {
     return multer({
         storage: storagePmfu,
@@ -1184,6 +1191,13 @@ router.put("/put/table=docs", async (req, res) => {
                             doc_type: docType,
                             doc_path: cleanedPath,
                         });
+
+                        // --- AJOUT : garantir les droits 664 sur chaque fichier uploadé ---
+                        try {
+                            fs.chmodSync(file.path, 0o664);
+                        } catch (e) {
+                            console.warn(`Impossible de changer les droits du fichier ${file.path}:`, e.message);
+                        }
                     });
                 }
 

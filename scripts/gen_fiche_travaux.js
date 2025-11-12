@@ -83,7 +83,9 @@ function generateFicheTravauxWord(bilan) {
                                     children: ["Page ", PageNumber.CURRENT, " / ", PageNumber.TOTAL_PAGES],
                                 })
                             ],
-                        })
+                        });
+
+    communesDepartementsListStr = bilan.communes.map(c => `${c.nom} (${c.departement})`).join(", ");
 
     const doc = new Document({
         creator: "CENCA par Nicolas ELIE geomatique@cen-champagne-ardenne.org",
@@ -307,13 +309,14 @@ function generateFicheTravauxWord(bilan) {
                         text: "LOCALISATION DU SITE",
                         style: "TitreColore"
                     }),
+
                     new Paragraph({
                         children: [
                             new TextRun({ text: "Site / Code site CENCA : ", bold: true }),
                             new TextRun({ text: `${bilan.site.nom} / ${bilan.site.code}` }),
                             new TextRun({ break: 1 }), // Saut de ligne
-                            new TextRun({ text: "Commune / Département : ", bold: true }),
-                            new TextRun({ text: `${bilan.communes.map(c => c.nom).join(", ")} / ${bilan.communes.map(c => c.departement).join(", ")}` }),
+                            new TextRun({ text: "Commune (Département) : ", bold: true }),
+                            new TextRun({ text: `${communesDepartementsListStr}` }),
                         ],
                         style: "wellSpaced",
                         spacing: { after: 200 }
@@ -393,7 +396,7 @@ function generateFicheTravauxWord(bilan) {
                                     children: [
                                         new TableCell({ children: [new Paragraph(String(op.type || ""))] }),
                                         new TableCell({ children: [new Paragraph(String(op.nom_mo || ""))] }),
-                                        new TableCell({ children: [new Paragraph(`${String(op.quantite || "")} - ${String(op.unite_str.toLowerCase() || "")}${op.quantite > 0 ? "s" : ""}`)] }),
+                                        new TableCell({ children: [new Paragraph(`${String(op.quantite || "")} - ${String(op.unite_str.toLowerCase() || "")}`)] }),
                                         new TableCell({ children: [new Paragraph({
                                             children: (op.financeurs ?? []).map((financeur, i) => [
                                                 new TextRun({ text: financeur, style: "HeaderTable", verticalAlign: "center" }),
@@ -504,7 +507,7 @@ function generateFicheTravauxWord(bilan) {
                                             children: [new Paragraph(String(bilan.operations_full[op.uuid_ope].cadre_intervention_str || ""))]
                                         }),
                                         new TableCell({
-                                            children: [new Paragraph(`${String(op.quantite || "")} - ${String(op.unite_str.toLowerCase() || "")}${op.quantite > 0 ? "s" : ""}`)]
+                                            children: [new Paragraph(`${String(op.quantite || "")} - ${String(op.unite_str.toLowerCase() || "")}`)]
                                         }),
                                         new TableCell({
                                             children: [new Paragraph(String(bilan.operations_full[op.uuid_ope].date_debut_str || ""))]
@@ -523,7 +526,7 @@ function generateFicheTravauxWord(bilan) {
                                 new Paragraph({
                                     children: [
                                         new TextRun({
-                                            text: "Données relatives aux travaux de paturages",
+                                            text: "Données relatives aux travaux de pâturage",
                                             bold: true,
                                             break: 1
                                         })

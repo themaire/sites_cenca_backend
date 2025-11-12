@@ -1,14 +1,14 @@
 {
   "metadata": {
     "description": "Configuration complète des routes CENCA avec paramètres",
-    "generated": "2025-10-31T21:30:41.143Z",
+    "generated": "2025-11-10T14:18:51.822Z",
     "version": "2.1.0",
     "stats": {
-      "totalRoutes": 46,
-      "routesWithParams": 30,
+      "totalRoutes": 47,
+      "routesWithParams": 31,
       "enabledRoutes": 1
     },
-    "lastUpdate": "2025-10-31T21:30:41.149Z"
+    "lastUpdate": "2025-11-10T14:18:51.823Z"
   },
   "settings": {
     "defaultTimeout": 15000,
@@ -451,6 +451,19 @@
       "priority": "LOW",
       "category": "Sites Management",
       "note": "Route PUT avec paramètres - À configurer selon les besoins"
+    },
+    "/api-geo/commune/:codeInsee": {
+      "method": "GET",
+      "file": "apiGeoRoutes.js",
+      "enabled": false,
+      "parameters": {
+        "codeInsee": [
+          "valeur_exemple"
+        ]
+      },
+      "priority": "LOW",
+      "category": "Geographic API",
+      "note": "Route GET avec paramètres - À configurer selon les besoins"
     },
     "/api-geo/parcelles/commune/:codeInsee": {
       "method": "GET",
