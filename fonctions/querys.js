@@ -220,8 +220,19 @@ function generateCloneQuery(table, pkName, columns, id2clone, newId = null, excl
                 }
             });
         }
-        console.log('Champs à exclure :', fieldsToExclude);
+        
+    } else if (table === 'opegerer.salaries') {
+        if (excludeFieldsGroups && Array.isArray(excludeFieldsGroups)) {
+            excludeFieldsGroups.forEach(group => {
+                switch (group) {
+                    case 'fonction':
+                        fieldsToExclude.push('fonction');
+                        break;
+                }   
+            });
+        }
     }
+    console.log('Champs à exclure :', fieldsToExclude);
 
 
     // On place la nouvelle valeur de PK en premier, puis on sélectionne toutes les autres colonnes sauf la PK et les champs exclus
@@ -234,9 +245,15 @@ function generateCloneQuery(table, pkName, columns, id2clone, newId = null, excl
     // On adapte le SELECT pour ajouter le suffixe à nom_mo (si pas exclu)
     const selectColumns = [
         newId,
-        ...columnsWithoutPk.map(col =>
-            col === 'nom_mo' ? `${col} || ' (cloné)'` : col
-        )
+        ...columnsWithoutPk.map(col => {
+            if (col === 'nom_mo') {
+                return `${col} || ' (cloné)'`;
+            } else if (col === 'identifiant') {
+                return `${col} || '_cloned'`;
+            } else {
+                return col;
+            }
+        })
     ].join(', ');
 
     const query = `

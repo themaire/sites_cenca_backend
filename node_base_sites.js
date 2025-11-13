@@ -135,7 +135,7 @@ const processRoutes = require('./routes/processRoutes');
 const pictureRoute = require('./routes/pictureRoute');
 const apiGeoRoutes = require('./routes/apiGeoRoutes');
 
-const adminRoutes = require('./routes/getAdminRoute');
+const adminRoutes = require('./routes/adminRoute.js');
 
 // Configuration HTTPS (seulement en production)
 let httpsOptions = null;

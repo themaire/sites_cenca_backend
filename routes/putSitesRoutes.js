@@ -722,7 +722,6 @@ router.put("/put/table=:table/clone", (req, res) => {
     const TABLES = {'projets':'opegerer', 'operations':'opegerer'};
 
     try {
-
         if (Object.keys(TABLES).includes(TABLE)) {
             
             const WORKING_TABLE = TABLES[TABLE] + "." + TABLE;
