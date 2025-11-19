@@ -27,7 +27,7 @@ const CONFIG = {
     PASSWORD: process.env.MONITORING_PASSWORD || 'password',
     TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
-    CHECK_INTERVAL: parseInt(process.env.MONITORING_INTERVAL || '300000'), // 5 minutes
+    CHECK_INTERVAL: parseInt(process.env.MONITORING_INTERVAL || '3600000'), // 1 hour
     TIMEOUT: parseInt(process.env.MONITORING_TIMEOUT || '15000'),
     ROUTES_DIR: '/app/routes',
     CONFIG_FILE: path.join(__dirname, 'routes-config.json')

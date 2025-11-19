@@ -1,14 +1,3 @@
-// const { get } = require("../routes/putSitesRoutes"); // Supprimer cette ligne
-
-const OperationsColumns = [
-    'uuid_ope', 'code', 'titre', 'inscrit_pdg', 'rmq_pdg', 'description', 'interv_zh', 'surf', 'lin', 'app_fourr',
-    'pression_moy', 'ugb_moy', 'nbjours', 'charge_moy', 'charge_inst', 'remarque', 'validite', 'action', 'objectif',
-    'typ_intervention', 'date_debut', 'date_fin', 'date_approx', 'ben_participants', 'ben_heures', 'ref_uuid_proj',
-    'obj_ope', 'abroutissement_paturage', 'action_2', 'cadre_intervention', 'cadre_intervention_detail',
-    'chargement_paturage', 'date_ajout', 'effectif_paturage', 'exportation_fauche', 'financeur_description',
-    'interv_cloture', 'nb_jours_paturage', 'nom_mo', 'productivite_fauche', 'quantite', 'recouvrement_ligneux_paturage',
-    'ref_loc_id', 'total_exporte_fauche', 'type_intervention_hydro', 'unite'
-];
 
 function getRightId(table) {
     let pkName = '';
@@ -28,6 +17,8 @@ function getRightId(table) {
         }
     } else if (table == 'localisations') {
         pkName = 'loc_id';
+    } else if (table == 'salaries') {
+        pkName = 'cd_salarie';
     } else {
         pkName = table.slice(0, -1);
     }

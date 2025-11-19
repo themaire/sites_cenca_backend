@@ -7,9 +7,10 @@ const {joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch,
 const { generateFicheTravauxWord } = require("../scripts/gen_fiche_travaux.js");
 const pool = require("../dbPool/poolConnect.js");
     
-const { getTableColums, generateCloneQuery } = require('../fonctions/querys.js');
+const { generateUpdateQuery, getTableColums, generateCloneQuery } = require('../fonctions/querys.js');
+const { handleDelete } = require('../fonctions/routeHandlers.js');
 
-// Utilisateurs
+// Récupérer des utilisateurs ( un ou plusieurs )
 router.get("/users/:mode/:cd_salarie?", (req, res) => {
     let { SelectFields, FromTable, where, message } = reset();
     mode = req.params.mode;
@@ -19,7 +20,7 @@ router.get("/users/:mode/:cd_salarie?", (req, res) => {
     if (req.params.mode == "lite") {
         SelectFields =
             "SELECT cd_salarie, \"nom complet\" as nom_complet, email, fonction, identifiant ";
-        FromTable = "FROM admin.v_salaries";
+        FromTable = "FROM admin.v_salaries order by nom_complet;";
     } else if (req.params.mode == "full") {
         SelectFields =
             "select cd_salarie, nom, prenom, email, statut, typ_fonction, identifiant, sal_role ";
@@ -143,6 +144,77 @@ router.put("/put/table=:table/clone", (req, res) => {
             message: "Erreur interne du serveur."
         });
     }
+});
+
+// Modifier un utilisateur
+router.put("/put/user/:mode/:id?", (req, res) => {
+    const MODE = req.params.mode;
+    const ID = req.params.id ? req.params.id : null;
+    const UPDATE_DATA = req.body; // Récupérer l'objet JSON envoyé
+
+    message = "/put/user/" + MODE;
+
+    console.log("Opération sur un utilisateur en mode : " + MODE);
+    console.log("Body reçu pour la mise à jour :", UPDATE_DATA);
+
+    try {
+        let queryObject = {};
+        if (MODE === "update" && ID !== null) {
+            // Préparer la requête de mise à jour
+            console.log("Valeur de la variable ID : " + ID);
+            queryObject = generateUpdateQuery(
+                "admin.salaries",
+                ID,
+                UPDATE_DATA
+            );
+        }
+        console.log("Requête de mise à jour de salarié générée : ");
+        console.log(queryObject);
+        
+
+        // Exécuter la requête de mise à jour
+        ExecuteQuerySite(
+            pool,
+            { query: queryObject, message: message },
+            "update",
+            (resultats, message) => {
+                res.setHeader("Access-Control-Allow-Origin", "*");
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+                if (message === 'ok') {
+                    res.status(200).json({
+                        success: true,
+                        message: "Mise à jour réussie de l'utilisateur " + UPDATE_DATA["prenom"] + " " + UPDATE_DATA["nom"] + ".",
+                        code: 0,
+                        data: resultats
+                    });
+                } else {
+                    const currentDateTime = new Date().toISOString();
+                    console.log(`Échec de la requête à ${currentDateTime}`);
+                    console.log(updateQuery.text);
+                    console.log(updateQuery.values);
+                    res.status(500).json({
+                        success: false,
+                        message: "Erreur, la requête s'est mal exécutée."
+                    });
+                }
+            }
+        );
+    } catch (error) {
+        console.error("Erreur lors de la mise à jour : ", error);
+        res.status(500).json({
+            success: false,
+            message: "Erreur interne du serveur.",
+        });
+    }
+});
+
+// Supprimer unutilisateur, un groupe, etc.
+// La route est maintenant gérée par handleDelete dans fonctions/routeHandlers.js
+// C'est plus propre et évite la duplication de code
+// On délègue la logique de suppression à handleDelete qui est un fichier à part, partagé entre plusieurs routes si besoin
+router.delete("/delete/:table/:uuidName=:id/:idBisName?/:idBis?", (req, res) => {
+    handleDelete(req, res, pool);
 });
 
 module.exports = router;

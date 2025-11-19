@@ -395,6 +395,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
         });
     }
 });
+
 // Ajouter un site, un acte, une operation ...
 router.put("/put/table=:table/insert", (req, res) => {
     // console.log("La requête : ", req);
