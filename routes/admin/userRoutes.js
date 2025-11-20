@@ -9,7 +9,7 @@ const saltRounds = process.env.SALT_ROUNDS;
 const authorizedDomains = process.env.AUTHORIZED_DOMAINS;
 
 // Fonctions et connexion à PostgreSQL
-const { joinQuery, ExecuteQuerySite } = require('../fonctions/fonctionsSites.js'); 
+const { joinQuery, ExecuteQuerySite } = require('../../fonctions/fonctionsSites.js'); 
 
 const express = require('express'); // Pour utiliser le routeur express
 const router = express.Router();
@@ -19,13 +19,13 @@ const bcrypt = require('bcrypt'); // Pour hacher les mots de passe
 const jwt = require('jsonwebtoken'); // Pour créer des tokens d'authentification
 
 // Connexion à PostgreSQL
-const pool = require('../dbPool/poolConnect.js');
+const pool = require('../../dbPool/poolConnect.js');
 
 // Fonctions pour l'authentification
-const { authenticateToken } = require('../fonctions/fonctionsAuth.js');
+const { authenticateToken } = require('../../fonctions/fonctionsAuth.js');
 
 // Fonction pour envoyer un email
-const { sendEmail } = require('../fonctions/fonctionsMails.js');
+const { sendEmail } = require('../../fonctions/fonctionsMails.js');
 
 // let badPasswordMessage = "Le mot de passe doit contenir au moins 6 caractères, une majuscule, ";
 // badPasswordMessage += "une minuscule, un chiffre et un caractère spécial.";

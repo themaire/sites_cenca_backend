@@ -122,20 +122,20 @@ app.use(express.urlencoded({ extended: true })); // Pour traiter les requêtes e
 
 // Importation des routes
 const menuRoutes = require('./routes/menuRoutes');
-const siteRoutesGet = require('./routes/getSitesRoutes');
-const siteRoutesPut = require('./routes/putSitesRoutes');
+const siteRoutesGet = require('./routes/sites/getSitesRoutes.js');
+const siteRoutesPut = require('./routes/sites/putSitesRoutes.js');
 
 // Import du middleware d'authentification
 const { authenticateToken } = require('./fonctions/fonctionsAuth.js');
 
-const foncierRoutes = require('./routes/foncierRoutes');
-const siteRoutesDelete = require('./routes/deleteSitesRoutes');
-const userRoutes = require('./routes/userRoutes');
+const foncierRoutes = require('./routes/sites/foncierRoutes.js');
+const siteRoutesDelete = require('./routes/sites/deleteSitesRoutes.js');
+const userRoutes = require('./routes/admin/userRoutes.js');
 const processRoutes = require('./routes/processRoutes');
 const pictureRoute = require('./routes/pictureRoute');
 const apiGeoRoutes = require('./routes/apiGeoRoutes');
 
-const adminRoutes = require('./routes/adminRoute.js');
+const adminRoutes = require('./routes/admin/adminRoute.js');
 
 // Configuration HTTPS (seulement en production)
 let httpsOptions = null;

@@ -3,12 +3,12 @@ const router = express.Router();
 
 // Fonctions et connexion à PostgreSQL
 const {joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch,
-    executeQueryAndRespond, reset, getBilan,} = require("../fonctions/fonctionsSites.js");
-const { generateFicheTravauxWord } = require("../scripts/gen_fiche_travaux.js");
-const pool = require("../dbPool/poolConnect.js");
+    executeQueryAndRespond, reset, getBilan,} = require("../../fonctions/fonctionsSites.js");
+const { generateFicheTravauxWord } = require("../../scripts/gen_fiche_travaux.js");
+const pool = require("../../dbPool/poolConnect.js");
     
-const { generateUpdateQuery, getTableColums, generateCloneQuery } = require('../fonctions/querys.js');
-const { handleDelete } = require('../fonctions/routeHandlers.js');
+const { generateUpdateQuery, getTableColums, generateCloneQuery } = require('../../fonctions/querys.js');
+const { handleDelete } = require('../../fonctions/routeHandlers.js');
 
 // Récupérer des utilisateurs ( un ou plusieurs )
 router.get("/users/:mode/:cd_salarie?", (req, res) => {
@@ -146,13 +146,22 @@ router.put("/put/table=:table/clone", (req, res) => {
     }
 });
 
-// Modifier un utilisateur
-router.put("/put/user/:mode/:id?", (req, res) => {
-    const MODE = req.params.mode;
-    const ID = req.params.id ? req.params.id : null;
-    const UPDATE_DATA = req.body; // Récupérer l'objet JSON envoyé
+// Modifier un utilisateur ou un groupe
+router.put("/put/:type/:mode/:id?", (req, res) => {
+    
+    // déterminer le nom de la table en fonction du type
+    let table = "";
+    if (req.params.type === "user") {
+        table = "salaries";
+    } else if (req.params.type === "group") {
+        table = "groupes";
+    }
 
-    message = "/put/user/" + MODE;
+    const MODE = req.params.mode; // update, add
+    const ID = req.params.id ? req.params.id : null;
+    const UPDATE_DATA = req.body; // Récupérer l'objet JSON reçu
+
+    message = "/put/" + req.params.type + "/" + MODE;
 
     console.log("Opération sur un utilisateur en mode : " + MODE);
     console.log("Body reçu pour la mise à jour :", UPDATE_DATA);
@@ -163,7 +172,7 @@ router.put("/put/user/:mode/:id?", (req, res) => {
             // Préparer la requête de mise à jour
             console.log("Valeur de la variable ID : " + ID);
             queryObject = generateUpdateQuery(
-                "admin.salaries",
+                "admin." + table,
                 ID,
                 UPDATE_DATA
             );
@@ -215,6 +224,37 @@ router.put("/put/user/:mode/:id?", (req, res) => {
 // On délègue la logique de suppression à handleDelete qui est un fichier à part, partagé entre plusieurs routes si besoin
 router.delete("/delete/:table/:uuidName=:id/:idBisName?/:idBis?", (req, res) => {
     handleDelete(req, res, pool);
+});
+
+
+// Récupérer des groupes ( un ou plusieurs )
+router.get("/group/:mode/:gro_id?", (req, res) => {
+    let { SelectFields, FromTable, where, message } = reset();
+    mode = req.params.mode;
+    const gro_id = req.params.gro_id ? req.params.gro_id : null;
+    message = "/groups/" + mode;
+    if (req.params.mode == "lite") {
+        SelectFields =
+            "SELECT gro_id, gro_nom, gro_description ";
+        FromTable = "FROM admin.groupes order by gro_id;";
+    } else if (req.params.mode == "full") {
+        SelectFields =
+            "select gro_id, gro_nom, gro_description, gro_statut ";
+        FromTable = "FROM admin.groupes AS gro ";
+        FromTable += " ";
+        where = "where gro.gro_id = $1;";
+    }
+
+    executeQueryAndRespond(
+        pool,
+        SelectFields,
+        FromTable,
+        where,
+        gro_id,
+        res,
+        message,
+        mode
+    );
 });
 
 module.exports = router;

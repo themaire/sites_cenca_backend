@@ -15,15 +15,15 @@ router.use((req, res, next) => {
   next();
 });
 
-const { handleDelete } = require('../fonctions/routeHandlers.js');
+const { handleDelete } = require('../../fonctions/routeHandlers.js');
 
 
 // Fonctions et connexion à PostgreSQL
-const { ExecuteQuerySite } = require("../fonctions/fonctionsSites.js");
-const pool = require("../dbPool/poolConnect.js");
+const { ExecuteQuerySite } = require("../../fonctions/fonctionsSites.js");
+const pool = require("../../dbPool/poolConnect.js");
 
 // Generateur de requetes SQL
-const { generateDeleteQuery } = require("../fonctions/querys.js");
+const { generateDeleteQuery } = require("../../fonctions/querys.js");
 
 // Supprimer une opération, une localisation (d'opération), un projet, etc.
 

@@ -22,9 +22,9 @@ if (!fs.existsSync(CACHE_DIR)) {
 
 // Fonctions et connexion à PostgreSQL
 const {joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch,
-    executeQueryAndRespond, reset, getBilan,} = require("../fonctions/fonctionsSites.js");
-const { generateFicheTravauxWord } = require("../scripts/gen_fiche_travaux.js");
-const pool = require("../dbPool/poolConnect.js");
+    executeQueryAndRespond, reset, getBilan,} = require("../../fonctions/fonctionsSites.js");
+const { generateFicheTravauxWord } = require("../../scripts/gen_fiche_travaux.js");
+const pool = require("../../dbPool/poolConnect.js");
 
 router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
     // A FAIRE POUR PLUS TARD : adapter la fonction executeQueryAndRespond() (utilisée de partout sur toutes le routes) pour qu'elle puisse prendre en compte les paramètres de la requête

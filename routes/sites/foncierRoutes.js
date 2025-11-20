@@ -2,11 +2,11 @@ const express = require('express');
 const router = express.Router();
 
 // Fonctions et connexion à PostgreSQL
-const { joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch, executeQueryAndRespond, reset } = require('../fonctions/fonctionsSites.js'); 
-const pool = require('../dbPool/poolConnect.js');
+const { joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch, executeQueryAndRespond, reset } = require('../../fonctions/fonctionsSites.js'); 
+const pool = require('../../dbPool/poolConnect.js');
 
 // Generateur de requetes SQL
-const { generateUpdateQuery, generateInsertQuery } = require('../fonctions/querys.js'); 
+const { generateUpdateQuery, generateInsertQuery } = require('../../fonctions/querys.js'); 
 
 // Demandes d'extractions foncières, soit toutes soit une avec son ID
 router.get("/foncier/extraction=:id", (req, res) => {

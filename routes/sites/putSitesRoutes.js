@@ -13,11 +13,11 @@ const {
     convertToWKT,
     detectShapefileGeometryType,
     extractZipFile,
-} = require("../fonctions/fonctionsSites.js");
-const pool = require("../dbPool/poolConnect.js");
+} = require("../../fonctions/fonctionsSites.js");
+const pool = require("../../dbPool/poolConnect.js");
 
 // Generateur de requetes SQL
-const { generateUpdateQuery, generateInsertQuery, generateCloneQuery, getTableColums, generateCloneCheckboxQuery } = require('../fonctions/querys.js'); 
+const { generateUpdateQuery, generateInsertQuery, generateCloneQuery, getTableColums, generateCloneCheckboxQuery } = require('../../fonctions/querys.js'); 
 
 const multer = require("multer");
 const shapefile = require("shapefile");

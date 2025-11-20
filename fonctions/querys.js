@@ -19,6 +19,8 @@ function getRightId(table) {
         pkName = 'loc_id';
     } else if (table == 'salaries') {
         pkName = 'cd_salarie';
+    } else if (table == 'groupes') {
+        pkName = 'gro_id';
     } else {
         pkName = table.slice(0, -1);
     }
