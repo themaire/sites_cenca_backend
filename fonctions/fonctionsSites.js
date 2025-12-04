@@ -130,13 +130,14 @@ function selectQuery(params) {
 
 async function distinctSiteResearch(
     pool,
+    table,
     selectors,
     property,
     title,
     callback
 ) {
     const QUERY = {
-        text: "SELECT DISTINCT " + property + " FROM sitcenca.listesitescenca;",
+        text: "SELECT DISTINCT " + property + " FROM " + table + ";",
         values: [],
         // rowMode: 'array',
     };

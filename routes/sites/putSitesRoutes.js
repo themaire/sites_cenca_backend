@@ -714,139 +714,140 @@ router.put("/put/table=:table/clone", (req, res) => {
 });
 
 // Dupliquer un projet complet ou une operation.
-router.put("/put/table=:table/clone", (req, res) => {
-    const TABLE = req.params.table;
-    const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
-    console.log("Body reçu pour la duplication :", INSERT_DATA);
-    const MESSAGE = "sites/put/table=" + TABLE + "/clone";
-    // Tables possibles pour des differents insert. En clé le nom de la table, en valeur son schema
-    const TABLES = {'projets':'opegerer', 'operations':'opegerer'};
+// DOUBLON??
+// router.put("/put/table=:table/clone", (req, res) => {
+//     const TABLE = req.params.table;
+//     const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
+//     console.log("Body reçu pour la duplication :", INSERT_DATA);
+//     const MESSAGE = "sites/put/table=" + TABLE + "/clone";
+//     // Tables possibles pour des differents insert. En clé le nom de la table, en valeur son schema
+//     const TABLES = {'projets':'opegerer', 'operations':'opegerer'};
 
-    try {
-        if (Object.keys(TABLES).includes(TABLE)) {
+//     try {
+//         if (Object.keys(TABLES).includes(TABLE)) {
             
-            const WORKING_TABLE = TABLES[TABLE] + "." + TABLE;
-            console.log("WORKING_TABLE : " + WORKING_TABLE);
+//             const WORKING_TABLE = TABLES[TABLE] + "." + TABLE;
+//             console.log("WORKING_TABLE : " + WORKING_TABLE);
 
-            const queryFields = getTableColums(TABLES[TABLE], TABLE);
-            console.log(queryFields);
+//             const queryFields = getTableColums(TABLES[TABLE], TABLE);
+//             console.log(queryFields);
 
-            // Premiere execution de requete pour obtnenir la liste des champs de la table cible
-            ExecuteQuerySite(
-                pool,
-                { query: queryFields, message: MESSAGE },
-                "select",
-                ( fields, message ) => {
+//             // Premiere execution de requete pour obtnenir la liste des champs de la table cible
+//             ExecuteQuerySite(
+//                 pool,
+//                 { query: queryFields, message: MESSAGE },
+//                 "select",
+//                 ( fields, message ) => {
 
-                    console.log("fields obtenus par la requête : ");
-                    console.log(fields);
+//                     console.log("fields obtenus par la requête : ");
+//                     console.log(fields);
 
-                    if (fields && fields.length > 0) { // Si on a bien des champs retournés
-                        // par exemple :
-                        //  [
-                        //   { column_name: 'uuid_ope' },
-                        //   { column_name: 'code' },
-                        //   { column_name: 'titre' },
+//                     if (fields && fields.length > 0) { // Si on a bien des champs retournés
+//                         // par exemple :
+//                         //  [
+//                         //   { column_name: 'uuid_ope' },
+//                         //   { column_name: 'code' },
+//                         //   { column_name: 'titre' },
 
-                        // Générer la requête d'insertion avec les bons champs
-                        const newUUID = uuidv4();
-                        const queryObject = generateCloneQuery(WORKING_TABLE, fields[0]['column_name'], fields, INSERT_DATA["id"], newUUID, INSERT_DATA["excludeFieldsGroups"]);
-                        console.log(queryObject);
+//                         // Générer la requête d'insertion avec les bons champs
+//                         const newUUID = uuidv4();
+//                         const queryObject = generateCloneQuery(WORKING_TABLE, fields[0]['column_name'], fields, INSERT_DATA["id"], newUUID, INSERT_DATA["excludeFieldsGroups"]);
+//                         console.log(queryObject);
 
-                        // Deuxième execution de requete pour cloner cette fois ci l'élement souhaité
-                        ExecuteQuerySite(
-                            pool,
-                            { query: queryObject, message: MESSAGE },
-                            "insert",
-                            ( resultats, message ) => {
-                                res.setHeader("Access-Control-Allow-Origin", "*");
-                                res.setHeader("Content-Type", "application/json; charset=utf-8");
+//                         // Deuxième execution de requete pour cloner cette fois ci l'élement souhaité
+//                         ExecuteQuerySite(
+//                             pool,
+//                             { query: queryObject, message: MESSAGE },
+//                             "insert",
+//                             ( resultats, message ) => {
+//                                 res.setHeader("Access-Control-Allow-Origin", "*");
+//                                 res.setHeader("Content-Type", "application/json; charset=utf-8");
 
-                                if (message === 'ok') { // le message est ok est dans le cas hors d'un select
-                                    if (TABLE == 'operations') {
-                                        // Si on clone une operation, on doit aussi cloner ses financeurs et animaux liés
-                                        const queryCloneFinanceurs = generateCloneCheckboxQuery('opegerer.operation_financeurs', INSERT_DATA["id"], newUUID);
-                                        ExecuteQuerySite(
-                                            pool,
-                                            { query: queryCloneFinanceurs, message: MESSAGE },
-                                            "insert",
-                                            (resultats, message) => {
-                                                if (message === 'ok') {
-                                                    console.log("Financeurs clonés avec succès.");
-                                                } else {
-                                                    console.error("Erreur lors du clonage des financeurs.");
-                                                }
-                                            }
-                                        );
+//                                 if (message === 'ok') { // le message est ok est dans le cas hors d'un select
+//                                     if (TABLE == 'operations') {
+//                                         // Si on clone une operation, on doit aussi cloner ses financeurs et animaux liés
+//                                         const queryCloneFinanceurs = generateCloneCheckboxQuery('opegerer.operation_financeurs', INSERT_DATA["id"], newUUID);
+//                                         ExecuteQuerySite(
+//                                             pool,
+//                                             { query: queryCloneFinanceurs, message: MESSAGE },
+//                                             "insert",
+//                                             (resultats, message) => {
+//                                                 if (message === 'ok') {
+//                                                     console.log("Financeurs clonés avec succès.");
+//                                                 } else {
+//                                                     console.error("Erreur lors du clonage des financeurs.");
+//                                                 }
+//                                             }
+//                                         );
 
-                                        const queryCloneAnimaux = generateCloneCheckboxQuery('opegerer.operation_animaux', INSERT_DATA["id"], newUUID);
-                                        ExecuteQuerySite(
-                                            pool,
-                                            { query: queryCloneAnimaux, message: MESSAGE },
-                                            "insert",
-                                            (resultats, message) => {
-                                                if (message === 'ok') {
-                                                    console.log("Animaux clonés avec succès.");
-                                                } else {
-                                                    console.error("Erreur lors du clonage des animaux.");
-                                                }
-                                            }
-                                        );
-                                    }
-                                    res.status(201).json({
-                                        success: true,
-                                        message: "Duplication réussie de la ligne " + INSERT_DATA["id"] + " dans la table " + WORKING_TABLE + ".",
-                                        code: 0,
-                                        data: resultats
-                                    });
-                                    console.log("message : " + message);
-                                    console.log("resultats : " + resultats);
-                                } else {
-                                    const currentDateTime = new Date().toISOString();
-                                    console.log(`Échec de la requête à ${currentDateTime}`);
-                                    console.log(queryObject.text);
-                                    console.log(queryObject.values);
-                                    res.status(500).json({
-                                        success: false,
-                                        message: "Erreur, la requête s'est mal exécutée."
-                                    });
-                                }
-                            }
-                        );
+//                                         const queryCloneAnimaux = generateCloneCheckboxQuery('opegerer.operation_animaux', INSERT_DATA["id"], newUUID);
+//                                         ExecuteQuerySite(
+//                                             pool,
+//                                             { query: queryCloneAnimaux, message: MESSAGE },
+//                                             "insert",
+//                                             (resultats, message) => {
+//                                                 if (message === 'ok') {
+//                                                     console.log("Animaux clonés avec succès.");
+//                                                 } else {
+//                                                     console.error("Erreur lors du clonage des animaux.");
+//                                                 }
+//                                             }
+//                                         );
+//                                     }
+//                                     res.status(201).json({
+//                                         success: true,
+//                                         message: "Duplication réussie de la ligne " + INSERT_DATA["id"] + " dans la table " + WORKING_TABLE + ".",
+//                                         code: 0,
+//                                         data: resultats
+//                                     });
+//                                     console.log("message : " + message);
+//                                     console.log("resultats : " + resultats);
+//                                 } else {
+//                                     const currentDateTime = new Date().toISOString();
+//                                     console.log(`Échec de la requête à ${currentDateTime}`);
+//                                     console.log(queryObject.text);
+//                                     console.log(queryObject.values);
+//                                     res.status(500).json({
+//                                         success: false,
+//                                         message: "Erreur, la requête s'est mal exécutée."
+//                                     });
+//                                 }
+//                             }
+//                         );
 
 
-                    } else {
-                        const currentDateTime = new Date().toISOString();
-                        console.log(`Échec de la requête de récupèration des colonnes à ${currentDateTime}`);
-                        console.log("Message de la fonction callback : " + message);
-                        console.log(queryFields.text);
-                        console.log(queryFields.values);
-                        res.status(500).json({
-                            success: false,
-                            message: "Erreur, la requête s'est mal exécutée."
-                        });
-                    }
-                }
-            );
+//                     } else {
+//                         const currentDateTime = new Date().toISOString();
+//                         console.log(`Échec de la requête de récupèration des colonnes à ${currentDateTime}`);
+//                         console.log("Message de la fonction callback : " + message);
+//                         console.log(queryFields.text);
+//                         console.log(queryFields.values);
+//                         res.status(500).json({
+//                             success: false,
+//                             message: "Erreur, la requête s'est mal exécutée."
+//                         });
+//                     }
+//                 }
+//             );
 
 
             
-        } else {
-            const BAD_MESSAGE = "Table " + TABLE + " inconnue dans la liste des tables connues.";
-            console.log(BAD_MESSAGE);
-            res.status(400).json({
-                success: false,
-                message: BAD_MESSAGE
-            });
-        }
-    } catch (error) {
-        console.error("Erreur lors de la mise à jour : ", error);
-        res.status(500).json({
-            success: false,
-            message: "Erreur interne du serveur."
-        });
-    }
-});
+//         } else {
+//             const BAD_MESSAGE = "Table " + TABLE + " inconnue dans la liste des tables connues.";
+//             console.log(BAD_MESSAGE);
+//             res.status(400).json({
+//                 success: false,
+//                 message: BAD_MESSAGE
+//             });
+//         }
+//     } catch (error) {
+//         console.error("Erreur lors de la mise à jour : ", error);
+//         res.status(500).json({
+//             success: false,
+//             message: "Erreur interne du serveur."
+//         });
+//     }
+// });
 
 // Nouvelle route pour gérer l'upload du fichier shapefile avec des données supplémentaires
 router.post(
@@ -895,7 +896,7 @@ router.post(
             const originalname = req.files.file[0].originalname; // Nom du fichier reçu
             const fileName = originalname.split(".").slice(0, -1).join("."); // Nom du fichier reçu avec l'extension
 
-            const uploadPath = path.join(__dirname, "../uploads");
+            const uploadPath = path.join(__dirname, "../../uploads");
             const extractPath = path.join(uploadPath, "extracted"); // Où les zip sont mis les zip extraits
             // const extractedFolder = path.join(extractPath, fileName); // Chemin du zip extrait
 
@@ -1106,7 +1107,7 @@ router.post(
             //     await fs.promises.rm(workingPath, { force: true });
             // }
 
-            const cleanUpFolder = path.join(__dirname, "../uploads/extracted");
+            const cleanUpFolder = path.join(__dirname, "../../uploads/extracted");
             try {
                 const things = await fs.promises.readdir(cleanUpFolder);
                 for (const thing of things) {

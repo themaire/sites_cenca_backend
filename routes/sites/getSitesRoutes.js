@@ -57,6 +57,38 @@ router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
             }
 );
 
+
+router.get("/criteria_travaux/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
+    // A FAIRE POUR PLUS TARD : adapter la fonction executeQueryAndRespond() (utilisée de partout sur toutes le routes) pour qu'elle puisse prendre en compte les paramètres de la requête
+
+    const queryObject = selectListTravauxQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
+    console.log(
+        "Requête pour les critères de recherche de sites : " +
+            JSON.stringify(queryObject)
+    );
+
+                ExecuteQuerySite(
+                    pool,
+                    { message: "/sites/criteria/type/code...", query: queryObject },
+                    "select",
+                    ( resultats, message ) => {
+                        if (resultats.length > 0 || message == "ok") {
+                        const json = JSON.stringify(resultats);
+                        // console.log(json);
+                        res.setHeader("Access-Control-Allow-Origin", "*");
+                        res.setHeader("Content-Type", "application/json; charset=utf-8");
+                        res.end(json);
+                        } else {
+                        const json = JSON.stringify([]);
+                        res.setHeader("Access-Control-Allow-Origin", "*");
+                        res.setHeader("Content-Type", "application/json; charset=utf-8");
+                        res.end(json);
+                        }
+                    }
+                );
+            }
+);
+
 // Données d'un site par son uuid
 router.get("/uuid=:uuid", (req, res) => {
     let { SelectFields, FromTable, where, message, json } = reset();
@@ -488,36 +520,41 @@ router.get("/objectifs/uuid=:uuid/:mode", (req, res) => {
 });
 
 // Selectors de la barre de recherche de sites par critères
-router.get("/selectors", (req, res) => {
+router.get("/selectors_sites", (req, res) => {
     distinctSiteResearch(
         pool,
+        'sitcenca.listesitescenca',
         [],
         "milieux_naturels",
         "Milieux naturels",
         (selectors) => {
             distinctSiteResearch(
                 pool,
+                'sitcenca.listesitescenca',
                 selectors,
                 "responsable",
                 "Responsable",
                 (selectors) => {
                     distinctSiteResearch(
                         pool,
+                        'sitcenca.listesitescenca',
                         selectors,
                         "bassin_agence",
                         "Bassin agence",
-                        (selectors) => {
-                            distinctSiteResearch(
-                                pool,
-                                selectors,
-                                "prem_ctr",
-                                "Premier contrat",
-                                (selectors) => {
-                                    distinctSiteResearch(
-                                        pool,
-                                        selectors,
-                                        "fin",
-                                        "Fin acte",
+                        // (selectors) => {
+                            // distinctSiteResearch(
+                                // pool,
+                                // 'sitcenca.listesitescenca',
+                                // selectors,
+                                // "prem_ctr",
+                                // "Premier contrat",
+                                // (selectors) => {
+                                //     distinctSiteResearch(
+                                        // pool,
+                                        // 'sitcenca.listesitescenca',
+                                        // selectors,
+                                        // "fin",
+                                        // "Fin acte",
                                         (selectors) => {
                                             const json =
                                                 JSON.stringify(selectors);
@@ -530,10 +567,70 @@ router.get("/selectors", (req, res) => {
                                                 "application/json; charset=UTF-8"
                                             );
                                             res.end(json);
-                                        }
-                                    );
-                                }
-                            );
+                                        // }
+                                    // );
+                                //}
+                            // );
+                        }
+                    );
+                }
+            );
+        }
+    );
+});
+
+// Selectors de la barre de recherche de projets par critères
+router.get("/selectors_projets", (req, res) => {
+    distinctSiteResearch(
+        pool,
+        'ope.listeprojets',
+        [],
+        "type_projet",
+        "Type de projet",
+        (selectors) => {
+            distinctSiteResearch(
+                pool,
+                'ope.listeprojets',
+                selectors,
+                "annee",
+                "Année",
+                (selectors) => {
+                    distinctSiteResearch(
+                        pool,
+                        'ope.listeprojets',
+                        selectors,
+                        "responsable",
+                        "Responsable",
+                        // (selectors) => {
+                            // distinctSiteResearch(
+                                // pool,
+                                // 'ope.listeprojets',
+                                // selectors,
+                                // "statut",
+                                // "Statut",
+                                // (selectors) => {
+                                //     distinctSiteResearch(
+                                        // pool,
+                                        // 'ope.listeprojets',
+                                        // selectors,
+                                        // "fin",
+                                        // "Fin acte",
+                                        (selectors) => {
+                                            const json =
+                                                JSON.stringify(selectors);
+                                            res.setHeader(
+                                                "Access-Control-Allow-Origin",
+                                                "*"
+                                            );
+                                            res.setHeader(
+                                                "Content-type",
+                                                "application/json; charset=UTF-8"
+                                            );
+                                            res.end(json);
+                                        // }
+                                    // );
+                                //}
+                            // );
                         }
                     );
                 }
