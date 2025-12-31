@@ -519,7 +519,7 @@ router.get("/objectifs/uuid=:uuid/:mode", (req, res) => {
     ); // Retourne un ou plusieurs résultats
 });
 
-// Selectors de la barre de recherche de sites par critères
+// SITE Selectors de la barre de recherche de sites par critères
 router.get("/selectors_sites", (req, res) => {
     distinctSiteResearch(
         pool,
@@ -579,7 +579,7 @@ router.get("/selectors_sites", (req, res) => {
     );
 });
 
-// Selectors de la barre de recherche de projets par critères
+// PROJECT Selectors de la barre de recherche de projets par critères
 router.get("/selectors_projets", (req, res) => {
     distinctSiteResearch(
         pool,
@@ -645,9 +645,10 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
     const list = req.params.list;
     const option = req.params.option;
     message = "/sites/selectvalues/" + list + "/" + option;
+    console.log(`[DEBUG selectvalues] list='${String(list)}' option='${String(option)}' originalUrl='${req.originalUrl}'`);
     let order = undefined;
 
-    console.log("Demande de la liste de choix de la table " + list);
+    console.log("Demande de la liste de choix de la table " + list + (option === undefined ? "" : " avec option " + option));
 
     SelectFields = "SELECT ";
 
@@ -671,36 +672,61 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         "unites",
         "pression_maitrise",
         "doc_type",
+        "all",
+        "out",
+        "financement_agence",
+        "types_acte",
+        "type_proprio",
+        "besoin_appuis",
+        "validation_ca",
+        "priorite",
+        "status",
+        "prochaine_etape",
     ];
 
     if (simpleTables.includes(list)) {
         SelectFields += "cd_type, libelle ";
+
     } else if (list == "ope.actions") {
         SelectFields += "cd_action as cd_type, libelle, commentaire ";
+
     } else if (list == "ope.financeurs") {
         SelectFields += "cd_prog as cd_type, nom, annee, statut ";
+
     } else if (list == "ope.typ_interventions") {
         SelectFields += "cd_type, lib_type as libelle ";
+
     } else if (list == "opegerer.typ_amenagements") {
         SelectFields +=
             "cd_type as cd_type, libelle, categorie, libelle_pluriel ";
+
     } else if (list == "typ_travauxsol") {
         SelectFields +=
             "cd_type, libelle, val_tri, val_filtre, libelle_pluriel ";
+
     } else if (list == "opegerer.typ_troupeaux") {
         SelectFields +=
             "cd_type, libelle, coef_ugb, right(cd_supra,3) as code_supp, niveau ";
+
     } else if (list == "ope.listprogrammes") {
         SelectFields += "cd_programme as cd_type, cd_programme || ' - ' || libelle as libelle ";
-    } else if (
+
+    } else if ( // Tables de libelles
         list == "opegerer.libelles" ||
         list == "sitcenca.libelles"
     ) {
         SelectFields += "lib_id as cd_type, lib_libelle as libelle ";
+        
     } else if (list == "files.libelles") {
         SelectFields += "lib_id as cd_type, lib_libelle as libelle, lib_path as path, lib_field as field ";
+
     } else if (list == "admin.salaries") {
-        SelectFields += "cd_salarie as cd_type, prenom || ' ' || nom as libelle ";
+        if (option == "all") {
+            SelectFields += "cd_salarie as cd_type, prenom || ' ' || nom as libelle ";
+        } else {
+            SelectFields += "cd_salarie as cd_type, prenom || ' ' || nom as libelle, case when typ_fonction not in ('COM', 'COMP', 'DIR', 'GEOM', 'RAF', 'SC', 'SECR', 'STAG') then 1 else 0 end as is_ope ";
+        }
+
     }
 
     FromTable = "FROM " + list + " ";
@@ -730,21 +756,44 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
                 "where left(cd_programme,2) in ('24', '25') order by cd_programme;";
         } else if (
             (list == "opegerer.libelles" || list == "sitcenca.libelles") &&
-            libelles_names.includes(option)
+            libelles_names.includes(((option || "").split("-")[0]))
         ) {
-            // Si l'option est dans la liste des libelles_names
-            // sera dynamique en fonction de l'option choisi c'est a dire la famille de libelles.
-            where =
-                "where libnom_id = (SELECT libnom_id FROM " +
-                list +
-                "_nom" +
-                " where libnom_nom = '" +
-                option +
-                "') order by lib_ordre;";
+            // Si l'option nécessite un filtrage supplémentaire
+            // Mapping option -> liste d'IDs `lib_id`. Ajouter d'autres cas ici si besoin.
+            const optionLibIdMap = {
+                agence: [9, 10, 11, 12, 13, 7, 1],
+                // ex: autre_option: [2,3,4],
+            };
+
+            const parts = (option || "").split("-");
+            const base = parts[0] || ""; // ex 'financement_agence'
+            const modifier = parts[1] || ""; // ex 'agence'
+
+            let libnom_nom = "";
+            if (modifier && modifier.includes("agence")) {
+                libnom_nom = base;
+            } else {
+                libnom_nom = option || base;
+            }
+
+            // Construire la clause WHERE en utilisant `libnom_nom`
+            where = "";
+            where +=
+                "where libnom_id = (SELECT libnom_id FROM " + list + "_nom" + " where libnom_nom = '" + libnom_nom + "')";
+
+            const mapKey = modifier || base;
+            if (optionLibIdMap[mapKey]) {
+                where += " and lib_id in (" + optionLibIdMap[mapKey].join(", ") + ")";
+            }
+
+            where += " order by lib_ordre;";
+            
         } else if (list == "files.libelles") {
             where = "where libnom_id =" + option + " order by lib_ordre;";
-        } else if (list == "admin.salaries") {
+
+        } else if (list == "admin.salaries" && option == undefined) {
             where = "where statut is true order by prenom;";
+
         } else if (list == "files.libelles") {
             where = "order by lib_ordre;";
         } else {
@@ -752,6 +801,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         }
     }
 
+    // Si l'option est dans la liste des libelles_names
     if (libelles_names.includes(option)) {
         console.log(
             "---------------Demande de la liste de choix de la table " +
@@ -759,7 +809,10 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
                 " pour l'option " +
                 option
         );
-        // Si l'option est dans la liste des libelles_names
+
+        if (list == "admin.salaries" && option == "all") {
+            where = "order by prenom;";
+        }
     } else {
         console.log(
             "option " + option + " n'est pas dans la liste des libelles_names"
@@ -861,13 +914,13 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
     message = "projets/pmfu/id/" + req.params.mode;
     const mode = req.params.mode;
     if (mode === "lite") {
-        SelectFields = `SELECT pmfu_id, pmfu_nom, pmfu_responsable, pmfu_commune, pmfu_type_acte `;
+        SelectFields = `SELECT pmfu_id, pmfu_nom, pmfu_responsable, pmfu_commune_nom, pmfu_type_acte `;
         FromTable = "FROM sitcenca.projets_mfu;";
         where = "";
         req.params.id = null;
     } else if (mode === "full") {
         SelectFields = 'SELECT p.pmfu_id, p.pmfu_nom, p.pmfu_responsable, p.pmfu_createur, p.pmfu_agence, p.pmfu_associe, p.pmfu_proch_etape, p.pmfu_dep, p.pmfu_territoire, ';
-        SelectFields += 'p.pmfu_type_acte, p.pmfu_commune, p.pmfu_annee_debut, p.pmfu_proprietaire, p.pmfu_appui, p.appui_desc, p.pmfu_quest_juri, p.pmfu_validation, ';
+        SelectFields += 'p.pmfu_type_acte, p.pmfu_commune_insee, p.pmfu_commune_nom, p.pmfu_annee_debut, p.pmfu_proprietaire, p.pmfu_appui, p.pmfu_appui_desc, p.pmfu_quest_juri, p.pmfu_validation, ';
         SelectFields += 'p.pmfu_mes_comp, p.pmfu_cout, p.pmfu_financements, p.pmfu_superficie, p.pmfu_priorite, p.pmfu_status, p.pmfu_annee_signature, p.pmfu_echeances, p.pmfu_creation, ';
         SelectFields += 'p.pmfu_derniere_maj, COUNT(*) FILTER (WHERE d.doc_type = 1) AS photos_site_nb, ';
         SelectFields += 'COUNT(*) FILTER (WHERE d.doc_type = 2) AS projet_acte_nb, COUNT(*) FILTER (WHERE d.doc_type = 3) AS decision_bureau_nb, COUNT(*) FILTER (WHERE d.doc_type = 4) AS note_bureau_nb, pmfu_parc_list ';

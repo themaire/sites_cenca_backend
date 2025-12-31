@@ -820,19 +820,29 @@ function createBasicAuth(username, password) {
  * @param {string} codeInsee - Code INSEE de la commune
  * @returns {Promise<Object>} - Objet contenant toutes les propriétés principales de la commune
  */
-async function getCommuneDetails(codeInsee) {
+async function getCommuneDetails(codeInsee, mode = 'full') {
     return new Promise((resolve, reject) => {
         if (!codeInsee || typeof codeInsee !== 'string') {
             return reject(new Error('Code INSEE invalide'));
         }
-        // Champs principaux à récupérer
-        const fields = [
-            'nom', 'code', 'codesPostaux', 'population', 'surface', 'centre', 'contour',
-            'codeDepartement', 'departement', 'codeRegion', 'region', 'siren', 'epci', 'arrondissement', 'type', 'intercommunalite', 'ancienCode', 'ancienNom'
-        ];
+
+        // Choisir les champs selon le mode
+        let fields;
+        if (mode === 'nom') {
+            // Mode minimal : nom et code département
+            fields = ['nom', 'codeDepartement', 'code'];
+        } else {
+            // Mode full par défaut : tous les champs utiles
+            fields = [
+                'nom', 'code', 'codesPostaux', 'population', 'surface', 'centre', 'contour',
+                'codeDepartement', 'departement', 'codeRegion', 'region', 'siren', 'epci', 'arrondissement', 'type', 'intercommunalite', 'ancienCode', 'ancienNom'
+            ];
+        }
+
         const url = `https://geo.api.gouv.fr/communes/${codeInsee}?fields=${fields.join(',')}&format=json`;
-        console.log(`[API_IGN] Récupération des détails pour la commune ${codeInsee}`);
+        console.log(`[API_IGN] Récupération des détails pour la commune ${codeInsee} (mode=${mode})`);
         console.log(`[API_IGN] URL: ${url}`);
+
         https.get(url, (response) => {
             let data = '';
             response.on('data', (chunk) => { data += chunk; });
@@ -840,19 +850,25 @@ async function getCommuneDetails(codeInsee) {
                 try {
                     const commune = JSON.parse(data);
                     if (commune && commune.code === codeInsee) {
-                        resolve(commune);
+                        if (mode === 'nom') {
+                            // composer "Nom (DD)" — préférer codeDepartement s'il existe
+                            const dept = commune.codeDepartement || (commune.code ? commune.code.substring(0, 2) : '');
+                            const nom = commune.nom || '';
+                            return resolve(`${nom} (${dept})`);
+                        }
+                        return resolve(commune);
                     } else {
                         console.error('[API_IGN] Commune non trouvée ou réponse inattendue:', commune);
-                        reject(new Error('Commune non trouvée ou réponse inattendue'));
+                        return reject(new Error('Commune non trouvée ou réponse inattendue'));
                     }
                 } catch (err) {
                     console.error('[API_IGN] Erreur lors du parsing JSON:', err);
-                    reject(new Error(`Erreur lors du parsing de la réponse: ${err.message}`));
+                    return reject(new Error(`Erreur lors du parsing de la réponse: ${err.message}`));
                 }
             });
         }).on('error', (error) => {
             console.error('[API_IGN] Erreur lors de la requête:', error);
-            reject(new Error(`Erreur réseau: ${error.message}`));
+            return reject(new Error(`Erreur réseau: ${error.message}`));
         });
     });
 }

@@ -70,6 +70,7 @@ Date de migration : 16 octobre 2025 🚀
 // Import des fonctions GEO API (IGN + Lizmap)
 const { 
     getCommunesByDepartements, 
+    getCommuneDetails,
     getParcellesCadastrales,
     getParcellesByCommune,
     parseBboxString,
@@ -195,15 +196,22 @@ router.get("/communes", async (req, res) => {
 
 /**
  * Route pour récupérer le détail d'une commune par code INSEE
- * GET /api-geo/commune/:codeInsee
+ * GET /api-geo/commune/:codeInsee/:mode?
+ * Paramètres URL:
+ * - codeInsee: code INSEE de la commune
+ * - mode (optionnel): "full" pour détails complets, sinon nom
  */
-router.get("/commune/:codeInsee", async (req, res) => {
+router.get("/commune/:codeInsee/:mode?", async (req, res) => {
     try {
+        console.log("[API-GEO] Demande de récupération du détail d'une commune");
+        console.log(`[API-GEO] Code INSEE: ${req.params.codeInsee}, Mode: ${req.params.mode || 'full'}`);
         const codeInsee = req.params.codeInsee;
-        const commune = await getCommuneDetails(codeInsee);
+        const mode = req.params.mode || 'full';
+        const commune = await getCommuneDetails(codeInsee, mode);
         res.status(200).json({
             success: true,
-            data: commune
+            data: commune,
+            mode: mode
         });
     } catch (error) {
         console.error("[API-GEO] Erreur lors de la récupération de la commune:", error);
