@@ -6,6 +6,7 @@
 
 services:
   node_app:
+    user: "0:0"  # Exécuter en tant que root pour accéder aux certificats SSL
     environment:
       - NODE_ENV=production
     volumes:
