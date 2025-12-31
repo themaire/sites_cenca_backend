@@ -914,8 +914,9 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
     message = "projets/pmfu/id/" + req.params.mode;
     const mode = req.params.mode;
     if (mode === "lite") {
-        SelectFields = `SELECT pmfu_id, pmfu_nom, pmfu_responsable, pmfu_commune_nom, pmfu_type_acte `;
-        FromTable = "FROM sitcenca.projets_mfu;";
+        SelectFields = `SELECT p.pmfu_id, p.pmfu_nom, p.pmfu_responsable, p.pmfu_commune_nom, l.lib_libelle as type_acte `;
+        FromTable = "FROM sitcenca.projets_mfu p ";
+        FromTable += "LEFT JOIN sitcenca.libelles l ON p.pmfu_type_acte = l.lib_id;";
         where = "";
         req.params.id = null;
     } else if (mode === "full") {
