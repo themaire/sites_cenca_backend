@@ -682,6 +682,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         "priorite",
         "status",
         "prochaine_etape",
+        "territoire"
     ];
 
     if (simpleTables.includes(list)) {
@@ -903,6 +904,7 @@ router.get("/gen_fiche_travaux/uuid_proj=:uuid", async (req, res) => {
     }
 });
 
+// Pour récuperer les projets MFU
 router.get("/pmfu/id=:id/:mode", (req, res) => {
     console.log(
         "Demande de pmfu pour l'id " +

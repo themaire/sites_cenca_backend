@@ -1169,9 +1169,7 @@ router.put("/put/table=docs", async (req, res) => {
                 // Préparer les fichiers à insérer
                 const filesToInsert = [];
 
-                for (const [fieldName, files] of Object.entries(
-                    req.files || {}
-                )) {
+                for (const [fieldName, files] of Object.entries( req.files || {} )) {
                     const docType = fieldToType[fieldName];
                     if (!docType) {
                         console.warn(
@@ -1193,9 +1191,9 @@ router.put("/put/table=docs", async (req, res) => {
                             doc_path: cleanedPath,
                         });
 
-                        // --- AJOUT : garantir les droits 664 sur chaque fichier uploadé ---
+                        // --- AJOUT : garantir les droits 666 sur chaque fichier uploadé ---
                         try {
-                            fs.chmodSync(file.path, 0o664);
+                            fs.chmodSync(file.path, 0o666);
                         } catch (e) {
                             console.warn(`Impossible de changer les droits du fichier ${file.path}:`, e.message);
                         }
