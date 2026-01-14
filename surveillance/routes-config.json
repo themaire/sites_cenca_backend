@@ -1,14 +1,14 @@
 {
   "metadata": {
     "description": "Configuration complète des routes CENCA avec paramètres",
-    "generated": "2026-01-05T15:43:04.505Z",
+    "generated": "2026-01-09T15:27:37.401Z",
     "version": "2.1.0",
     "stats": {
       "totalRoutes": 13,
       "routesWithParams": 5,
       "enabledRoutes": 0
     },
-    "lastUpdate": "2026-01-05T15:43:04.508Z"
+    "lastUpdate": "2026-01-09T15:27:37.403Z"
   },
   "settings": {
     "defaultTimeout": 15000,

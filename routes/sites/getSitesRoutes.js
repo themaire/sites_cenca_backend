@@ -249,7 +249,7 @@ router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
     ); // Retourne un ou plusieurs résultats
 });
 
-// Les projets
+// Les projets travaux
 router.get("/projets/uuid=:uuid/:mode", (req, res) => {
     const mode = req.params.mode; // 'lite' ou 'full'
     const type = req.query.type || null; // Paramètre optionnel "type"
@@ -916,8 +916,9 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
     message = "projets/pmfu/id/" + req.params.mode;
     const mode = req.params.mode;
     if (mode === "lite") {
-        SelectFields = `SELECT p.pmfu_id, p.pmfu_nom, p.pmfu_responsable, p.pmfu_commune_nom, l.lib_libelle as type_acte `;
+        SelectFields = `SELECT p.pmfu_id, p.pmfu_nom, left(s.prenom, 1) || ' ' || s.nom as pmfu_responsable, p.pmfu_commune_nom, l.lib_libelle as type_acte `;
         FromTable = "FROM sitcenca.projets_mfu p ";
+        FromTable += "LEFT JOIN admin.salaries s ON p.pmfu_responsable = s.cd_salarie ";
         FromTable += "LEFT JOIN sitcenca.libelles l ON p.pmfu_type_acte = l.lib_id;";
         where = "";
         req.params.id = null;
@@ -945,6 +946,7 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
     );
 });
 
+// Pour récuperer les documents liés à des éléments (sites, projets mfu ...).
 router.get("/docs/:section/cd_type=:cd_type/:mode/:ref_id?",
     async (req, res) => {
         let { SelectFields, FromTable, where, message } = reset();

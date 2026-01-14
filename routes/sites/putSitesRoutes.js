@@ -30,10 +30,13 @@ const unzipper = require("unzipper");
 const ROOT_DIR = path.join("/");
 console.log("Racine du projet:", ROOT_DIR);
 // 1. Définir le dossier des fichiers
+
 const FILES_DIR = path.resolve(ROOT_DIR, "mnt", "storage_data", "app");
 // 2. Définir le dossier des images
+
 const IMAGES_DIR = path.resolve(FILES_DIR, "photos");
 console.log("Dossier images:", IMAGES_DIR);
+
 // 3. Définir le dossier des fichiers en cache
 const CACHE_DIR = path.resolve(FILES_DIR, "cache");
 console.log("Dossier cache:", CACHE_DIR);
@@ -97,6 +100,8 @@ loadMulterFieldsConfig();
 // Const storage pour renommer les pmfu_docs reçus
 const storagePmfu = multer.diskStorage({
     destination: (req, file, cb) => {
+        console.log("Le fichier reçu - tableau nommé file  :", file);
+
         // Récupération du dossier correspondant au nom
         const folderName = uploadFolders[file.fieldname] || "autres";
         const folder = path.join(FILES_DIR, folderName);
@@ -111,12 +116,10 @@ const storagePmfu = multer.diskStorage({
     filename: (req, file, cb) => {
         const refId = req.body.ref_id;
         const now = new Date();
-        const date = `${now.getFullYear()}-${
-            now.getMonth() + 1
-        }-${now.getDate()}-${now.getMilliseconds()}`;
-        const extension = path.extname(file.originalname).toLowerCase();
+        const date = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${now.getMilliseconds()}`;
+        // const extension = path.extname(file.originalname).toLowerCase();
 
-        const filename = `doc_${refId}_${date}${extension}`;
+        const filename = `doc_${refId}_${date}_${file.originalname}`;
         cb(null, filename);
     },
 });

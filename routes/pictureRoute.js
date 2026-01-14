@@ -24,6 +24,7 @@ if (!fs.existsSync(CACHE_DIR)) {
  * Route pour servir les images redimensionnées
  */
 router.get("/img", async (req, res) => {
+    // req.query contient les paramètres GET de la requête
     const { file, width } = req.query;
     console.log("Demande d'image " + file + " en largeur " + width);
 
@@ -37,7 +38,10 @@ router.get("/img", async (req, res) => {
     }
 
     const originalPath = path.join(IMAGES_DIR, file);
-    const cachePath = path.join(CACHE_DIR, `${w}-${file}`);
+    
+    // Remplacer les / par _ dans le nom de fichier pour le cache
+    const safeFileName = file.replace(/\//g, '_');
+    const cachePath = path.join(CACHE_DIR, `${w}-${safeFileName}`);
 
     try {
         // Vérifie si le fichier existe déjà en cache
@@ -48,6 +52,8 @@ router.get("/img", async (req, res) => {
         // Vérifie que l'image originale existe
         if (!fs.existsSync(originalPath)) {
             return res.status(404).send("Image originale introuvable");
+        }else{
+            console.log("fichier à redimensionner trouvé : " + originalPath)
         }
 
         // Redimensionne et écrit en cache

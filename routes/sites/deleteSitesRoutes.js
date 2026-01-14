@@ -148,8 +148,9 @@ router.delete("/delete/:table", (req, res) => {
                     "application/json; charset=utf-8"
                 );
 
+                // Si la suppression en base de données est un succès, on supprime les fichiers physiquement (fichier plus eventuel fichier de cache)
                 if (message === "ok") {
-                    //  suppression physique avec check path traversal
+                    // suppression physique avec check path traversal
                     const uploadsDir = path.join('/mnt/storage_data/app');
                     console.log("uploadsDir:", uploadsDir);
 
@@ -161,7 +162,7 @@ router.delete("/delete/:table", (req, res) => {
                     const cachePath = path.resolve(cacheDir, '200-' + doc_path.split('/').pop());
                     console.log("cache path:", cachePath);
                     
-                    // Vérification : le fichier doit être dans le dossier downloads
+                    // Vérification : le fichier doit être dans le bon dossier
                     if (!filePath.startsWith(uploadsDir)) {
                         console.warn("Tentative de path traversal détectée:", doc_path);
                         return res.status(400).json({
