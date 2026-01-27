@@ -380,7 +380,7 @@ async function detectShapefileGeometryType(shpPath, dbfPath) {
 function convertToWKT(coordinates, typeGeometry = null) {
     console.log("Coordonnées brutes:", coordinates);
 
-    // Si le type est explicitement passé, on l'utilise, sinon on déduit
+    // Si le type est explicitement passé, on l'utilise
     let type = typeGeometry ? typeGeometry.toUpperCase() : null;
 
     // Détection automatique si type non fourni
@@ -416,21 +416,20 @@ function convertToWKT(coordinates, typeGeometry = null) {
             .join(", ");
     } else if (type === "POLYGON") {
         const processPolygon = (polygon) => {
-            const uniqueCoords = polygon.filter(
-                (coord, index, self) =>
-                    index ===
-                    self.findIndex(
-                        (c) => c[0] === coord[0] && c[1] === coord[1]
-                    )
-            );
-            if (
-                uniqueCoords[0][0] !==
-                    uniqueCoords[uniqueCoords.length - 1][0] ||
-                uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]
-            ) {
-                uniqueCoords.push(uniqueCoords[0]);
+            // Ne PAS filtrer les doublons, juste vérifier que le polygone est fermé
+            const coords = polygon.map(coord => [coord[0], coord[1]]); // Ignorer le Z si présent
+            
+            // Vérifier si le premier et dernier point sont identiques (polygone fermé)
+            const isClosedPolygon = 
+                coords[0][0] === coords[coords.length - 1][0] &&
+                coords[0][1] === coords[coords.length - 1][1];
+            
+            // Si pas fermé, fermer le polygone
+            if (!isClosedPolygon) {
+                coords.push([coords[0][0], coords[0][1]]);
             }
-            return uniqueCoords
+            
+            return coords
                 .map((coord) => `${coord[0]} ${coord[1]}`)
                 .join(", ");
         };
@@ -439,21 +438,20 @@ function convertToWKT(coordinates, typeGeometry = null) {
             .join(",");
     } else if (type === "MULTIPOLYGON") {
         const processPolygon = (polygon) => {
-            const uniqueCoords = polygon.filter(
-                (coord, index, self) =>
-                    index ===
-                    self.findIndex(
-                        (c) => c[0] === coord[0] && c[1] === coord[1]
-                    )
-            );
-            if (
-                uniqueCoords[0][0] !==
-                    uniqueCoords[uniqueCoords.length - 1][0] ||
-                uniqueCoords[0][1] !== uniqueCoords[uniqueCoords.length - 1][1]
-            ) {
-                uniqueCoords.push(uniqueCoords[0]);
+            // Ne PAS filtrer les doublons, juste vérifier que le polygone est fermé
+            const coords = polygon.map(coord => [coord[0], coord[1]]); // Ignorer le Z si présent
+            
+            // Vérifier si le premier et dernier point sont identiques (polygone fermé)
+            const isClosedPolygon = 
+                coords[0][0] === coords[coords.length - 1][0] &&
+                coords[0][1] === coords[coords.length - 1][1];
+            
+            // Si pas fermé, fermer le polygone
+            if (!isClosedPolygon) {
+                coords.push([coords[0][0], coords[0][1]]);
             }
-            return uniqueCoords
+            
+            return coords
                 .map((coord) => `${coord[0]} ${coord[1]}`)
                 .join(", ");
         };
