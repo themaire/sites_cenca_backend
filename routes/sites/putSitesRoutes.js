@@ -162,7 +162,7 @@ const fileFilter = (req, file, cb) => {
     }
 };
 // Configuration de multer pour gérer l'upload de fichiers
-// Configuration Multer modifiée
+// Configuration Multer modifiée pour les shapefiles zippés
 const multerMiddlewareZip = multer({
     dest: "uploads/",
     fileFilter: (req, file, cb) => {
@@ -184,6 +184,29 @@ const multerMiddlewareZip = multer({
     { name: "type_geometry", maxCount: 1 },
 ]);
 
+// Configuration Multer pour les fichiers GeoJSON
+const multerMiddlewareGeoJSON = multer({
+    dest: "uploads/",
+    fileFilter: (req, file, cb) => {
+        if (
+            file.mimetype === "application/json" ||
+            file.mimetype === "application/geo+json" ||
+            file.originalname.endsWith(".geojson") ||
+            file.originalname.endsWith(".json")
+        ) {
+            cb(null, true);
+        } else {
+            cb(
+                new Error(
+                    "Format de fichier non supporté. Seuls les .geojson et .json sont acceptés."
+                )
+            );
+        }
+    },
+}).fields([
+    { name: "file", maxCount: 1 },
+]);
+
 /**
  * Middleware Multer pour l'upload de documents
  * @returns {import("multer").Multer}
@@ -196,6 +219,60 @@ function createMulterMiddlewareDoc() {
 }
 
 let multerMiddlewareDoc = createMulterMiddlewareDoc();
+
+/**
+ * Fonction commune pour insérer une géométrie dans la base de données
+ * @param {Object} wktData - Données WKT {type, EWKT}
+ * @param {string} uuid_ope - UUID de l'opération
+ * @param {Object} properties - Propriétés additionnelles de la géométrie
+ * @returns {Promise<Object>} - Résultat de l'insertion
+ */
+async function insertGeometryToDB(wktData, uuid_ope, properties = {}) {
+    // Détermination de la colonne de géométrie
+    let geomColumn = "";
+    if (wktData.type.trim().endsWith("POLYGON")) {
+        geomColumn = "loc_poly";
+    } else if (wktData.type === "POINT") {
+        geomColumn = "loc_point";
+    } else if (wktData.type === "LINESTRING") {
+        geomColumn = "loc_line";
+    } else {
+        throw new Error(`Type de géométrie non supporté: ${wktData.type}`);
+    }
+
+    console.log(`Type de géométrie:`, wktData.type);
+    console.log(`Colonne cible:`, geomColumn);
+    console.log(`WKT:`, wktData.EWKT);
+
+    // Créer l'objet de requête
+    const queryObject = {
+        text: `INSERT INTO opegerer.localisations (${geomColumn}, ref_uuid_ope) VALUES (ST_GeomFromEWKT($1), $2);`,
+        values: [wktData.EWKT, uuid_ope],
+    };
+
+    // Exécuter la requête
+    return new Promise((resolve, reject) => {
+        ExecuteQuerySite(
+            pool,
+            {
+                query: queryObject,
+                message: `insert ${wktData.type} to opegerer.localisations`,
+            },
+            "insert",
+            (resultats, message) => {
+                if (message === "ok") {
+                    resolve({
+                        success: true,
+                        type: wktData.type,
+                        data: resultats,
+                    });
+                } else {
+                    reject(new Error(message));
+                }
+            }
+        );
+    });
+}
 
 // Mettre à jour un site, un acte, un projet, une operation ...
 router.put("/put/table=:table/uuid=:uuid", (req, res) => {
@@ -716,142 +793,6 @@ router.put("/put/table=:table/clone", (req, res) => {
     }
 });
 
-// Dupliquer un projet complet ou une operation.
-// DOUBLON??
-// router.put("/put/table=:table/clone", (req, res) => {
-//     const TABLE = req.params.table;
-//     const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
-//     console.log("Body reçu pour la duplication :", INSERT_DATA);
-//     const MESSAGE = "sites/put/table=" + TABLE + "/clone";
-//     // Tables possibles pour des differents insert. En clé le nom de la table, en valeur son schema
-//     const TABLES = {'projets':'opegerer', 'operations':'opegerer'};
-
-//     try {
-//         if (Object.keys(TABLES).includes(TABLE)) {
-            
-//             const WORKING_TABLE = TABLES[TABLE] + "." + TABLE;
-//             console.log("WORKING_TABLE : " + WORKING_TABLE);
-
-//             const queryFields = getTableColums(TABLES[TABLE], TABLE);
-//             console.log(queryFields);
-
-//             // Premiere execution de requete pour obtnenir la liste des champs de la table cible
-//             ExecuteQuerySite(
-//                 pool,
-//                 { query: queryFields, message: MESSAGE },
-//                 "select",
-//                 ( fields, message ) => {
-
-//                     console.log("fields obtenus par la requête : ");
-//                     console.log(fields);
-
-//                     if (fields && fields.length > 0) { // Si on a bien des champs retournés
-//                         // par exemple :
-//                         //  [
-//                         //   { column_name: 'uuid_ope' },
-//                         //   { column_name: 'code' },
-//                         //   { column_name: 'titre' },
-
-//                         // Générer la requête d'insertion avec les bons champs
-//                         const newUUID = uuidv4();
-//                         const queryObject = generateCloneQuery(WORKING_TABLE, fields[0]['column_name'], fields, INSERT_DATA["id"], newUUID, INSERT_DATA["excludeFieldsGroups"]);
-//                         console.log(queryObject);
-
-//                         // Deuxième execution de requete pour cloner cette fois ci l'élement souhaité
-//                         ExecuteQuerySite(
-//                             pool,
-//                             { query: queryObject, message: MESSAGE },
-//                             "insert",
-//                             ( resultats, message ) => {
-//                                 res.setHeader("Access-Control-Allow-Origin", "*");
-//                                 res.setHeader("Content-Type", "application/json; charset=utf-8");
-
-//                                 if (message === 'ok') { // le message est ok est dans le cas hors d'un select
-//                                     if (TABLE == 'operations') {
-//                                         // Si on clone une operation, on doit aussi cloner ses financeurs et animaux liés
-//                                         const queryCloneFinanceurs = generateCloneCheckboxQuery('opegerer.operation_financeurs', INSERT_DATA["id"], newUUID);
-//                                         ExecuteQuerySite(
-//                                             pool,
-//                                             { query: queryCloneFinanceurs, message: MESSAGE },
-//                                             "insert",
-//                                             (resultats, message) => {
-//                                                 if (message === 'ok') {
-//                                                     console.log("Financeurs clonés avec succès.");
-//                                                 } else {
-//                                                     console.error("Erreur lors du clonage des financeurs.");
-//                                                 }
-//                                             }
-//                                         );
-
-//                                         const queryCloneAnimaux = generateCloneCheckboxQuery('opegerer.operation_animaux', INSERT_DATA["id"], newUUID);
-//                                         ExecuteQuerySite(
-//                                             pool,
-//                                             { query: queryCloneAnimaux, message: MESSAGE },
-//                                             "insert",
-//                                             (resultats, message) => {
-//                                                 if (message === 'ok') {
-//                                                     console.log("Animaux clonés avec succès.");
-//                                                 } else {
-//                                                     console.error("Erreur lors du clonage des animaux.");
-//                                                 }
-//                                             }
-//                                         );
-//                                     }
-//                                     res.status(201).json({
-//                                         success: true,
-//                                         message: "Duplication réussie de la ligne " + INSERT_DATA["id"] + " dans la table " + WORKING_TABLE + ".",
-//                                         code: 0,
-//                                         data: resultats
-//                                     });
-//                                     console.log("message : " + message);
-//                                     console.log("resultats : " + resultats);
-//                                 } else {
-//                                     const currentDateTime = new Date().toISOString();
-//                                     console.log(`Échec de la requête à ${currentDateTime}`);
-//                                     console.log(queryObject.text);
-//                                     console.log(queryObject.values);
-//                                     res.status(500).json({
-//                                         success: false,
-//                                         message: "Erreur, la requête s'est mal exécutée."
-//                                     });
-//                                 }
-//                             }
-//                         );
-
-
-//                     } else {
-//                         const currentDateTime = new Date().toISOString();
-//                         console.log(`Échec de la requête de récupèration des colonnes à ${currentDateTime}`);
-//                         console.log("Message de la fonction callback : " + message);
-//                         console.log(queryFields.text);
-//                         console.log(queryFields.values);
-//                         res.status(500).json({
-//                             success: false,
-//                             message: "Erreur, la requête s'est mal exécutée."
-//                         });
-//                     }
-//                 }
-//             );
-
-
-            
-//         } else {
-//             const BAD_MESSAGE = "Table " + TABLE + " inconnue dans la liste des tables connues.";
-//             console.log(BAD_MESSAGE);
-//             res.status(400).json({
-//                 success: false,
-//                 message: BAD_MESSAGE
-//             });
-//         }
-//     } catch (error) {
-//         console.error("Erreur lors de la mise à jour : ", error);
-//         res.status(500).json({
-//             success: false,
-//             message: "Erreur interne du serveur."
-//         });
-//     }
-// });
-
 // Nouvelle route pour gérer l'upload du fichier shapefile avec des données supplémentaires
 router.post(
     //// Paramètres
@@ -1016,67 +957,27 @@ router.post(
             let insertResults = [];
             let insertErrors = [];
 
-            // Insérer le polygone dans la base de données
+            // Insérer les géométries dans la base de données
             for (let i = 0; i < features.length; i++) {
-                // Boucle meme si une seule geometrie dans la liste
-                // Convertir les coordonnées en WKT
-                WKTData = convertToWKT(
-                    features[i].geometry.coordinates,
-                    typeGeometry
-                );
-
-                geomColumn = "";
-                // Détermination de la colonne de géométrie dans la table opegerer.localisations
-                if (WKTData.type.trim().endsWith("POLYGON")) {
-                    geomColumn = "loc_poly";
-                } else if (WKTData.type == "POINT") {
-                    geomColumn = "loc_point";
-                } else if (WKTData.type == "LINESTRING") {
-                    geomColumn = "loc_line";
-                } else {
-                    geomColumn = "";
-                }
-                console.log(`Type de la géométrie [${i}]:`, WKTData.type);
-                console.log(`Colonne de la géométrie [${i}]:`, geomColumn);
-                console.log(`WKT de la géométrie [${i}]:`, WKTData.EWKT);
-
-                const properties = {
-                    ...features[i].properties,
-                    wkt: WKTData.EWKT,
-                    type_geometry: typeGeometry,
-                    ref_uuid_ope: uuid_ope,
-                };
-
-                // Créer l'objet de requête avec la géométrie
-                const queryObject = {
-                    text: `INSERT INTO opegerer.localisations (${geomColumn}, ref_uuid_ope) VALUES (ST_GeomFromEWKT($1), $2);`,
-                    values: [properties.wkt, properties.ref_uuid_ope],
-                };
-                console.log("Requête:", queryObject);
-
                 try {
-                    // Exécuter la requête
-                    await ExecuteQuerySite(
-                        pool,
-                        {
-                            query: queryObject,
-                            message:
-                                "insert polygon from shapefile to opegerer.localisation_tvx",
-                        },
-                        "insert",
-                        (resultats, message) => {
-                            if (message === "ok") {
-                                insertResults.push({
-                                    success: true,
-                                    type: WKTData.type,
-                                    data: resultats,
-                                });
-                            } else {
-                                insertErrors.push({ success: false, message });
-                            }
-                        }
+                    // Convertir les coordonnées en WKT
+                    const WKTData = convertToWKT(
+                        features[i].geometry.coordinates,
+                        typeGeometry
                     );
+
+                    console.log(`\n=== Traitement géométrie [${i}] ===`);
+                    
+                    // Utiliser la fonction commune d'insertion
+                    const result = await insertGeometryToDB(
+                        WKTData,
+                        uuid_ope,
+                        features[i].properties
+                    );
+                    
+                    insertResults.push(result);
                 } catch (e) {
+                    console.error(`Erreur insertion géométrie [${i}]:`, e.message);
                     insertErrors.push({ success: false, message: e.message });
                 }
             }
@@ -1129,6 +1030,223 @@ router.post(
     }
 );
 
+// Nouvelle route pour gérer l'upload du fichier GeoJSON
+router.post(
+    "/put/ope_geojson",
+
+    // Multer pour fichiers GeoJSON
+    multerMiddlewareGeoJSON,
+
+    // Middleware de validation
+    (req, res, next) => {
+        console.log("");
+        console.log("Requête reçue pour le traitement d'un fichier GeoJSON");
+        console.log("Body:", req.body);
+        console.log("Files:", req.files);
+
+        // Vérification si le fichier est présent
+        if (!req.files?.file?.[0]) {
+            return res.status(400).json({
+                success: false,
+                message: "Aucun fichier n'a été envoyé",
+            });
+        }
+        next();
+    },
+
+    // Handler principal
+    async (req, res) => {
+        let filePath = null;
+
+        try {
+            // Récupération des paramètres
+            filePath = req.files.file[0].path;
+            const originalname = req.files.file[0].originalname;
+            const uuid_ope = req.body.uuid_ope || req.fields?.uuid_ope;
+
+            console.log("Fichier GeoJSON reçu:", originalname);
+            console.log("Chemin temporaire:", filePath);
+            console.log("UUID opération:", uuid_ope);
+
+            if (!uuid_ope) {
+                throw new Error("UUID de l'opération manquant (uuid_ope requis)");
+            }
+
+            // Lecture du fichier GeoJSON
+            const fileContent = await fs.promises.readFile(filePath, "utf8");
+            let geojsonData;
+
+            try {
+                geojsonData = JSON.parse(fileContent);
+            } catch (parseError) {
+                throw new Error(
+                    `Fichier JSON invalide: ${parseError.message}`
+                );
+            }
+
+            console.log("\n=== Analyse du GeoJSON ===");
+            console.log("Type:", geojsonData.type);
+            console.log("CRS:", JSON.stringify(geojsonData.crs));
+
+            // Extraction du SRID depuis le CRS si présent
+            let srid = 4326; // Par défaut WGS84
+            if (geojsonData.crs && geojsonData.crs.properties && geojsonData.crs.properties.name) {
+                const crsName = geojsonData.crs.properties.name;
+                // Format: "urn:ogc:def:crs:EPSG::2154" ou "EPSG:2154"
+                const epsgMatch = crsName.match(/EPSG::?(\d+)/i);
+                if (epsgMatch) {
+                    srid = parseInt(epsgMatch[1]);
+                    console.log(`SRID détecté depuis CRS: ${srid}`);
+                }
+            }
+
+            // Validation de la structure GeoJSON
+            if (!geojsonData.type) {
+                throw new Error(
+                    "Format GeoJSON invalide: propriété 'type' manquante"
+                );
+            }
+
+            let features = [];
+
+            // Gestion des différents types GeoJSON
+            if (geojsonData.type === "FeatureCollection") {
+                if (!Array.isArray(geojsonData.features)) {
+                    throw new Error(
+                        "FeatureCollection invalide: 'features' doit être un tableau"
+                    );
+                }
+                features = geojsonData.features;
+            } else if (geojsonData.type === "Feature") {
+                features = [geojsonData];
+            } else if (["Point", "LineString", "Polygon", "MultiPoint", "MultiLineString", "MultiPolygon"].includes(geojsonData.type)) {
+                // Géométrie directe (sans Feature wrapper)
+                features = [{
+                    type: "Feature",
+                    geometry: geojsonData,
+                    properties: {}
+                }];
+            } else {
+                throw new Error(
+                    `Type GeoJSON non supporté: ${geojsonData.type}`
+                );
+            }
+
+            if (features.length === 0) {
+                throw new Error("Aucune géométrie trouvée dans le fichier GeoJSON");
+            }
+
+            console.log(`${features.length} géométrie(s) détectée(s)`);
+
+            // Validation et détection du type de géométrie
+            let typeGeometry = null;
+            for (const feature of features) {
+                if (!feature.geometry || !feature.geometry.type) {
+                    throw new Error("Feature sans géométrie détecté");
+                }
+                
+                const geomType = feature.geometry.type.toUpperCase();
+                console.log(`Type géométrie dans feature: ${geomType}`);
+                console.log(`Coordonnées:`, JSON.stringify(feature.geometry.coordinates).substring(0, 200));
+                
+                if (!typeGeometry) {
+                    typeGeometry = geomType;
+                } else if (typeGeometry !== geomType) {
+                    throw new Error(
+                        `Types de géométrie mixtes non supportés: ${typeGeometry} et ${geomType}`
+                    );
+                }
+            }
+
+            console.log("Type de géométrie final détecté:", typeGeometry);
+
+            // Restriction pour les polygones : une seule géométrie
+            if (typeGeometry.includes("POLYGON") && features.length > 1) {
+                throw new Error(
+                    `Pour les polygones, une seule géométrie est autorisée (${features.length} trouvées)`
+                );
+            }
+
+            let insertResults = [];
+            let insertErrors = [];
+
+            // Insertion des géométries
+            for (let i = 0; i < features.length; i++) {
+                try {
+                    const feature = features[i];
+                    
+                    console.log(`\n=== Traitement géométrie GeoJSON [${i}] ===`);
+                    console.log(`Type: ${feature.geometry.type}`);
+                    console.log(`Nombre de coordonnées (depth):`, JSON.stringify(feature.geometry.coordinates).length);
+                    
+                    // Convertir en WKT (la fonction utilise le SRID hardcodé pour l'instant)
+                    const WKTData = convertToWKT(
+                        feature.geometry.coordinates,
+                        typeGeometry
+                    );
+
+                    // Remplacer le SRID si différent de 2154
+                    if (srid !== 2154) {
+                        WKTData.EWKT = WKTData.EWKT.replace(/SRID=\d+/, `SRID=${srid}`);
+                        console.log(`SRID ajusté à ${srid}`);
+                    }
+
+                    console.log(`WKT généré:`, WKTData.EWKT.substring(0, 200));
+
+                    // Utiliser la fonction commune d'insertion
+                    const result = await insertGeometryToDB(
+                        WKTData,
+                        uuid_ope,
+                        feature.properties || {}
+                    );
+
+                    insertResults.push(result);
+                } catch (e) {
+                    console.error(`Erreur insertion géométrie [${i}]:`, e.message);
+                    insertErrors.push({ success: false, message: e.message });
+                }
+            }
+
+            // Réponse finale
+            if (insertErrors.length === 0) {
+                res.status(200).json({
+                    success: true,
+                    message: `${insertResults.length} géométrie(s) GeoJSON importée(s) avec succès.`,
+                    data: insertResults,
+                });
+            } else {
+                res.status(500).json({
+                    success: false,
+                    message: "Erreur(s) lors de l'import GeoJSON.",
+                    errors: insertErrors,
+                    partialSuccess: insertResults.length > 0 ? insertResults : undefined,
+                });
+            }
+        } catch (error) {
+            console.error("Erreur détaillée:", error);
+
+            res.status(error.message.includes("géométrie") || error.message.includes("JSON") ? 400 : 500).json({
+                success: false,
+                message: error.message,
+            });
+        } finally {
+            // Nettoyage du fichier temporaire
+            if (filePath) {
+                try {
+                    await fs.promises.rm(filePath, { force: true });
+                    console.log("Fichier temporaire GeoJSON supprimé");
+                } catch (cleanupError) {
+                    console.error(
+                        "Erreur lors du nettoyage du fichier temporaire:",
+                        cleanupError
+                    );
+                }
+            }
+        }
+    }
+);
+
+// Enregistrement de documents liés à une référence (ref_id) dans la table files.docs
 router.put("/put/table=docs", async (req, res) => {
     try {
         // Charger les champs Multer dynamiques depuis la DB
