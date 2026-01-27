@@ -384,8 +384,7 @@ function convertToWKT(coordinates, typeGeometry = null) {
     let type = typeGeometry ? typeGeometry.toUpperCase() : null;
 
     // Détection automatique si type non fourni
-    // if (!type) {
-    if (1) {
+    if (!type) {
         if (typeof coordinates[0] === "number") {
             type = "POINT";
         } else if (
@@ -397,8 +396,14 @@ function convertToWKT(coordinates, typeGeometry = null) {
             Array.isArray(coordinates[0]) &&
             Array.isArray(coordinates[0][0])
         ) {
-            // Polygon ou MultiPolygon
-            type = coordinates.length > 1 ? "MULTIPOLYGON" : "POLYGON";
+            // Différencier POLYGON (avec ou sans trous) vs MULTIPOLYGON
+            // POLYGON: coordinates[0][0] est [x, y] (coordonnée)
+            // MULTIPOLYGON: coordinates[0][0] est un anneau [[x, y], ...]
+            if (typeof coordinates[0][0][0] === "number") {
+                type = "POLYGON";
+            } else {
+                type = "MULTIPOLYGON";
+            }
         }
     }
 
@@ -618,3 +623,4 @@ module.exports = {
     extractZipFile, // Ajouter l'export de la nouvelle fonction
     getBilan,
 };
+
