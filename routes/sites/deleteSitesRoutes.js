@@ -159,8 +159,13 @@ router.delete("/delete/:table", (req, res) => {
                     const filePath = path.resolve(uploadsDir, doc_path.split('/').slice(-2).join('/'));
                     console.log("Fichier à supprimer:", filePath);
                     
-                    const cachePath = path.resolve(cacheDir, '200-' + doc_path.split('/').pop());
-                    console.log("cache path:", cachePath);
+                    // Construire le pattern de recherche pour tous les fichiers de cache liés
+                    // Exemple: photo.jpg -> photo_*.jpg (trouvera photo_200.jpg, photo_800.jpg, etc.)
+                    const fileName = doc_path.split('/').pop();
+                    const ext = path.extname(fileName);
+                    const basename = path.basename(fileName, ext);
+                    const cachePattern = `${basename}_*${ext}`;
+                    console.log("Pattern de cache à rechercher:", cachePattern);
                     
                     // Vérification : le fichier doit être dans le bon dossier
                     if (!filePath.startsWith(uploadsDir)) {
@@ -171,18 +176,21 @@ router.delete("/delete/:table", (req, res) => {
                             code: 3,
                         });
                     }
-                    if (cachePath.endsWith(".jpg") || cachePath.endsWith(".jpeg") || cachePath.endsWith(".png")) {
-                        fs.unlink(cachePath, (err) => {
-                            if (err) {
-                                console.error("Erreur suppression fichier:", err);
-                                return res.status(500).json({
-                                    success: false,
-                                    message: "Fichier introuvable ou non supprimé",
-                                    code: 2,
-                                });
-                            }
-                            console.log("Fichier supprimé:", cachePath);
-                        })
+                    // Supprimer tous les fichiers de cache correspondant au pattern
+                    if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") || fileName.endsWith(".png")) {
+                        const glob = require('glob');
+                        const cacheFiles = glob.sync(path.join(cacheDir, cachePattern));
+                        console.log(`Fichiers de cache trouvés (${cacheFiles.length}):`, cacheFiles);
+                        
+                        cacheFiles.forEach(cacheFile => {
+                            fs.unlink(cacheFile, (err) => {
+                                if (err) {
+                                    console.error("Erreur suppression cache:", err);
+                                } else {
+                                    console.log("Cache supprimé:", cacheFile);
+                                }
+                            });
+                        });
                     }
                     fs.unlink(filePath, (err) => {
                         if (err) {

@@ -166,12 +166,12 @@ const FILES_DIR_ENV = process.env.FILES_DIR_ENV || '/mnt/storage_data/app'
         │      └──────────────────────────────┘
         │             │
         │             ▼
-        │      ┌──────────────────────────────┐
-        │      │  Stockage Cache              │
-        │      │  Pattern: {width}-{fichier}  │
-        │      │  Ex: 200-photo.jpg           │
-        │      │  /mnt/storage_data/app/cache/│
-        │      └──────────┬───────────────────┘
+        │      ┌──────────────────────────────────┐
+        │      │  Stockage Cache                  │
+        │      │  Pattern: {basename}_{width}.ext │
+        │      │  Ex: photo_200.jpg               │
+        │      │  /mnt/storage_data/app/cache/    │
+        │      └──────────┬─────────────────────────┘
         │                 │
         └─────────────────┘
                   │
@@ -192,7 +192,8 @@ const FILES_DIR_ENV = process.env.FILES_DIR_ENV || '/mnt/storage_data/app'
 
 2. **Chemins**:
    - Original: `/mnt/storage_data/app/photos/{file}`
-   - Cache: `/mnt/storage_data/app/cache/{width}-{safeFileName}`
+   - Cache: `/mnt/storage_data/app/cache/{basename}_{width}.{extension}`
+   - Exemples: `photo.jpg` → `photo_200.jpg`, `paysage.png` → `paysage_800.png`
    - Note: Les `/` dans le nom sont remplacés par `_`
 
 3. **Processus Sharp**:
@@ -253,9 +254,13 @@ const FILES_DIR_ENV = process.env.FILES_DIR_ENV || '/mnt/storage_data/app'
         │          └─────► FIN
         ▼
 ┌──────────────────────────────────────────┐
-│  4. Suppression Cache Image              │
-│  fs.unlink(cachePath)                    │
-│  /mnt/storage_data/app/cache/200-file.jpg│
+│  4. Suppression Cache Images (Glob)      │
+│  Pattern: {basename}_*.{ext}             │
+│  Exemple: photo_*.jpg trouve:            │
+│    - photo_200.jpg                       │
+│    - photo_400.jpg                       │
+│    - photo_800.jpg                       │
+│  Supprime TOUTES les résolutions         │
 └──────────────────────────────────────────┘
          │
          ▼
@@ -343,16 +348,22 @@ multerMiddlewareDoc = createMulterMiddlewareDoc();  // Ligne 200
 
 ### Scénario 2: Affichage d'une Photo Miniature
 1. Client demande `GET /picts/img?file=photo.jpg&width=200`
-2. Route vérifie si `/cache/200-photo.jpg` existe
+2. Route vérifie si `/cache/photo_200.jpg` existe
 3. Si non: redimensionne avec Sharp et met en cache
 4. Renvoie l'image depuis le cache
 
-### Scénario 3: Suppression d'une Photo
+### Scénario 3: Suppression d'une Photo (avec tous ses caches)
 1. Client envoie `DELETE /sites/delete/pmfu_docs?doc_path=photos/photo.jpg`
 2. Suppression en BDD
-3. Suppression fichier `/photos/photo.jpg`
-4. Détection extension `.jpg` → suppression `/cache/200-photo.jpg`
-5. Réponse succès au client
+3. Suppression fichier original `/photos/photo.jpg`
+4. Détection extension `.jpg` → recherche pattern `photo_*.jpg`
+5. Suppression de **tous** les caches trouvés:
+   - `/cache/photo_200.jpg`
+   - `/cache/photo_400.jpg`
+   - `/cache/photo_800.jpg`
+   - (toutes les résolutions générées)
+6. Logs affichent le nombre de caches supprimés
+7. Réponse succès au client
 
 ---
 
@@ -368,14 +379,30 @@ multerMiddlewareDoc = createMulterMiddlewareDoc();  // Ligne 200
 - Images: `.jpg`, `.jpeg`, `.png`
 
 ### Format Cache Images
-- Pattern: `{largeur}-{nom_fichier_sécurisé}`
-- Exemple: `200-ma_photo.jpg`
-- Caractères `/` remplacés par `_`
+- **Nouveau pattern** (depuis janv. 2026): `{nom_base}_{largeur}.{extension}`
+- Exemples:
+  - `photo.jpg` → Cache: `photo_200.jpg`, `photo_400.jpg`, `photo_800.jpg`
+  - `paysage.png` → Cache: `paysage_200.png`
+- Avantages:
+  - Suppression simple avec glob: `photo_*` supprime tous les caches
+  - Meilleur tri alphabétique
+  - Plus intuitif (nom de base en préfixe)
+- Caractères `/` dans les chemins remplacés par `_`
 - Format JPEG avec qualité 80%
 
 ### Variables d'Environnement
 ```env
 FILES_DIR_ENV=/mnt/storage_data/app  # Défini dans .env
+```
+
+### Dépendances Requises
+**Package npm nécessaires**:
+- `multer` - Upload de fichiers
+- `sharp` - Redimensionnement d'images
+- `glob` - Pattern matching pour suppression de caches (⚠️ requis depuis janv. 2026)
+
+```bash
+npm install multer sharp glob
 ```
 
 ---

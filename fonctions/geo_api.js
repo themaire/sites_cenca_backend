@@ -845,6 +845,14 @@ async function getCommuneDetails(codeInsee, mode = 'full') {
 
         https.get(url, (response) => {
             let data = '';
+            
+            // Vérification du status code HTTP
+            if (response.statusCode !== 200) {
+                console.error(`[API_IGN] Erreur HTTP ${response.statusCode} pour la commune ${codeInsee}`);
+                response.resume(); // Consommer la réponse pour libérer la mémoire
+                return reject(new Error(`Erreur HTTP ${response.statusCode}: ${response.statusMessage}`));
+            }
+            
             response.on('data', (chunk) => { data += chunk; });
             response.on('end', () => {
                 try {
@@ -863,6 +871,7 @@ async function getCommuneDetails(codeInsee, mode = 'full') {
                     }
                 } catch (err) {
                     console.error('[API_IGN] Erreur lors du parsing JSON:', err);
+                    console.error('[API_IGN] Réponse reçue (premiers 500 caractères):', data.substring(0, 500));
                     return reject(new Error(`Erreur lors du parsing de la réponse: ${err.message}`));
                 }
             });

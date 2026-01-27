@@ -39,9 +39,13 @@ router.get("/img", async (req, res) => {
 
     const originalPath = path.join(IMAGES_DIR, file);
     
-    // Remplacer les / par _ dans le nom de fichier pour le cache
+    // Construire le nom du fichier de cache : {basename}_{width}.{extension}
+    // Exemple: photo.jpg -> photo_200.jpg
     const safeFileName = file.replace(/\//g, '_');
-    const cachePath = path.join(CACHE_DIR, `${w}-${safeFileName}`);
+    const ext = path.extname(safeFileName); // .jpg
+    const basename = path.basename(safeFileName, ext); // photo
+    const cacheFileName = `${basename}_${w}${ext}`; // photo_200.jpg
+    const cachePath = path.join(CACHE_DIR, cacheFileName);
 
     try {
         // Vérifie si le fichier existe déjà en cache
