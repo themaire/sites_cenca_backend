@@ -21,8 +21,8 @@ if (!fs.existsSync(CACHE_DIR)) {
 // const { authenticateToken } = require('../fonctions/fonctionsAuth.js');
 
 // Fonctions et connexion à PostgreSQL
-const {joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch,
-    executeQueryAndRespond, reset, getBilan,} = require("../../fonctions/fonctionsSites.js");
+const { joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch,
+    executeQueryAndRespond, reset, getBilan, } = require("../../fonctions/fonctionsSites.js");
 const { generateFicheTravauxWord } = require("../../scripts/gen_fiche_travaux.js");
 const pool = require("../../dbPool/poolConnect.js");
 
@@ -32,29 +32,29 @@ router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
     const queryObject = selectQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
     console.log(
         "Requête pour les critères de recherche de sites : " +
-            JSON.stringify(queryObject)
+        JSON.stringify(queryObject)
     );
 
-                ExecuteQuerySite(
-                    pool,
-                    { message: "/sites/criteria/type/code...", query: queryObject },
-                    "select",
-                    ( resultats, message ) => {
-                        if (resultats.length > 0 || message == "ok") {
-                        const json = JSON.stringify(resultats);
-                        // console.log(json);
-                        res.setHeader("Access-Control-Allow-Origin", "*");
-                        res.setHeader("Content-Type", "application/json; charset=utf-8");
-                        res.end(json);
-                        } else {
-                        const json = JSON.stringify([]);
-                        res.setHeader("Access-Control-Allow-Origin", "*");
-                        res.setHeader("Content-Type", "application/json; charset=utf-8");
-                        res.end(json);
-                        }
-                    }
-                );
+    ExecuteQuerySite(
+        pool,
+        { message: "/sites/criteria/type/code...", query: queryObject },
+        "select",
+        (resultats, message) => {
+            if (resultats.length > 0 || message == "ok") {
+                const json = JSON.stringify(resultats);
+                // console.log(json);
+                res.setHeader("Access-Control-Allow-Origin", "*");
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(json);
+            } else {
+                const json = JSON.stringify([]);
+                res.setHeader("Access-Control-Allow-Origin", "*");
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(json);
             }
+        }
+    );
+}
 );
 
 
@@ -64,29 +64,29 @@ router.get("/criteria_travaux/:type/:code/:nom/:commune/:milnat/:resp", (req, re
     const queryObject = selectListTravauxQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
     console.log(
         "Requête pour les critères de recherche de sites : " +
-            JSON.stringify(queryObject)
+        JSON.stringify(queryObject)
     );
 
-                ExecuteQuerySite(
-                    pool,
-                    { message: "/sites/criteria/type/code...", query: queryObject },
-                    "select",
-                    ( resultats, message ) => {
-                        if (resultats.length > 0 || message == "ok") {
-                        const json = JSON.stringify(resultats);
-                        // console.log(json);
-                        res.setHeader("Access-Control-Allow-Origin", "*");
-                        res.setHeader("Content-Type", "application/json; charset=utf-8");
-                        res.end(json);
-                        } else {
-                        const json = JSON.stringify([]);
-                        res.setHeader("Access-Control-Allow-Origin", "*");
-                        res.setHeader("Content-Type", "application/json; charset=utf-8");
-                        res.end(json);
-                        }
-                    }
-                );
+    ExecuteQuerySite(
+        pool,
+        { message: "/sites/criteria/type/code...", query: queryObject },
+        "select",
+        (resultats, message) => {
+            if (resultats.length > 0 || message == "ok") {
+                const json = JSON.stringify(resultats);
+                // console.log(json);
+                res.setHeader("Access-Control-Allow-Origin", "*");
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(json);
+            } else {
+                const json = JSON.stringify([]);
+                res.setHeader("Access-Control-Allow-Origin", "*");
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(json);
             }
+        }
+    );
+}
 );
 
 // Données d'un site par son uuid
@@ -217,7 +217,7 @@ router.get("/milnat/uuid=:uuid", (req, res) => {
     ); // Retourne plusieurs résultats
 });
 
-// MFU
+// MFU - Actes pour le site
 router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
     let { SelectFields, FromTable, where, message } = reset();
     mode = req.params.mode;
@@ -225,16 +225,17 @@ router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
 
     if (req.params.mode == "lite") {
         SelectFields =
-            "SELECT site, uuid_acte, debut, fin, tacit_rec, typ_mfu, actuel, url, types_prop, surface ";
-        FromTable = "FROM sitcenca.listeactes ";
+            "SELECT site, uuid_acte, debut, fin, tacit_rec, typ_mfu, url, type_prop, surf_totale, validite ";
+        FromTable = "FROM sitcenca.listeallactes ";
         where = "where site = $1 order by debut;";
+
     } else if (req.params.mode == "full") {
         SelectFields =
-            "select amfu.uuid_acte, amfu.debut, amfu.fin, amfu.tacit_rec, amfu.detail_rec, amfu.notaire, amfu.cout, amfu.remarque, amfu.validite, amfu.date_crea, amfu.date_modif, amfu.typ_mfu, amfu.site, amfu.url, amfu.actuel, e.nom as nom_site ";
+            "select uuid_acte, debut, fin, tacit_rec, detail_rec, notaire, cout, remarque, amfu.validite, amfu.date_crea, date_modif, typ_mfu, site, amfu.url, e.nom as nom_site ";
         FromTable = "FROM sitcenca.actes_mfu AS amfu ";
         FromTable += "LEFT JOIN sitcenca.sites s ON amfu.site = s.uuid_site ";
         FromTable += "LEFT JOIN esp.espaces e ON s.espace = e.uuid_espace ";
-        where = "where amfu.uuid_acte = $1;";
+        where = "where uuid_acte = $1;";
     }
 
     executeQueryAndRespond(
@@ -256,13 +257,13 @@ router.get("/projets/uuid=:uuid/:mode", (req, res) => {
     const webapp = req.query.webapp || null; // Paramètre optionnel "webapp"
     console.log(
         "Demande de projet pour l'uuid " +
-            req.params.uuid +
-            " et le mode " +
-            req.params.mode +
-            " avec type " +
-            type +
-            " et webapp " +
-            webapp
+        req.params.uuid +
+        " et le mode " +
+        req.params.mode +
+        " avec type " +
+        type +
+        " et webapp " +
+        webapp
     );
 
     let { selectFields, fromTable, where, message } = reset();
@@ -542,34 +543,34 @@ router.get("/selectors_sites", (req, res) => {
                         "bassin_agence",
                         "Bassin agence",
                         // (selectors) => {
-                            // distinctSiteResearch(
-                                // pool,
-                                // 'sitcenca.listesitescenca',
-                                // selectors,
-                                // "prem_ctr",
-                                // "Premier contrat",
-                                // (selectors) => {
-                                //     distinctSiteResearch(
-                                        // pool,
-                                        // 'sitcenca.listesitescenca',
-                                        // selectors,
-                                        // "fin",
-                                        // "Fin acte",
-                                        (selectors) => {
-                                            const json =
-                                                JSON.stringify(selectors);
-                                            res.setHeader(
-                                                "Access-Control-Allow-Origin",
-                                                "*"
-                                            );
-                                            res.setHeader(
-                                                "Content-type",
-                                                "application/json; charset=UTF-8"
-                                            );
-                                            res.end(json);
-                                        // }
-                                    // );
-                                //}
+                        // distinctSiteResearch(
+                        // pool,
+                        // 'sitcenca.listesitescenca',
+                        // selectors,
+                        // "prem_ctr",
+                        // "Premier contrat",
+                        // (selectors) => {
+                        //     distinctSiteResearch(
+                        // pool,
+                        // 'sitcenca.listesitescenca',
+                        // selectors,
+                        // "fin",
+                        // "Fin acte",
+                        (selectors) => {
+                            const json =
+                                JSON.stringify(selectors);
+                            res.setHeader(
+                                "Access-Control-Allow-Origin",
+                                "*"
+                            );
+                            res.setHeader(
+                                "Content-type",
+                                "application/json; charset=UTF-8"
+                            );
+                            res.end(json);
+                            // }
+                            // );
+                            //}
                             // );
                         }
                     );
@@ -602,34 +603,34 @@ router.get("/selectors_projets", (req, res) => {
                         "responsable",
                         "Responsable",
                         // (selectors) => {
-                            // distinctSiteResearch(
-                                // pool,
-                                // 'ope.listeprojets',
-                                // selectors,
-                                // "statut",
-                                // "Statut",
-                                // (selectors) => {
-                                //     distinctSiteResearch(
-                                        // pool,
-                                        // 'ope.listeprojets',
-                                        // selectors,
-                                        // "fin",
-                                        // "Fin acte",
-                                        (selectors) => {
-                                            const json =
-                                                JSON.stringify(selectors);
-                                            res.setHeader(
-                                                "Access-Control-Allow-Origin",
-                                                "*"
-                                            );
-                                            res.setHeader(
-                                                "Content-type",
-                                                "application/json; charset=UTF-8"
-                                            );
-                                            res.end(json);
-                                        // }
-                                    // );
-                                //}
+                        // distinctSiteResearch(
+                        // pool,
+                        // 'ope.listeprojets',
+                        // selectors,
+                        // "statut",
+                        // "Statut",
+                        // (selectors) => {
+                        //     distinctSiteResearch(
+                        // pool,
+                        // 'ope.listeprojets',
+                        // selectors,
+                        // "fin",
+                        // "Fin acte",
+                        (selectors) => {
+                            const json =
+                                JSON.stringify(selectors);
+                            res.setHeader(
+                                "Access-Control-Allow-Origin",
+                                "*"
+                            );
+                            res.setHeader(
+                                "Content-type",
+                                "application/json; charset=UTF-8"
+                            );
+                            res.end(json);
+                            // }
+                            // );
+                            //}
                             // );
                         }
                     );
@@ -639,7 +640,7 @@ router.get("/selectors_projets", (req, res) => {
     );
 });
 
-// Les liste de choix pour les champs de formulaires
+// Les listes de choix pour les champs de formulaires
 router.get("/selectvalues=:list/:option?", (req, res) => {
     let { SelectFields, FromTable, where, message, json } = reset();
     const list = req.params.list;
@@ -663,6 +664,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         "opegerer.typ_mecaniques",
         "opegerer.typ_objectifope",
         "opegerer.typ_objectifs",
+        "sitcenca.typ_mfu",
     ];
 
     // Liste des libelles de la table commune des libelles
@@ -717,7 +719,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         list == "sitcenca.libelles"
     ) {
         SelectFields += "lib_id as cd_type, lib_libelle as libelle ";
-        
+
     } else if (list == "files.libelles") {
         SelectFields += "lib_id as cd_type, lib_libelle as libelle, lib_path as path, lib_field as field ";
 
@@ -788,7 +790,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
             }
 
             where += " order by lib_ordre;";
-            
+
         } else if (list == "files.libelles") {
             where = "where libnom_id =" + option + " order by lib_ordre;";
 
@@ -797,7 +799,10 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
 
         } else if (list == "files.libelles") {
             where = "order by lib_ordre;";
-        } else {
+        } else if (list == "sitcenca.typ_mfu") {
+            where = "where val_tri is not null order by val_tri;"
+        }
+        else {
             where = "order by val_tri;";
         }
     }
@@ -806,9 +811,9 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
     if (libelles_names.includes(option)) {
         console.log(
             "---------------Demande de la liste de choix de la table " +
-                list +
-                " pour l'option " +
-                option
+            list +
+            " pour l'option " +
+            option
         );
 
         if (list == "admin.salaries" && option == "all") {
@@ -908,9 +913,9 @@ router.get("/gen_fiche_travaux/uuid_proj=:uuid", async (req, res) => {
 router.get("/pmfu/id=:id/:mode", (req, res) => {
     console.log(
         "Demande de pmfu pour l'id " +
-            req.params.id +
-            " et le mode " +
-            req.params.mode
+        req.params.id +
+        " et le mode " +
+        req.params.mode
     );
     let { SelectFields, FromTable, where, message } = reset();
     message = "projets/pmfu/id/" + req.params.mode;

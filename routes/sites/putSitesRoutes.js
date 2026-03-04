@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 import('uuid').then(module => {
-  uuidv4 = module.v4;
-  // ... le reste de ton code qui utilise uuidv4 ...
+    uuidv4 = module.v4;
+    // ... le reste de ton code qui utilise uuidv4 ...
 });
 
 // Fonctions et connexion à PostgreSQL
@@ -17,7 +17,7 @@ const {
 const pool = require("../../dbPool/poolConnect.js");
 
 // Generateur de requetes SQL
-const { generateUpdateQuery, generateInsertQuery, generateCloneQuery, getTableColums, generateCloneCheckboxQuery } = require('../../fonctions/querys.js'); 
+const { generateUpdateQuery, generateInsertQuery, generateCloneQuery, getTableColums, generateCloneCheckboxQuery } = require('../../fonctions/querys.js');
 
 const multer = require("multer");
 const shapefile = require("shapefile");
@@ -380,7 +380,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                     if (message === "ok") {
                         res.status(200).json({
                             success: true,
-                            message: "Mise à jour réussie (" + TABLE + ").", // sera viible dans le snackbar
+                            message: "Mise à jour réussie.", // sera visible dans le snackbar
                             data: resultats,
                         });
                         console.log("message : " + message);
@@ -397,8 +397,11 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                     }
                 }
             );
-        } else if (TABLE in ["acte"]) {
-            const queryObject = generateUpdateQuery(TABLE, UUID, updateData);
+        } else if (TABLE === "actes_mfu") {
+            console.log("Coucou je suis passé par là pour la table " + TABLE);
+            // spécifier le schema pour que generateUpdateQuery puisse extraire correctement le nom
+            const queryObject = generateUpdateQuery(
+                "sitcenca." + TABLE, UUID, updateData);
             console.log(queryObject);
 
             ExecuteQuerySite(
@@ -407,6 +410,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                     query: queryObject,
                     message: "sites/put/table=" + TABLE + "/uuid",
                 },
+                "update",
                 (resultats, message) => {
                     res.setHeader("Access-Control-Allow-Origin", "*");
                     res.setHeader(
@@ -414,7 +418,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                         "application/json; charset=utf-8"
                     );
 
-                    if (resultats && resultats.length > 0) {
+                    if (message === "ok") {
                         res.status(200).json({
                             success: true,
                             message: "Mise à jour réussie.",
@@ -440,7 +444,6 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                 UUID,
                 updateData
             );
-            console.log("Query de pmfu : " + queryObject);
             ExecuteQuerySitePromise(pool, {
                 query: queryObject,
                 message: "...",
@@ -482,7 +485,7 @@ router.put("/put/table=:table/insert", (req, res) => {
     const TABLE = req.params.table;
     const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
     console.log("INSERT_DATA de la requête : ", INSERT_DATA);
-    
+
     const MESSAGE = "sites/put/table=" + TABLE + "/insert";
     // Tables possibles pour des differents insert. En clé le nom de la table, en valeur son schema
     const TABLES = {
@@ -497,7 +500,7 @@ router.put("/put/table=:table/insert", (req, res) => {
         operation_animaux: "opegerer",
     };
 
-
+    // Ajout d'un projet_mfu
     try {
         if (TABLE === "projets_mfu") {
             console.log("data avant envoi :", INSERT_DATA.pmfu_id);
@@ -664,12 +667,12 @@ router.put("/put/table=:table/clone", (req, res) => {
     console.log("Body reçu pour la duplication :", INSERT_DATA);
     const MESSAGE = "sites/put/table=" + TABLE + "/clone";
     // Tables possibles pour des differents insert. En clé le nom de la table, en valeur son schema
-    const TABLES = {'projets':'opegerer', 'operations':'opegerer'};
+    const TABLES = { 'projets': 'opegerer', 'operations': 'opegerer' };
 
     try {
 
         if (Object.keys(TABLES).includes(TABLE)) {
-            
+
             const WORKING_TABLE = TABLES[TABLE] + "." + TABLE;
             console.log("WORKING_TABLE : " + WORKING_TABLE);
 
@@ -681,7 +684,7 @@ router.put("/put/table=:table/clone", (req, res) => {
                 pool,
                 { query: queryFields, message: MESSAGE },
                 "select",
-                ( fields, message ) => {
+                (fields, message) => {
 
                     console.log("fields obtenus par la requête : ");
                     console.log(fields);
@@ -703,7 +706,7 @@ router.put("/put/table=:table/clone", (req, res) => {
                             pool,
                             { query: queryObject, message: MESSAGE },
                             "insert",
-                            ( resultats, message ) => {
+                            (resultats, message) => {
                                 res.setHeader("Access-Control-Allow-Origin", "*");
                                 res.setHeader("Content-Type", "application/json; charset=utf-8");
 
@@ -775,7 +778,7 @@ router.put("/put/table=:table/clone", (req, res) => {
             );
 
 
-            
+
         } else {
             const BAD_MESSAGE = "Table " + TABLE + " inconnue dans la liste des tables connues.";
             console.log(BAD_MESSAGE);
@@ -862,9 +865,9 @@ router.post(
             // Debug
             console.log(
                 "Chemin du fichier reçu par le client : " +
-                    filePath +
-                    ". De type : " +
-                    req.files.file[0].mimetype
+                filePath +
+                ". De type : " +
+                req.files.file[0].mimetype
             );
             console.log("Vrai nom du fichier reçu : ", originalname);
             console.log(
@@ -967,14 +970,14 @@ router.post(
                     );
 
                     console.log(`\n=== Traitement géométrie [${i}] ===`);
-                    
+
                     // Utiliser la fonction commune d'insertion
                     const result = await insertGeometryToDB(
                         WKTData,
                         uuid_ope,
                         features[i].properties
                     );
-                    
+
                     insertResults.push(result);
                 } catch (e) {
                     console.error(`Erreur insertion géométrie [${i}]:`, e.message);
@@ -1144,11 +1147,11 @@ router.post(
                 if (!feature.geometry || !feature.geometry.type) {
                     throw new Error("Feature sans géométrie détecté");
                 }
-                
+
                 const geomType = feature.geometry.type.toUpperCase();
                 console.log(`Type géométrie dans feature: ${geomType}`);
                 console.log(`Coordonnées:`, JSON.stringify(feature.geometry.coordinates).substring(0, 200));
-                
+
                 if (!typeGeometry) {
                     typeGeometry = geomType;
                 } else if (typeGeometry !== geomType) {
@@ -1174,11 +1177,11 @@ router.post(
             for (let i = 0; i < features.length; i++) {
                 try {
                     const feature = features[i];
-                    
+
                     console.log(`\n=== Traitement géométrie GeoJSON [${i}] ===`);
                     console.log(`Type: ${feature.geometry.type}`);
                     console.log(`Nombre de coordonnées (depth):`, JSON.stringify(feature.geometry.coordinates).length);
-                    
+
                     // Convertir en WKT (la fonction utilise le SRID hardcodé pour l'instant)
                     const WKTData = convertToWKT(
                         feature.geometry.coordinates,
@@ -1290,7 +1293,7 @@ router.put("/put/table=docs", async (req, res) => {
                 // Préparer les fichiers à insérer
                 const filesToInsert = [];
 
-                for (const [fieldName, files] of Object.entries( req.files || {} )) {
+                for (const [fieldName, files] of Object.entries(req.files || {})) {
                     const docType = fieldToType[fieldName];
                     if (!docType) {
                         console.warn(

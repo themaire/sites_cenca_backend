@@ -1,7 +1,7 @@
 
 function getRightId(table) {
     let pkName = '';
-    if (['espaces', 'sites', 'projets', 'operations', 'objectifs','projets_mfu'].includes(table)) {
+    if (['espaces', 'sites', 'projets', 'operations', 'objectifs','projets_mfu', 'actes_mfu'].includes(table)) {
         if(table == 'espaces'){
             pkName = 'uuid_espace';
         } else if(table == 'sites'){
@@ -12,8 +12,10 @@ function getRightId(table) {
             pkName = 'uuid_ope';
         } else if(table == 'objectifs'){
             pkName = 'uuid_objectif';
-        } else if(table == 'projets_mfu'){
+        } else if (table == 'projets_mfu'){
             pkName = 'pmfu_id';
+        } else if (table == 'actes_mfu'){
+            pkName = 'uuid_acte';
         }
     } else if (table == 'localisations') {
         pkName = 'loc_id';
@@ -21,6 +23,8 @@ function getRightId(table) {
         pkName = 'cd_salarie';
     } else if (table == 'groupes') {
         pkName = 'gro_id';
+    } else if (table == 'actes_mfu') {
+        pkName = 'uuid_acte';
     } else {
         pkName = table.slice(0, -1);
     }
