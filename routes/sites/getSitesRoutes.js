@@ -250,6 +250,28 @@ router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
     ); // Retourne un ou plusieurs résultats
 });
 
+    // Parcelles associées à un acte MFU
+    router.get("/parcelles_mfu/uuid=:uuid", (req, res) => {
+        let { SelectFields, FromTable, where, message } = reset();
+        message = "sites/parcelles_mfu/uuid";
+        SelectFields = "SELECT uuid_parcelle, insee, prefix, section, numero, partie, surface, validite, acte_mfu, id_source, remarque, pour_partie, typ_proprietaire, proprietaire, code_parcelle, typro.libelle as libelle, typro.libelle_court as libelle_court ";
+        FromTable = "FROM sitcenca.parcelles_mfu ";
+        FromTable += "LEFT JOIN sitcenca.typ_proprietaires as typro ON sitcenca.parcelles_mfu.typ_proprietaire = typro.cd_type ";
+        where = "where acte_mfu = $1;";
+
+        executeQueryAndRespond(
+            pool,
+            SelectFields,
+            FromTable,
+            where,
+            req.params.uuid,
+            res,
+            message,
+            (mode = "lite")
+        ); // Retourne plusieurs résultats
+    });
+
+
 // Les projets travaux
 router.get("/projets/uuid=:uuid/:mode", (req, res) => {
     const mode = req.params.mode; // 'lite' ou 'full'
@@ -687,7 +709,11 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         "territoire"
     ];
 
-    if (simpleTables.includes(list)) {
+    // Handle typ_proprietaires table specifically - before simpleTables check
+    if (list == "sitcenca.typ_proprietaires") {
+        SelectFields += "cd_type, libelle ";
+        where = "order by cd_type;";
+    } else if (simpleTables.includes(list)) {
         SelectFields += "cd_type, libelle ";
 
     } else if (list == "ope.actions") {
@@ -801,6 +827,8 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
             where = "order by lib_ordre;";
         } else if (list == "sitcenca.typ_mfu") {
             where = "where val_tri is not null order by val_tri;"
+        } else if (list == "sitcenca.typ_proprietaires") {
+            where = "order by cd_type;"
         }
         else {
             where = "order by val_tri;";

@@ -145,7 +145,7 @@ const fileFilter = (req, file, cb) => {
     ];
 
     const ext = path.extname(file.originalname).toLowerCase();
-    console.log(" Tentative d’upload:", file.originalname, ">", file.mimetype);
+    console.log(" Tentative d'upload:", file.originalname, ">", file.mimetype);
     if (
         allowedMimeTypes.includes(file.mimetype) ||
         allowedExtensions.includes(ext)
@@ -438,6 +438,47 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                     }
                 }
             );
+        } else if (TABLE === "parcelles_mfu") {
+            console.log("Coucou je suis passé par là pour la table " + TABLE);
+            // spécifier le schema pour que generateUpdateQuery puisse extraire correctement le nom
+            const queryObject = generateUpdateQuery(
+                "sitcenca." + TABLE, UUID, updateData);
+            console.log(queryObject);
+
+            ExecuteQuerySite(
+                pool,
+                {
+                    query: queryObject,
+                    message: "sites/put/table=" + TABLE + "/uuid",
+                },
+                "update",
+                (resultats, message) => {
+                    res.setHeader("Access-Control-Allow-Origin", "*");
+                    res.setHeader(
+                        "Content-Type",
+                        "application/json; charset=utf-8"
+                    );
+
+                    if (message === "ok") {
+                        res.status(200).json({
+                            success: true,
+                            message: "Mise à jour réussie.",
+                            data: resultats,
+                        });
+                        console.log("message : " + message);
+                        console.log("resultats : " + resultats);
+                    } else {
+                        const currentDateTime = new Date().toISOString();
+                        console.log(`Échec de la requête à ${currentDateTime}`);
+                        console.log(queryObject.text);
+                        console.log(queryObject.values);
+                        res.status(500).json({
+                            success: false,
+                            message: "Erreur, la requête s'est mal exécutée.",
+                        });
+                    }
+                }
+            );
         } else if (TABLE === "projets_mfu") {
             const queryObject = generateUpdateQuery(
                 "sitcenca." + TABLE,
@@ -479,7 +520,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
     }
 });
 
-// Ajouter un site, un acte, une operation ...
+// Ajouter un site, un acte, une parcelle, une operation ...
 router.put("/put/table=:table/insert", (req, res) => {
     // console.log("La requête : ", req);
     const TABLE = req.params.table;
@@ -491,6 +532,7 @@ router.put("/put/table=:table/insert", (req, res) => {
     const TABLES = {
         sites: "sitcenca",
         actes_mfu: "sitcenca",
+        parcelles_mfu: "sitcenca",
         projets_mfu: "sitcenca",
         pmfu_docs: "sitcenca",
         projets: "opegerer",
@@ -603,9 +645,11 @@ router.put("/put/table=:table/insert", (req, res) => {
             const queryObject = generateInsertQuery(
                 WORKING_TABLE,
                 INSERT_DATA,
-                (createUUID = false)
+                false
             );
-            console.log(queryObject);
+            console.log("Requête générée pour " + TABLE + " :");
+            console.log("SQL:", queryObject.text);
+            console.log("Values:", queryObject.values);
 
             ExecuteQuerySite(
                 pool,
@@ -630,11 +674,12 @@ router.put("/put/table=:table/insert", (req, res) => {
                     } else {
                         const currentDateTime = new Date().toISOString();
                         console.log(`Échec de la requête à ${currentDateTime}`);
-                        console.log(queryObject.text);
-                        console.log(queryObject.values);
+                        console.log("SQL:", queryObject.text);
+                        console.log("Values:", queryObject.values);
+                        console.log("Message d'erreur:", message);
                         res.status(500).json({
                             success: false,
-                            message: "Erreur, la requête s'est mal exécutée.",
+                            message: "Erreur, la requête s'est mal exécutée. Détails: " + message,
                         });
                     }
                 }
@@ -1347,7 +1392,7 @@ router.put("/put/table=docs", async (req, res) => {
                 return res.status(200).json({ success: true, data: results });
             } catch (err) {
                 console.error(
-                    "Erreur pendant l’insertion des documents :",
+                    "Erreur pendant l'insertion des documents :",
                     err
                 );
                 return res

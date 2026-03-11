@@ -16,6 +16,8 @@ function getRightId(table) {
             pkName = 'pmfu_id';
         } else if (table == 'actes_mfu'){
             pkName = 'uuid_acte';
+        } else if (table == 'parcelles_mfu'){
+            pkName = 'uuid_parcelle';
         }
     } else if (table == 'localisations') {
         pkName = 'loc_id';
@@ -25,6 +27,8 @@ function getRightId(table) {
         pkName = 'gro_id';
     } else if (table == 'actes_mfu') {
         pkName = 'uuid_acte';
+    } else if (table == 'parcelles_mfu') {
+        pkName = 'uuid_parcelle';
     } else {
         pkName = table.slice(0, -1);
     }
@@ -36,9 +40,23 @@ function generateUpdateQuery(table, uuid, updateData) {
     const setClauses = [];
     const values = [];
 
-    Object.keys(updateData).forEach((key, index) => {
+    // Colonnes virtuelles à exclure pour certaines tables (ces colonnes proviennent des JOINs, pas de la table elle-même)
+    const virtualColumns = {
+        'parcelles_mfu': ['libelle', 'libelle_court'],
+        'sitcenca.parcelles_mfu': ['libelle', 'libelle_court']
+    };
+    
+    // Filtrer les colonnes virtuelles
+    const tableKey = table.replace(/^.*\./, ''); // Enlever le schéma si présent
+    const columnsToExclude = virtualColumns[table] || virtualColumns[tableKey] || [];
+
+    // Filtrer les données pour exclure les colonnes virtuelles
+    const filteredData = Object.entries(updateData).filter(([key]) => !columnsToExclude.includes(key));
+    
+    // Générer les clauses SET avec les données filtrées
+    filteredData.forEach(([key, value], index) => {
         setClauses.push(`${key} = $${index + 2}`); // +2 pour compenser l'UUID
-        values.push(updateData[key]); // Ajouter la valeur
+        values.push(value);
     });
 
     updateQuery += setClauses.join(", ");
@@ -75,6 +93,17 @@ function generateInsertQuery(tableName, insertData, createUUID = true) {
         throw new Error("insertData ne peut pas être vide");
     }
 
+    // Colonnes virtuelles à exclure pour certaines tables (ces colonnes proviennent des JOINs, pas de la table elle-même)
+    const virtualColumns = {
+        'sitcenca.parcelles_mfu': ['libelle', 'libelle_court'],
+        'parcelles_mfu': ['libelle', 'libelle_court']
+    };
+    
+    // Filtrer les colonnes virtuelles
+    const tableKey = tableName.replace(/^.*\./, ''); // Enlever le schéma si présent
+    const columnsToExclude = virtualColumns[tableName] || virtualColumns[tableKey] || [];
+    
+    const filteredEntries = entries.filter(([key]) => !columnsToExclude.includes(key));
 
     // Construire la requête SQL en utilisant (ou pas) gen_random_uuid() pour le premier élément
     let genUUID = ''; // Pour générer un UUID (ou pas)
@@ -84,13 +113,13 @@ function generateInsertQuery(tableName, insertData, createUUID = true) {
     if (createUUID) {
         console.log("mode : c'est la BDD qui créé le UUID");
         // Ignorer le premier élément pour les placeholders
-        const [firstEntry, ...filteredEntries] = entries;
+        const [firstEntry, ...restEntries] = filteredEntries;
 
-        // Il s'agit de la premiere colonne des champs donnés
+        // Il s'agit de la premiere colonne des champs dados
         const firstEntryValue = firstEntry[0]; // Pour specifier la clé de la table comme premier élément (ou pas)
 
         // Reconstruire l'objet sans le premier élément
-        const filteredData = Object.fromEntries(filteredEntries);
+        const filteredData = Object.fromEntries(restEntries);
     
         // Générer les noms de colonnes et les valeurs
         const columns = Object.keys(filteredData).join(', ');
@@ -112,8 +141,8 @@ function generateInsertQuery(tableName, insertData, createUUID = true) {
         };
     } else {
         console.log("mode : c'est PAS l'appli qui créé le UUID");
-        // Reconstruire l'objet entier
-        const data = Object.fromEntries(entries);
+        // Reconstruire l'objet entier (déjà filtré)
+        const data = Object.fromEntries(filteredEntries);
         console.log('pmfu_id dans data: ', data.pmfu_id);
         console.log('ref_pmfu_id dans data: ', data.ref_pmfu_id);
         // Générer les noms de colonnes et les valeurs
@@ -286,3 +315,4 @@ function generateCloneCheckboxQuery(checkboxTable, oldUuidOpe, newUuidOpe) {
 }
 
 module.exports = { generateUpdateQuery, generateInsertQuery, generateDeleteQuery, generateCloneQuery, getTableColums, generateCloneCheckboxQuery };
+
