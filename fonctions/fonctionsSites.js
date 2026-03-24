@@ -21,10 +21,14 @@ async function ExecuteQuerySite(pool, param, type, callback) {
 
     if (type === "string") type = type.toLowerCase();
 
+console.log(`🔍 [ExecuteQuerySite] ${param.message || 'requête'}:`, JSON.stringify(param.query, null, 2));
+
     try {
         // Exécute la requête SQL avec les paramètres fournis
         const RESULTS = await pool.query(param["query"]);
         const nbLignes = RESULTS.rowCount;
+        console.log(`✅ [ExecuteQuerySite] ${param.message || 'requête'} → ${nbLignes} lignes`);
+
 
         // Si aucune ligne n'est retournée ou si le type est "update" ou "insert" ou "delete", appelle le callback avec un message et une liste vide
         if (nbLignes >= 0 && ["update", "insert", "delete"].includes(type)) {

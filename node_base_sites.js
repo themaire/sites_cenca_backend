@@ -153,8 +153,15 @@ if (NODE_ENV === 'production') {
   }
 }
 
+// Fonction principale pour démarrer le serveur
 async function run() {
   try {
+
+    // // récupérer toutes les communes en cache 
+    // await getAllCommunesCache(); // Appel de la fonction pour précharger les communes en cache
+    // console.log("✅ Cache des communes préchargé");
+    // console.log("Global cacheCommunes:", global.communesCache.length); // Affiche le contenu du cache des communes
+
     app.use('/menu', menuRoutes);
     app.use('/auth', userRoutes);
 

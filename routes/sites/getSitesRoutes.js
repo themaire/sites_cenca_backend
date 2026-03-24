@@ -225,7 +225,7 @@ router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
 
     if (req.params.mode == "lite") {
         SelectFields =
-            "SELECT site, uuid_acte, debut, fin, tacit_rec, typ_mfu, url, type_prop, surf_totale, validite ";
+            "SELECT nom, site, uuid_acte, debut, fin, tacit_rec, typ_mfu, url, type_prop, surf_totale, validite ";
         FromTable = "FROM sitcenca.listeallactes ";
         where = "where site = $1 order by debut;";
 
@@ -250,26 +250,35 @@ router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
     ); // Retourne un ou plusieurs résultats
 });
 
-    // Parcelles associées à un acte MFU
+// Parcelles associées à un acte MFU 🔍 DIAGNOSTIC
     router.get("/parcelles_mfu/uuid=:uuid", (req, res) => {
+        const uuidActe = req.params.uuid;
+        console.log(`🔍 [getSitesRoutes] Requête parcelles pour acte_mfu UUID: ${uuidActe}`);
+        
         let { SelectFields, FromTable, where, message } = reset();
         message = "sites/parcelles_mfu/uuid";
-        SelectFields = "SELECT uuid_parcelle, insee, prefix, section, numero, partie, surface, validite, acte_mfu, id_source, remarque, pour_partie, typ_proprietaire, proprietaire, code_parcelle, typro.libelle as libelle, typro.libelle_court as libelle_court ";
-        FromTable = "FROM sitcenca.parcelles_mfu ";
-        FromTable += "LEFT JOIN sitcenca.typ_proprietaires as typro ON sitcenca.parcelles_mfu.typ_proprietaire = typro.cd_type ";
-        where = "where acte_mfu = $1;";
+        SelectFields = "SELECT p.*, typro.libelle as libelle, typro.libelle_court as libelle_court, com.nom as nom_commune ";
+        FromTable = "FROM sitcenca.parcelles_mfu p ";
+        FromTable += "LEFT JOIN sitcenca.typ_proprietaires typro ON p.typ_proprietaire = typro.cd_type ";
+        FromTable += "LEFT JOIN terr.listecommunes com ON p.insee = com.insee_com ";
+        where = "WHERE p.acte_mfu = $1 ORDER BY com.nom NULLS LAST, p.section, p.numero";
 
+        console.log(`🔍 [getSitesRoutes] SQL générée: ${SelectFields}\nFROM ${FromTable}\n${where}`);
+        
         executeQueryAndRespond(
             pool,
             SelectFields,
             FromTable,
             where,
-            req.params.uuid,
+            uuidActe,
             res,
             message,
-            (mode = "lite")
-        ); // Retourne plusieurs résultats
+            'lite'
+        );
     });
+
+
+
 
 
 // Les projets travaux
@@ -277,6 +286,7 @@ router.get("/projets/uuid=:uuid/:mode", (req, res) => {
     const mode = req.params.mode; // 'lite' ou 'full'
     const type = req.query.type || null; // Paramètre optionnel "type"
     const webapp = req.query.webapp || null; // Paramètre optionnel "webapp"
+    const webappNum = webapp === '1' ? 1 : 0; // Convert string to number safely
     console.log(
         "Demande de projet pour l'uuid " +
         req.params.uuid +
@@ -299,7 +309,7 @@ router.get("/projets/uuid=:uuid/:mode", (req, res) => {
     where = "where ";
     // Liste liste pour les projets à l'ancienne (application MS Access)
     if (mode == "lite") {
-        if (webapp != 1) {
+        if (webappNum === 1) {
             selectFields +=
                 "uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, generation, statut, webapp, uuid_site ";
             fromTable = "FROM ope.synthesesites ";
