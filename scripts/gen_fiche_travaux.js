@@ -415,8 +415,7 @@ function generateFicheTravauxWord(bilan) {
                         children: [footer]
                     }),
                 }
-            }, // Fin de de la première section
-
+            }, // Fin de de la première section (page)
 
 
             {

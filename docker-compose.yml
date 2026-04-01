@@ -4,7 +4,7 @@ services:
     build: .
     # image: node_pgsql-node_app:latest
     volumes:
-      - /etc/ssl/certs/si-10.cen-champagne-ardenne.org:/etc/ssl/certs/si-10.cen-champagne-ardenne.org:ro
+      - /etc/letsencrypt/live/si-10.cen-champagne-ardenne.org:/etc/letsencrypt/live/si-10.cen-champagne-ardenne.org:ro
       - /mnt/storage_data/app/:/mnt/storage_data/app/
     ports:
       - "8889:8887"

@@ -115,7 +115,7 @@ router.post('/login', async (req, res) => {
     { query: userQuery, message: "/auth/login" },
     "select",
     async ( resultats, message ) => { // On a le droit de mettre async ici sur la fonction de rappel (callback)
-      let messageError = 'Indentifiant ou mot de passe incorrect';
+      let messageError = 'Identifiant ou mot de passe incorrect';
       if (resultats.length !== 1) {
         return res.status(400).json({ message: messageError });
       } else if (resultats.length === 1) {
