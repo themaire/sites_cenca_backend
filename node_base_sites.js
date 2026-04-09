@@ -59,16 +59,25 @@ app.use(metricsMiddleware);
 const rateLimit = require("express-rate-limit");
 
 // Configuration du middleware de rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Limite chaque IP à 500 requêtes par fenêtre
-  message: "Trop de requêtes effectuées depuis cette IP, veuillez réessayer plus tard.",
-  standardHeaders: true, // Retourne les informations de rate limit dans les headers `RateLimit-*`
-  legacyHeaders: false, // Désactive les headers `X-RateLimit-*`
+const globalRateLimit = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    if (!res.getHeader('Access-Control-Allow-Origin')) {
+      const origin = req.headers.origin;
+      res.setHeader('Access-Control-Allow-Origin', origin || '*');
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    }
+    res.status(429).json({
+      error: 'Trop de requêtes, veuillez réessayer plus tard.'
+    });
+  }
 });
-
-// Appliquer le middleware globalement
-app.use(limiter);
 
 var cors = require("cors");
 // app.listen(NODE_PORT); // ← Déplacé dans la fonction run() pour gestion HTTPS/HTTP
@@ -106,6 +115,21 @@ app.use(cors({
   credentials: true, // Autorise les cookies et les informations d'authentification
 }));
 
+// Appliquer le rate limit apres CORS pour conserver les headers CORS en 429
+app.use((req, res, next) => {
+  const origin = req.headers.origin || '';
+  const host = req.headers.host || '';
+  const isLocal =
+    !origin ||
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin) ||
+    /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host);
+
+  if (isLocal) {
+    return next();
+  }
+  return globalRateLimit(req, res, next);
+});
+
 
 // debugger les requêtes entrantes
 // app.use((req, res, next) => {
@@ -116,7 +140,19 @@ app.use(cors({
 
 
 // app.use(cors()); // Middleware CORS
-app.options('*', cors()); // Répond à toutes les requêtes préflight
+app.options('*', (req, res, next) => {
+  const origin = req.headers.origin || '';
+  const host = req.headers.host || '';
+  const isLocal =
+    !origin ||
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin) ||
+    /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host);
+
+  if (isLocal) {
+    return next();
+  }
+  return globalRateLimit(req, res, next);
+}, cors()); // Répond à toutes les requêtes préflight
 app.use(express.json()); // Pour traiter les requêtes JSON
 app.use(express.urlencoded({ extended: true })); // Pour traiter les requêtes encodées en URL
 
@@ -153,8 +189,15 @@ if (NODE_ENV === 'production') {
   }
 }
 
+// Fonction principale pour démarrer le serveur
 async function run() {
   try {
+
+    // // récupérer toutes les communes en cache 
+    // await getAllCommunesCache(); // Appel de la fonction pour précharger les communes en cache
+    // console.log("✅ Cache des communes préchargé");
+    // console.log("Global cacheCommunes:", global.communesCache.length); // Affiche le contenu du cache des communes
+
     app.use('/menu', menuRoutes);
     app.use('/auth', userRoutes);
 

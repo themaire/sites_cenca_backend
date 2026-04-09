@@ -293,6 +293,16 @@ router.get("/parcelles/commune/:codeInsee", async (req, res) => {
         
         const codeInsee = req.params.codeInsee;
         
+        // VALIDATION INSEE: 5 chiffres obligatoires
+        if (!/^[0-9]{5}$/.test(codeInsee)) {
+            console.error("[API-GEO] ❌ Code INSEE invalide:", codeInsee);
+            return res.status(400).json({
+                success: false,
+                message: `Code INSEE invalide: ${codeInsee} (doit être 5 chiffres ex: 10400)`,
+                example: "10400 (Aigremont)"
+            });
+        }
+        
         if (!codeInsee) {
             return res.status(400).json({
                 success: false,
@@ -331,6 +341,15 @@ router.get("/parcelles/commune/:codeInsee", async (req, res) => {
         });
     }
 });
+
+
+/**
+ * Route
+ * 
+ * 
+ * 
+ */
+
 
 /**
  * Route de test pour vérifier le bon fonctionnement du service
