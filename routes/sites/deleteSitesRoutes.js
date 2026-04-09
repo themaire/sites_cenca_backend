@@ -25,6 +25,47 @@ const pool = require("../../dbPool/poolConnect.js");
 // Generateur de requetes SQL
 const { generateDeleteQuery } = require("../../fonctions/querys.js");
 
+// Détacher un site secondaire d'un acte MFU multi-sites
+router.delete('/mfu/actes-multi/ref_uuid_acte=:acteUuid/ref_uuid_site=:siteUuid', async (req, res) => {
+    const { acteUuid, siteUuid } = req.params;
+
+    if (!acteUuid || !siteUuid) {
+        return res.status(400).json({
+            success: false,
+            message: 'Paramètres acteUuid/siteUuid manquants.',
+        });
+    }
+
+    try {
+        const query = `
+            DELETE FROM sitcenca.actes_mfu_multi
+            WHERE ref_uuid_acte = $1 AND ref_uuid_site = $2
+            RETURNING ref_uuid_acte, ref_uuid_site;
+        `;
+
+        const result = await pool.query(query, [acteUuid, siteUuid]);
+
+        if (!result.rowCount) {
+            return res.status(404).json({
+                success: false,
+                message: 'Rattachement introuvable.',
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'Site détaché de l\'acte.',
+            data: result.rows[0],
+        });
+    } catch (error) {
+        console.error('Erreur suppression rattachement acte/site:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Erreur lors du détachement du site.',
+        });
+    }
+});
+
 // Supprimer une opération, une localisation (d'opération), un projet, etc.
 
 // Commenté pour le moment, remplacé par handleDelete dans fonctions/routeHandlers.js
