@@ -20,6 +20,7 @@ router.get("/foncier/extraction=:id", (req, res) => {
     FromTable =     "FROM foncier.extractions ";
     FromTable +=    'LEFT JOIN admin.salaries sal ON extractions.ref_identifiant = sal.identifiant ';
 
+    where = "";  // Initialiser à vide par défaut
     if (ID !== "null") {
         where = "where ext_id = $1";
     }

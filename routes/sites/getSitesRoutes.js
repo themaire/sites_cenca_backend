@@ -225,9 +225,17 @@ router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
 
     if (req.params.mode == "lite") {
         SelectFields =
-            "SELECT nom, site, uuid_acte, debut, fin, tacit_rec, typ_mfu, url, type_prop, surf_totale, validite ";
+            "SELECT DISTINCT nom, site, uuid_acte, debut, fin, tacit_rec, typ_mfu, url, type_prop, surf_totale, validite ";
         FromTable = "FROM sitcenca.listeallactes ";
-        where = "where site = $1 order by debut;";
+        where =
+            "where site = $1 " +
+            "OR EXISTS (" +
+            "    SELECT 1 " +
+            "    FROM sitcenca.actes_mfu_multi amm " +
+            "    WHERE amm.ref_uuid_acte = sitcenca.listeallactes.uuid_acte " +
+            "      AND amm.ref_uuid_site = $1" +
+            ") " +
+            "order by debut;";
 
     } else if (req.params.mode == "full") {
         SelectFields =
@@ -250,32 +258,121 @@ router.get("/mfu/uuid=:uuid/:mode", (req, res) => {
     ); // Retourne un ou plusieurs résultats
 });
 
-// Parcelles associées à un acte MFU 🔍 DIAGNOSTIC
-    router.get("/parcelles_mfu/uuid=:uuid", (req, res) => {
-        const uuidActe = req.params.uuid;
-        console.log(`🔍 [getSitesRoutes] Requête parcelles pour acte_mfu UUID: ${uuidActe}`);
-        
-        let { SelectFields, FromTable, where, message } = reset();
-        message = "sites/parcelles_mfu/uuid";
-        SelectFields = "SELECT p.*, typro.libelle as libelle, typro.libelle_court as libelle_court, com.nom as nom_commune ";
-        FromTable = "FROM sitcenca.parcelles_mfu p ";
-        FromTable += "LEFT JOIN sitcenca.typ_proprietaires typro ON p.typ_proprietaire = typro.cd_type ";
-        FromTable += "LEFT JOIN terr.listecommunes com ON p.insee = com.insee_com ";
-        where = "WHERE p.acte_mfu = $1 ORDER BY com.nom NULLS LAST, p.section, p.numero";
+// MFU - Liste des actes avec rattachements multi-sites
+router.get("/mfu/multi-sites/lite", (req, res) => {
+    const sql = `
+        SELECT
+            amfu.uuid_acte,
+            amfu.typ_mfu,
+            COALESCE(tm.libelle, amfu.typ_mfu) AS typ_mfu_libelle,
+            amfu.debut,
+            amfu.fin,
+            amfu.validite,
+            amfu.site AS site_principal_uuid,
+            ep.nom AS site_principal_nom,
+            COALESCE(att.nb_sites, 1) AS nb_sites,
+            COALESCE(att.sites_associes, ep.nom) AS sites_associes,
+            COALESCE(att.sites_associes_details, '[]'::jsonb) AS sites_associes_details
+        FROM sitcenca.actes_mfu amfu
+        LEFT JOIN sitcenca.typ_mfu tm
+            ON tm.cd_type = amfu.typ_mfu
+        LEFT JOIN sitcenca.sites s_principal
+            ON s_principal.uuid_site = amfu.site
+        LEFT JOIN esp.espaces ep
+            ON ep.uuid_espace = s_principal.espace
+        LEFT JOIN LATERAL (
+            SELECT
+                COUNT(DISTINCT sites_union.uuid_site) AS nb_sites,
+                STRING_AGG(DISTINCT sites_union.nom_site, ' | ' ORDER BY sites_union.nom_site) AS sites_associes,
+                JSONB_AGG(DISTINCT jsonb_build_object('uuid_site', sites_union.uuid_site, 'nom_site', sites_union.nom_site))
+                    FILTER (WHERE sites_union.uuid_site IS NOT NULL) AS sites_associes_details
+            FROM (
+                SELECT
+                    s0.uuid_site,
+                    e0.nom AS nom_site
+                FROM sitcenca.sites s0
+                LEFT JOIN esp.espaces e0
+                    ON e0.uuid_espace = s0.espace
+                WHERE s0.uuid_site = amfu.site
 
-        console.log(`🔍 [getSitesRoutes] SQL générée: ${SelectFields}\nFROM ${FromTable}\n${where}`);
-        
-        executeQueryAndRespond(
-            pool,
-            SelectFields,
-            FromTable,
-            where,
-            uuidActe,
-            res,
-            message,
-            'lite'
-        );
+                UNION
+
+                SELECT
+                    s1.uuid_site,
+                    e1.nom AS nom_site
+                FROM sitcenca.actes_mfu_multi amm
+                JOIN sitcenca.sites s1
+                    ON s1.uuid_site = amm.ref_uuid_site
+                LEFT JOIN esp.espaces e1
+                    ON e1.uuid_espace = s1.espace
+                WHERE amm.ref_uuid_acte = amfu.uuid_acte
+            ) sites_union
+        ) att ON TRUE
+        ORDER BY amfu.debut DESC NULLS LAST;
+    `;
+
+    pool.query(sql, (err, result) => {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+        if (err) {
+            console.error("Erreur SQL /mfu/multi-sites/lite:", err);
+            return res.status(500).json({
+                success: false,
+                message: "Erreur lors de la récupération des actes multi-sites.",
+                detail: err.message,
+            });
+        }
+
+        return res.status(200).json(result?.rows || []);
     });
+});
+
+// MFU - Liste des sites disponibles pour rattachement multi-sites
+router.get("/mfu/sites/lite", (req, res) => {
+    let { SelectFields, FromTable, where, message } = reset();
+    message = "sites/mfu/sites/lite";
+
+    SelectFields = "SELECT s.uuid_site, e.nom as nom_site ";
+    FromTable = "FROM sitcenca.sites s ";
+    FromTable += "LEFT JOIN esp.espaces e ON s.espace = e.uuid_espace ";
+    where = "WHERE s.uuid_site IS NOT NULL ORDER BY e.nom;";
+
+    executeQueryAndRespond(
+        pool,
+        SelectFields,
+        FromTable,
+        where,
+        null,
+        res,
+        message,
+        "lite"
+    );
+});
+
+// Parcelles associées à un acte MFU
+router.get("/parcelles_mfu/uuid=:uuid", (req, res) => {
+    let { SelectFields, FromTable, where, message } = reset();
+    message = "sites/parcelles_mfu/uuid";
+
+    SelectFields =
+        "SELECT uuid_parcelle, insee, prefix, section, numero, partie, surface, validite, acte_mfu, id_source, remarque, pour_partie, typ_proprietaire, proprietaire, code_parcelle, typro.libelle as libelle, typro.libelle_court as libelle_court ";
+    FromTable = "FROM sitcenca.parcelles_mfu ";
+    FromTable +=
+        "LEFT JOIN sitcenca.typ_proprietaires as typro ON sitcenca.parcelles_mfu.typ_proprietaire = typro.cd_type ";
+    where = "where acte_mfu = $1;";
+
+    executeQueryAndRespond(
+        pool,
+        SelectFields,
+        FromTable,
+        where,
+        req.params.uuid,
+        res,
+        message,
+        "lite"
+    );
+});
 
 
 

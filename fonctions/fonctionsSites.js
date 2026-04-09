@@ -1,7 +1,9 @@
 const shapefile = require("shapefile");
 
 function joinQuery(select, from, where = "") {
-    const query = select + from + where;
+    // S'assurer que où n'est pas undefined
+    const whereClause = where === undefined || where === null ? "" : where;
+    const query = select + from + whereClause;
 
     // console.log(query);
 
@@ -295,12 +297,11 @@ function executeQueryAndRespond(
 
 function reset() {
     // Variables vides pour les requêtes
-
-    let SelectFields;
-    let FromTable;
-    let where;
-    let message;
-    let json;
+    let SelectFields = "";
+    let FromTable = "";
+    let where = "";  // Initialiser à vide pour éviter undefined
+    let message = "";
+    let json = {};
 
     return { SelectFields, FromTable, where, message, json };
 }

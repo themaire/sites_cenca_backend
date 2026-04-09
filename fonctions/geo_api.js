@@ -1,6 +1,12 @@
 const https = require('https');
 const http = require('http');
 
+require('dotenv').config();
+
+const LIZMAP_USER = process.env.LIZMAP_USER;
+const LIZMAP_PASSWORD = process.env.LIZMAP_PASSWORD;
+const LIZMAP_BASE_URL = process.env.LIZMAP_BASE_URL || 'https://cenca.lizmap.com/maps/index.php/lizmap/service';
+
 /**
  * Unified helper for robust API requests to geo.api.gouv.fr and similar
  * @param {string} url - Full URL to fetch
@@ -293,10 +299,161 @@ function validateAndAdjustBbox(bbox, maxArea = 0.1) {
     return bbox;
 }
 
-// Lizmap functions (placeholder - implement if needed)
+// Lizmap functions
 async function getLizmapData(params, options = {}) {
-    // Placeholder - implement Lizmap WFS if needed
-    throw new Error('Lizmap functions not implemented');
+    return new Promise((resolve, reject) => {
+        try {
+            if (!LIZMAP_USER || !LIZMAP_PASSWORD) {
+                return reject(new Error("Variables d'environnement LIZMAP_USER et LIZMAP_PASSWORD requises"));
+            }
+
+            const {
+                repository = 'cenca',
+                project = 'IRENEE',
+                version = '1.1.0',
+                request = 'GetFeature'
+            } = params || {};
+
+            const {
+                typename,
+                outputFormat = 'application/json',
+                maxFeatures = 1000,
+                bbox,
+                cqlFilter,
+                srs = 'EPSG:4326'
+            } = options || {};
+
+            const query = new URLSearchParams({
+                repository,
+                project,
+                SERVICE: 'WFS',
+                VERSION: version,
+                REQUEST: request,
+                OUTPUTFORMAT: outputFormat,
+                SRSNAME: srs,
+                MAXFEATURES: String(maxFeatures)
+            });
+
+            if (typename) query.append('TYPENAME', typename);
+            if (bbox) {
+                if (typeof bbox === 'string') {
+                    query.append('BBOX', bbox);
+                } else {
+                    query.append('BBOX', `${bbox.minX},${bbox.minY},${bbox.maxX},${bbox.maxY},${srs}`);
+                }
+            }
+            if (cqlFilter) query.append('CQL_FILTER', cqlFilter);
+
+            const url = `${LIZMAP_BASE_URL}?${query.toString()}`;
+            const auth = Buffer.from(`${LIZMAP_USER}:${LIZMAP_PASSWORD}`).toString('base64');
+
+            const req = https.get(url, {
+                headers: {
+                    Authorization: `Basic ${auth}`,
+                    'User-Agent': 'NodeJS-GeoAPI/1.0'
+                }
+            }, (response) => {
+                let data = '';
+                response.on('data', (chunk) => {
+                    data += chunk;
+                });
+                response.on('end', () => {
+                    if (response.statusCode && response.statusCode >= 400) {
+                        return reject(new Error(`Lizmap HTTP ${response.statusCode}: ${data.substring(0, 300)}`));
+                    }
+
+                    if (!data) {
+                        return resolve({});
+                    }
+
+                    try {
+                        const jsonData = JSON.parse(data);
+                        return resolve(jsonData);
+                    } catch {
+                        return resolve({
+                            data,
+                            contentType: response.headers['content-type'] || 'text/plain'
+                        });
+                    }
+                });
+            });
+
+            req.on('error', (error) => reject(new Error(`Erreur réseau Lizmap: ${error.message}`)));
+            req.setTimeout(20000, () => req.destroy(new Error('Timeout Lizmap')));
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+async function getLizmapLayerData(params, options = {}) {
+    const {
+        repository = 'cenca',
+        project = 'IRENEE',
+        layerName
+    } = params || {};
+
+    const {
+        bbox,
+        codesite,
+        maxFeatures = 1000,
+        srs = 'EPSG:4326'
+    } = options || {};
+
+    if (!layerName) {
+        throw new Error('Nom de couche Lizmap manquant (layerName)');
+    }
+
+    const query = new URLSearchParams({
+        repository,
+        project,
+        SERVICE: 'WFS',
+        VERSION: '1.1.0',
+        REQUEST: 'GetFeature',
+        TYPENAME: layerName,
+        OUTPUTFORMAT: 'application/json',
+        SRSNAME: srs,
+        MAXFEATURES: String(maxFeatures)
+    });
+
+    if (bbox && bbox.minX !== undefined) {
+        query.append('BBOX', `${bbox.minX},${bbox.minY},${bbox.maxX},${bbox.maxY},${srs}`);
+    }
+    if (codesite) {
+        query.append('CQL_FILTER', `codesite='${codesite}'`);
+    }
+
+    const data = await getLizmapData(
+        { repository, project, request: 'GetFeature', version: '1.1.0' },
+        {
+            typename: layerName,
+            outputFormat: 'application/json',
+            maxFeatures,
+            bbox: query.get('BBOX') || undefined,
+            cqlFilter: codesite ? `codesite='${codesite}'` : undefined,
+            srs
+        }
+    );
+
+    if (data?.type === 'ExceptionReport') {
+        const details = data?.Exception?.ExceptionText || 'Erreur WFS Lizmap';
+        throw new Error(String(details));
+    }
+
+    if (!data || !data.type || !Array.isArray(data.features)) {
+        const details = typeof data?.data === 'string' ? data.data.substring(0, 300) : JSON.stringify(data);
+        throw new Error(`Reponse Lizmap invalide pour ${layerName}: ${details}`);
+    }
+
+    return data;
+}
+
+async function getLizmapCapabilities(repository = 'cenca', project = 'IRENEE') {
+    const result = await getLizmapData(
+        { repository, project, request: 'GetCapabilities', version: '1.1.0' },
+        { outputFormat: 'text/xml', maxFeatures: 1 }
+    );
+    return result;
 }
 
 module.exports = {
@@ -307,6 +464,8 @@ module.exports = {
     parseIduFlexible,
     parseBboxString,
     validateAndAdjustBbox,
-    getLizmapData
+    getLizmapData,
+    getLizmapLayerData,
+    getLizmapCapabilities
 };
 

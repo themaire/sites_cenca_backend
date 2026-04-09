@@ -532,6 +532,7 @@ router.put("/put/table=:table/insert", (req, res) => {
     const TABLES = {
         sites: "sitcenca",
         actes_mfu: "sitcenca",
+        actes_mfu_multi: "sitcenca",
         parcelles_mfu: "sitcenca",
         projets_mfu: "sitcenca",
         pmfu_docs: "sitcenca",
