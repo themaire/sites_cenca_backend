@@ -74,7 +74,7 @@ const globalRateLimit = rateLimit({
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
     }
     res.status(429).json({
-      error: 'Trop de requetes, veuillez reessayer plus tard.'
+      error: 'Trop de requêtes, veuillez réessayer plus tard.'
     });
   }
 });
