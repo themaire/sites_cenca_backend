@@ -25,9 +25,72 @@ const pool = require("../../dbPool/poolConnect.js");
 // Generateur de requetes SQL
 const { generateDeleteQuery } = require("../../fonctions/querys.js");
 
+// Supprimer un acte MFU et tous ses rattachements multi-sites en une transaction.
+router.delete('/mfu/actes/uuid_acte=:acteUuid', async (req, res) => {
+    const { acteUuid } = req.params;
+
+    if (!acteUuid) {
+        return res.status(400).json({
+            success: false,
+            message: 'Paramètre acteUuid manquant.',
+        });
+    }
+
+    try {
+        await pool.query('BEGIN');
+
+        await pool.query(
+            `DELETE FROM sitcenca.actes_mfu_multi
+             WHERE ref_uuid_acte = $1`,
+            [acteUuid]
+        );
+
+        const deleteActeResult = await pool.query(
+            `DELETE FROM sitcenca.actes_mfu
+             WHERE uuid_acte = $1
+             RETURNING uuid_acte`,
+            [acteUuid]
+        );
+
+        if (!deleteActeResult.rowCount) {
+            await pool.query('ROLLBACK');
+            return res.status(404).json({
+                success: false,
+                message: 'Acte introuvable.',
+            });
+        }
+
+        await pool.query('COMMIT');
+
+        return res.status(200).json({
+            success: true,
+            message: 'Acte et rattachements supprimés.',
+            code: 0,
+            data: deleteActeResult.rows[0],
+        });
+    } catch (error) {
+        try {
+            await pool.query('ROLLBACK');
+        } catch (rollbackError) {
+            console.error('Erreur rollback suppression acte:', rollbackError);
+        }
+
+        console.error('Erreur suppression acte MFU:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la suppression de l\'acte MFU.',
+            code: 1,
+        });
+    }
+});
+
 // Détacher un site secondaire d'un acte MFU multi-sites
 router.delete('/mfu/actes-multi/ref_uuid_acte=:acteUuid/ref_uuid_site=:siteUuid', async (req, res) => {
     const { acteUuid, siteUuid } = req.params;
+    const currentSiteUuid = String(req.query.currentSiteUuid || '').trim();
+
+    const normalizeUuid = (value) => String(value || '').trim().toLowerCase();
+    const sameUuid = (left, right) => normalizeUuid(left) === normalizeUuid(right);
 
     if (!acteUuid || !siteUuid) {
         return res.status(400).json({
@@ -36,28 +99,113 @@ router.delete('/mfu/actes-multi/ref_uuid_acte=:acteUuid/ref_uuid_site=:siteUuid'
         });
     }
 
+    if (currentSiteUuid && sameUuid(currentSiteUuid, siteUuid)) {
+        return res.status(400).json({
+            success: false,
+            message: 'Impossible de détacher le site actuellement ouvert.',
+        });
+    }
+
     try {
-        const query = `
-            DELETE FROM sitcenca.actes_mfu_multi
-            WHERE ref_uuid_acte = $1 AND ref_uuid_site = $2
-            RETURNING ref_uuid_acte, ref_uuid_site;
+        await pool.query('BEGIN');
+
+        const acteQuery = `
+            SELECT uuid_acte, site
+            FROM sitcenca.actes_mfu
+            WHERE uuid_acte = $1
+            FOR UPDATE;
         `;
+        const acteResult = await pool.query(acteQuery, [acteUuid]);
 
-        const result = await pool.query(query, [acteUuid, siteUuid]);
-
-        if (!result.rowCount) {
+        if (!acteResult.rowCount) {
+            await pool.query('ROLLBACK');
             return res.status(404).json({
                 success: false,
-                message: 'Rattachement introuvable.',
+                message: 'Acte introuvable.',
             });
         }
+
+        const acteRow = acteResult.rows[0];
+        const isPrimarySite = sameUuid(acteRow.site, siteUuid);
+        const detached = {
+            ref_uuid_acte: acteUuid,
+            ref_uuid_site: siteUuid,
+        };
+
+        if (isPrimarySite) {
+            if (!currentSiteUuid) {
+                await pool.query('ROLLBACK');
+                return res.status(400).json({
+                    success: false,
+                    message: 'Le site courant est requis pour détacher le site principal de l\'acte.',
+                });
+            }
+
+            const currentAttachedQuery = `
+                SELECT 1
+                FROM sitcenca.actes_mfu_multi
+                WHERE ref_uuid_acte = $1 AND ref_uuid_site = $2
+                LIMIT 1;
+            `;
+            const currentAttachedResult = await pool.query(currentAttachedQuery, [acteUuid, currentSiteUuid]);
+
+            if (!currentAttachedResult.rowCount) {
+                await pool.query('ROLLBACK');
+                return res.status(400).json({
+                    success: false,
+                    message: 'Le site ouvert n\'est pas rattaché à cet acte.',
+                });
+            }
+
+            await pool.query(
+                `DELETE FROM sitcenca.actes_mfu_multi
+                 WHERE ref_uuid_acte = $1 AND ref_uuid_site = $2`,
+                [acteUuid, currentSiteUuid]
+            );
+
+            await pool.query(
+                `UPDATE sitcenca.actes_mfu
+                 SET site = $2
+                 WHERE uuid_acte = $1`,
+                [acteUuid, currentSiteUuid]
+            );
+
+            await pool.query(
+                `DELETE FROM sitcenca.actes_mfu_multi
+                 WHERE ref_uuid_acte = $1 AND ref_uuid_site = $2`,
+                [acteUuid, siteUuid]
+            );
+        } else {
+            const detachQuery = `
+                DELETE FROM sitcenca.actes_mfu_multi
+                WHERE ref_uuid_acte = $1 AND ref_uuid_site = $2
+                RETURNING ref_uuid_acte, ref_uuid_site;
+            `;
+
+            const detachResult = await pool.query(detachQuery, [acteUuid, siteUuid]);
+
+            if (!detachResult.rowCount) {
+                await pool.query('ROLLBACK');
+                return res.status(404).json({
+                    success: false,
+                    message: 'Rattachement introuvable.',
+                });
+            }
+        }
+
+        await pool.query('COMMIT');
 
         return res.status(200).json({
             success: true,
             message: 'Site détaché de l\'acte.',
-            data: result.rows[0],
+            data: detached,
         });
     } catch (error) {
+        try {
+            await pool.query('ROLLBACK');
+        } catch (rollbackError) {
+            console.error('Erreur rollback détachement acte/site:', rollbackError);
+        }
         console.error('Erreur suppression rattachement acte/site:', error);
         return res.status(500).json({
             success: false,
