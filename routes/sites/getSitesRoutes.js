@@ -269,7 +269,8 @@ router.get("/mfu/multi-sites/lite", (req, res) => {
             amfu.fin,
             amfu.validite,
             amfu.site AS site_principal_uuid,
-            ep.nom AS site_principal_nom,
+            s_principal.code AS site_principal_code,
+            ep.nom || ' (' || code || ')' AS site_principal_nom,
             COALESCE(att.nb_sites, 1) AS nb_sites,
             COALESCE(att.sites_associes, ep.nom) AS sites_associes,
             COALESCE(att.sites_associes_details, '[]'::jsonb) AS sites_associes_details
@@ -333,7 +334,7 @@ router.get("/mfu/sites/lite", (req, res) => {
     let { SelectFields, FromTable, where, message } = reset();
     message = "sites/mfu/sites/lite";
 
-    SelectFields = "SELECT s.uuid_site, e.nom as nom_site ";
+    SelectFields = "SELECT s.uuid_site, s.code as code_site, e.nom as nom_site ";
     FromTable = "FROM sitcenca.sites s ";
     FromTable += "LEFT JOIN esp.espaces e ON s.espace = e.uuid_espace ";
     where = "WHERE s.uuid_site IS NOT NULL ORDER BY e.nom;";
