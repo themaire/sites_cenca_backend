@@ -178,8 +178,8 @@ let httpsOptions = null;
 if (NODE_ENV === 'production') {
   try {
     httpsOptions = {
-      key: fs.readFileSync('/etc/ssl/certs/si-10.cen-champagne-ardenne.org/privkey.pem'),
-      cert: fs.readFileSync('/etc/ssl/certs/si-10.cen-champagne-ardenne.org/fullchain.pem')
+      key: fs.readFileSync('/etc/letsencrypt/live/si-10.cen-champagne-ardenne.org/privkey1.pem'),
+      cert: fs.readFileSync('/etc/letsencrypt/live/si-10.cen-champagne-ardenne.org/fullchain1.pem')
     };
     console.log('🔒 Certificats HTTPS chargés pour la production');
   } catch (error) {

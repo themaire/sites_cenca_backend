@@ -11,7 +11,7 @@ services:
       - NODE_ENV=production
     volumes:
       # Montage des certificats SSL pour HTTPS en production (lecture seule)
-      - /etc/ssl/certs/si-10.cen-champagne-ardenne.org:/etc/ssl/certs/si-10.cen-champagne-ardenne.org:ro
+      - /etc/letsencrypt/live/si-10.cen-champagne-ardenne.org:/etc/letsencrypt/live/si-10.cen-champagne-ardenne.org:ro
       
       # Montage du répertoire de stockage des données de l'application (lecture/écriture)
       - /mnt/storage_data/app/:/mnt/storage_data/app/

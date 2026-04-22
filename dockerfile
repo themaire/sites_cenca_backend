@@ -21,8 +21,8 @@ COPY .env .
 COPY node_base_sites.js .
 
 # Crée le répertoire pour les certificats SSL (si nécessaire)
-RUN mkdir -p /etc/ssl/certs/si-10.cen-champagne-ardenne.org
-RUN chown -R node:node /etc/ssl/certs/si-10.cen-champagne-ardenne.org
+RUN mkdir -p /etc/letsencrypt/live/si-10.cen-champagne-ardenne.org
+RUN chown -R node:node /etc/letsencrypt/live/si-10.cen-champagne-ardenne.org
 
  # Montage du stockage persistant
 RUN mkdir -p /mnt/storage_data/app/

@@ -1,7 +1,7 @@
 const { generateDeleteQuery } = require('./querys.js');
 const { ExecuteQuerySite } = require('./fonctionsSites.js');
 
-// Supprimer une opération, une localisation (d'opération), un projet, etc.
+// 
 function handleDelete(req, res, pool) {
     const table = req.params.table.split(".");
     const uuidName = req.params.uuidName;
