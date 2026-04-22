@@ -270,7 +270,7 @@ router.get("/mfu/multi-sites/lite", (req, res) => {
             amfu.validite,
             amfu.site AS site_principal_uuid,
             s_principal.code AS site_principal_code,
-            ep.nom AS site_principal_nom,
+            ep.nom || ' (' || code || ')' AS site_principal_nom,
             COALESCE(att.nb_sites, 1) AS nb_sites,
             COALESCE(att.sites_associes, ep.nom) AS sites_associes,
             COALESCE(att.sites_associes_details, '[]'::jsonb) AS sites_associes_details
