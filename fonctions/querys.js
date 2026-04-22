@@ -50,8 +50,17 @@ function generateUpdateQuery(table, uuid, updateData) {
     const tableKey = table.replace(/^.*\./, ''); // Enlever le schéma si présent
     const columnsToExclude = virtualColumns[table] || virtualColumns[tableKey] || [];
 
-    // Filtrer les données pour exclure les colonnes virtuelles
-    const filteredData = Object.entries(updateData).filter(([key]) => !columnsToExclude.includes(key));
+    console.log();
+    console.log("table : " + table);
+    const tableParts = table.split('.');
+    console.log("-----------> tableParts[1] : "  + tableParts[1]);
+
+    const pkName = getRightId(tableParts[1]); // Nom de la clé primaire - Prendre le nom de la table sans le schema
+
+    // Filtrer les données pour exclure les colonnes virtuelles et la clé primaire
+    const filteredData = Object.entries(updateData).filter(([key]) =>
+        !columnsToExclude.includes(key) && key !== pkName
+    );
     
     // Générer les clauses SET avec les données filtrées
     filteredData.forEach(([key, value], index) => {
@@ -59,13 +68,11 @@ function generateUpdateQuery(table, uuid, updateData) {
         values.push(value);
     });
 
-    updateQuery += setClauses.join(", ");
-    console.log();
-    console.log("table : " + table);
-    const tableParts = table.split('.');
-    console.log("-----------> tableParts[1] : "  + tableParts[1]);
+    if (!filteredData.length) {
+        throw new Error(`Aucune colonne modifiable fournie pour la table ${table}`);
+    }
 
-    const pkName = getRightId(tableParts[1]); // Nom de la clé primaire - Prendre le nom de la table sans le schema
+    updateQuery += setClauses.join(", ");
     
     console.log('pkName final:', pkName); // Debug
     const whereClause = " WHERE " + pkName + " = $1";
