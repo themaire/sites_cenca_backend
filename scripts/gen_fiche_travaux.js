@@ -364,9 +364,9 @@ function generateFicheTravauxWord(bilan) {
                                         verticalAlign: "center",
                                         children: [new Paragraph({ 
                                                         children: [
-                                                            new TextRun({ text: "Type d'opération 1 /" }),
-                                                            new TextRun({ break: 1 }), // Saut de ligne
-                                                            new TextRun({ text: "Type d'opération 2"})
+                                                            // new TextRun({ text: "Type d'opération 1 /" }),
+                                                            // new TextRun({ break: 1 }), // Saut de ligne
+                                                            new TextRun({ text: "Type d'opération"})
                                                         ],
                                                         alignment: AlignmentType.CENTER,
                                                         style: "HeaderTable"
@@ -394,7 +394,7 @@ function generateFicheTravauxWord(bilan) {
                             ...bilan.operations.map((op, idx) =>
                                 new TableRow({
                                     children: [
-                                        new TableCell({ children: [new Paragraph(String(op.type || ""))] }),
+                                        new TableCell({ children: [new Paragraph(String((op.type || "").split(' / ')[1] || ""))] }),
                                         new TableCell({ children: [new Paragraph(String(op.nom_mo || ""))] }),
                                         new TableCell({ children: [new Paragraph(`${String(op.quantite || "")} - ${String(op.unite_str.toLowerCase() || "")}`)] }),
                                         new TableCell({ children: [new Paragraph({
@@ -444,15 +444,15 @@ function generateFicheTravauxWord(bilan) {
                     // Boucle des opérations réalisées
                     ...bilan.operations.flatMap((op, i) => [
                         new Paragraph({
-                            text: `Opération ${i + 1}`,
+                            text: `Opération n°${i + 1}`,
                             style: "TitreColore",
                             spacing: { after: 80 }
                         }),
                         
                         new Paragraph({
                             children: [
-                                new TextRun({ text: "Type d'opération 1 / Type d'opération 2 : ", bold: true }),
-                                new TextRun({ text: op.type }),
+                                new TextRun({ text: "Type d'opération : ", bold: true }),
+                                new TextRun({ text: String((op.type || "").split(' / ')[1] || "") }),
                                 new TextRun({ break: 1 }),
                                 new TextRun({ text: "Description (détails) : ", bold: true }),
                                 new TextRun({ text: String(op.description || "non spécifiée") }),
