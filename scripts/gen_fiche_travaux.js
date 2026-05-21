@@ -26,7 +26,8 @@ function tableCellNoBorder(options = {}) {
 
 // Création du document
 function generateFicheTravauxWord(bilan) {
-    console.log("Génération de la fiche avec ce bilan :", bilan);
+    // console.log("Génération de la fiche avec ce bilan :", bilan);
+    // console.log("Financeurs :", bilan.operations.map(op => op.financeurs).flat());
 
     const header = new Table({
                     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -391,7 +392,8 @@ function generateFicheTravauxWord(bilan) {
                                 ]
                             }),
                             // Lignes d'opérations
-                            ...bilan.operations.map((op, idx) =>
+                            //...bilan.operations.map((op, idx) =>
+                            ...[...bilan.operations].sort((a, b) => { const p = d => { if (!d) return 0; const [j,m,an] = String(d).split('/'); return an && m && j ? new Date(an, m-1, j) : new Date(d); }; return p(a.date_debut_str) - p(b.date_debut_str); }).map((op, idx) =>
                                 new TableRow({
                                     children: [
                                         new TableCell({ children: [new Paragraph(String((op.type || "").split(' / ')[1] || ""))] }),
@@ -399,7 +401,7 @@ function generateFicheTravauxWord(bilan) {
                                         new TableCell({ children: [new Paragraph(`${String(op.quantite || "")} - ${String(op.unite_str.toLowerCase() || "")}`)] }),
                                         new TableCell({ children: [new Paragraph({
                                             children: (op.financeurs ?? []).map((financeur, i) => [
-                                                new TextRun({ text: financeur, style: "HeaderTable", verticalAlign: "center" }),
+                                                new TextRun({ text: financeur == 'Autre (préciser dans Description)' ? op.financeur_description ?? '' : financeur, style: "HeaderTable", verticalAlign: "center" }),
                                                 i < (op.financeurs ?? []).length - 1 ? new TextRun({ break: 1 }) : null
                                             ]).flat().filter(Boolean)
                                         })] }),
@@ -442,7 +444,7 @@ function generateFicheTravauxWord(bilan) {
                     }),
 
                     // Boucle des opérations réalisées
-                    ...bilan.operations.flatMap((op, i) => [
+                    ...[...bilan.operations].sort((a, b) => { const p = d => { if (!d) return 0; const [j,m,an] = String(d).split('/'); return an && m && j ? new Date(an, m-1, j) : new Date(d); }; return p(a.date_debut_str) - p(b.date_debut_str); }).flatMap((op, i) => [
                         new Paragraph({
                             text: `Opération n°${i + 1}`,
                             style: "TitreColore",

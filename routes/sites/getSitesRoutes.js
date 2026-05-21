@@ -465,10 +465,10 @@ router.get("/operations/uuid=:uuid/:mode", (req, res) => {
 
         selectFields = `SELECT op.uuid_ope, concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)) as type, op.nom_mo, op.quantite, opegerer.get_libelle(op.unite) as unite_str, op.code, op.titre, op.description, op.remarque, op.surf, to_char(op.date_debut, 'DD/MM/YYYY') as date_debut_str, `;
         selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_financeurs WHERE uuid_ope = op.uuid_ope ) AS financeurs, financeur_description, `;
-        selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_animaux WHERE uuid_ope = op.uuid_ope ) AS animaux `;
+        selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_animaux WHERE uuid_ope = op.uuid_ope ) AS animaux, financeur_description `;
         fromTable += "AS op ";
         where += "op.ref_uuid_proj = $1 ";
-        where += "ORDER BY op.date_ajout DESC;";
+        where += "ORDER BY op.date_debut ASC;";
 
     } else if (req.params.mode == 'full') {
         selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, ';
