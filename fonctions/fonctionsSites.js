@@ -67,6 +67,7 @@ console.log(`🔍 [ExecuteQuerySite] ${param.message || 'requête'}:`, JSON.stri
         }
     }
 }
+
 function ExecuteQuerySitePromise(pool, param, type) {
     return new Promise((resolve, reject) => {
         ExecuteQuerySite(pool, param, type, (rows, msg) => {
@@ -77,6 +78,7 @@ function ExecuteQuerySitePromise(pool, param, type) {
         });
     });
 }
+
 function selectQuery(params) {
     // Prends en paramètre les parametres de l'url recue
     // Retourne un query objet que la bibliotheque pg acceptera
@@ -134,6 +136,48 @@ function selectQuery(params) {
     }
 }
 
+function selectListTravauxQuery(params, typ_projet = 'TRV') {
+    // Toujours filtré sur les projets travaux (typ_projet = 'TRV')
+    // Filtres optionnels : annee, responsable, localisation, statut
+    // Retourne un query object compatible pg
+
+    let SelectFields = "SELECT ";
+    SelectFields += "p.uuid_proj, p.annee, p.responsable, p.loc, p.titre, p.nb_ope, p.statut, ";
+    SelectFields += "s.code AS code_site ";
+    let FromTable = "FROM ope.listeprojets p ";
+    FromTable += "LEFT JOIN opegerer.projets pr ON pr.uuid_proj = p.uuid_proj ";
+    FromTable += "LEFT JOIN sitcenca.sites s ON s.uuid_site = pr.site ";
+
+    let query = {
+        text: joinQuery(SelectFields, FromTable),
+        values: [],
+    };
+
+    let whereFilters = [
+        { "pr.pro_webapp": "True" },
+        { "p.typ_projet": typ_projet }
+    ]; // filtre de base toujours présent
+    let andOrEnd = " and ";
+
+    if (params.annee && params.annee !== "*") whereFilters.push({ "p.annee": params.annee });
+    if (params.responsable && params.responsable !== "*") whereFilters.push({ "p.responsable": params.responsable });
+    if (params.code && params.code !== "*") whereFilters.push({ "s.code": params.code });
+    if (params.statut && params.statut !== "*") whereFilters.push({ "p.statut": params.statut });
+
+    let where = " WHERE ";
+    for (const [key, value] of Object.entries(whereFilters)) {
+        let reqKey = parseInt(key) + 1;
+        if (reqKey === whereFilters.length) andOrEnd = ";";
+        where += Object.keys(value)[0] + " = $" + reqKey + andOrEnd;
+        query.values.push(Object.values(value)[0]);
+    }
+
+    query.text += where;
+    console.log(query);
+    return query;
+}
+
+
 async function distinctSiteResearch(
     pool,
     table,
@@ -150,7 +194,7 @@ async function distinctSiteResearch(
 
     const ResultValues = await pool.query(QUERY);
 
-    if (ResultValues.length === 0)
+    if (ResultValues.rowCount === 0)
         selectors.push({ name: property, values: [] });
     else {
         if (ResultValues !== undefined) {
@@ -167,6 +211,37 @@ async function distinctSiteResearch(
             callback(selectors);
         }
     }
+}
+
+/**
+ * Variante de distinctSiteResearch acceptant une requête SQL complète (avec jointures, WHERE, etc.).
+ * La requête doit retourner une colonne dont le nom correspond à `property`.
+ * @param {Object} pool - Le pool de connexions
+ * @param {Array}  selectors - Tableau accumulateur de sélecteurs
+ * @param {string} property  - Nom de la colonne retournée par la requête
+ * @param {string} title     - Titre affiché pour ce sélecteur
+ * @param {string} sqlText   - Requête SQL complète (SELECT DISTINCT ...)
+ * @param {Function} callback
+ */
+async function distinctResearchRaw(pool, selectors, property, title, sqlText, callback) {
+    const QUERY = { text: sqlText, values: [] };
+    // console.log("Executing distinctResearchRaw 🎯 with query:");
+    // console.log(QUERY);
+
+    const ResultValues = await pool.query(QUERY);
+    // console.log(`distinctResearchRaw - ${title}: ${ResultValues.rowCount} rows returned`);
+    
+    if (ResultValues.rowCount === 0) {
+        selectors.push({ name: property, title: title, values: [] });
+    } else {
+        let values = [];
+        for (let value of ResultValues.rows) {
+            if (value[property] !== null && value[property] !== undefined)
+                values.push(value[property]);
+        }
+        selectors.push({ name: property, title: title, values: values.sort() });
+    }
+    callback(selectors);
 }
 
 /**
@@ -617,7 +692,9 @@ module.exports = {
     ExecuteQuerySite,
     ExecuteQuerySitePromise,
     selectQuery,
+    selectListTravauxQuery,
     distinctSiteResearch,
+    distinctResearchRaw,
     updateEspaceSite,
     executeQueryAndRespond,
     reset,

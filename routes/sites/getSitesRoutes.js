@@ -21,7 +21,7 @@ if (!fs.existsSync(CACHE_DIR)) {
 // const { authenticateToken } = require('../fonctions/fonctionsAuth.js');
 
 // Fonctions et connexion à PostgreSQL
-const { joinQuery, selectQuery, ExecuteQuerySite, distinctSiteResearch,
+const { joinQuery, selectQuery, selectListTravauxQuery, ExecuteQuerySite, distinctSiteResearch, distinctResearchRaw,
     executeQueryAndRespond, reset, getBilan, } = require("../../fonctions/fonctionsSites.js");
 const { generateFicheTravauxWord } = require("../../scripts/gen_fiche_travaux.js");
 const pool = require("../../dbPool/poolConnect.js");
@@ -29,7 +29,7 @@ const pool = require("../../dbPool/poolConnect.js");
 router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
     // A FAIRE POUR PLUS TARD : adapter la fonction executeQueryAndRespond() (utilisée de partout sur toutes le routes) pour qu'elle puisse prendre en compte les paramètres de la requête
 
-    const queryObject = selectQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
+    const queryObject = selectQuery(req.params); // Fabrique la requete avec son where en fonction des req.params
     console.log(
         "Requête pour les critères de recherche de sites : " +
         JSON.stringify(queryObject)
@@ -58,18 +58,18 @@ router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
 );
 
 
-router.get("/criteria_travaux/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
+router.get("/criteria_travaux/:annee/:responsable/:code/:statut", (req, res) => {
     // A FAIRE POUR PLUS TARD : adapter la fonction executeQueryAndRespond() (utilisée de partout sur toutes le routes) pour qu'elle puisse prendre en compte les paramètres de la requête
 
-    const queryObject = selectListTravauxQuery(req.params); // Fabrique la requete avec son where en fonction des req.prams
+    const queryObject = selectListTravauxQuery(req.params); // Fabrique la requete avec son where en fonction des req.params
     console.log(
-        "Requête pour les critères de recherche de sites : " +
+        "Requête pour les critères de recherche de projets travaux : " +
         JSON.stringify(queryObject)
     );
 
     ExecuteQuerySite(
         pool,
-        { message: "/sites/criteria/type/code...", query: queryObject },
+        { message: "/sites/criteria_travaux/annee/responsable/code/statut", query: queryObject },
         "select",
         (resultats, message) => {
             if (resultats.length > 0 || message == "ok") {
@@ -710,58 +710,31 @@ router.get("/selectors_sites", (req, res) => {
     );
 });
 
-// PROJECT Selectors de la barre de recherche de projets par critères
+// PROJECT Selectors de la barre de recherche de projets travaux (type_projet = 'TRV')
 router.get("/selectors_projets", (req, res) => {
-    distinctSiteResearch(
-        pool,
-        'ope.listeprojets',
-        [],
-        "type_projet",
-        "Type de projet",
+    const TRV = "typ_projet = 'TRV'";
+
+    // ATTENTION : on ajoute aussi la condition "pro_webapp = True" pour ne récupérer que les projets qui sont dans la webapp (et pas ceux qui sont à l'ancienne dans MS Access)
+    const PRO_WEBAPP = "pro_webapp = True";
+    distinctResearchRaw(
+        pool, [], "annee", "Année",
+        `SELECT DISTINCT annee FROM ope.listeprojets WHERE ${TRV} and ${PRO_WEBAPP} ORDER BY annee DESC;`,
         (selectors) => {
-            distinctSiteResearch(
-                pool,
-                'ope.listeprojets',
-                selectors,
-                "annee",
-                "Année",
+            distinctResearchRaw(
+                pool, selectors, "responsable", "Responsable",
+                `SELECT DISTINCT responsable FROM ope.listeprojets WHERE ${TRV} and ${PRO_WEBAPP} ORDER BY responsable;`,
                 (selectors) => {
-                    distinctSiteResearch(
-                        pool,
-                        'ope.listeprojets',
-                        selectors,
-                        "responsable",
-                        "Responsable",
-                        // (selectors) => {
-                        // distinctSiteResearch(
-                        // pool,
-                        // 'ope.listeprojets',
-                        // selectors,
-                        // "statut",
-                        // "Statut",
-                        // (selectors) => {
-                        //     distinctSiteResearch(
-                        // pool,
-                        // 'ope.listeprojets',
-                        // selectors,
-                        // "fin",
-                        // "Fin acte",
+                    distinctResearchRaw(
+                        pool, selectors, "localisation", "Localisation",
+                        `SELECT DISTINCT s.code || ' - ' || e.nom AS localisation FROM ope.listeprojets p JOIN opegerer.projets pr ON pr.uuid_proj = p.uuid_proj JOIN sitcenca.sites s ON s.uuid_site = site JOIN esp.espaces e ON s.espace = e.uuid_espace WHERE p.${TRV} and p.${PRO_WEBAPP} ORDER BY localisation;`,
                         (selectors) => {
-                            const json =
-                                JSON.stringify(selectors);
-                            res.setHeader(
-                                "Access-Control-Allow-Origin",
-                                "*"
-                            );
-                            res.setHeader(
-                                "Content-type",
-                                "application/json; charset=UTF-8"
-                            );
+                            // console.log("Sélecteurs avant ajout du statut : " + JSON.stringify(selectors));
+                            
+                            selectors.push({ name: "statut", title: "Statut", values: ["Annulé", "En cours", "Terminé"] });
+                            const json = JSON.stringify(selectors);
+                            res.setHeader("Access-Control-Allow-Origin", "*");
+                            res.setHeader("Content-type", "application/json; charset=UTF-8");
                             res.end(json);
-                            // }
-                            // );
-                            //}
-                            // );
                         }
                     );
                 }
