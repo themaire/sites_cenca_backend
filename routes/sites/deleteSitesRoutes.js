@@ -345,14 +345,21 @@ router.delete("/delete/:table", (req, res) => {
 
                     const cacheDir = path.resolve(uploadsDir, "cache");
                     
-                    const filePath = path.resolve(uploadsDir, doc_path.split('/').slice(-2).join('/'));
+                    // doc_path est relatif à uploadsDir (ex: "photos/pmfu/doc_41_...jpg")
+                    let filePath = path.resolve(uploadsDir, doc_path);
+                    // Rétrocompat : anciens enregistrements BDD sans le préfixe "photos/" (slice(-2) bug)
+                    if (!fs.existsSync(filePath) && /\.(jpg|jpeg|png)$/i.test(doc_path)) {
+                        const legacyPath = path.resolve(uploadsDir, 'photos', doc_path);
+                        if (fs.existsSync(legacyPath)) filePath = legacyPath;
+                    }
                     console.log("Fichier à supprimer:", filePath);
                     
-                    // Construire le pattern de recherche pour tous les fichiers de cache liés
-                    // Exemple: photo.jpg -> photo_*.jpg (trouvera photo_200.jpg, photo_800.jpg, etc.)
-                    const fileName = doc_path.split('/').pop();
-                    const ext = path.extname(fileName);
-                    const basename = path.basename(fileName, ext);
+                    // Construire le pattern de recherche pour tous les fichiers de cache liés.
+                    // Le cache est nommé avec les '/' remplacés par '_' (même logique que pictureRoute.js).
+                    // Exemple: "photos/doc_42_plan.jpg" → cherche "photos_doc_42_plan_*.jpg"
+                    const safeFileName = doc_path.replace(/\//g, '_');
+                    const ext = path.extname(safeFileName);
+                    const basename = path.basename(safeFileName, ext);
                     const cachePattern = `${basename}_*${ext}`;
                     console.log("Pattern de cache à rechercher:", cachePattern);
                     
@@ -366,10 +373,14 @@ router.delete("/delete/:table", (req, res) => {
                         });
                     }
                     // Supprimer tous les fichiers de cache correspondant au pattern
-                    if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") || fileName.endsWith(".png")) {
+                    // console.log("[DELETE] doc_path reçu :", doc_path);
+                    // console.log("[DELETE] filePath résolu :", filePath);
+                    // console.log("[DELETE] cacheDir :", cacheDir);
+                    // console.log("[DELETE] cachePattern :", cachePattern);
+                    if (safeFileName.endsWith(".jpg") || safeFileName.endsWith(".jpeg") || safeFileName.endsWith(".png")) {
                         const glob = require('glob');
                         const cacheFiles = glob.sync(path.join(cacheDir, cachePattern));
-                        console.log(`Fichiers de cache trouvés (${cacheFiles.length}):`, cacheFiles);
+                        console.log(`[DELETE] Fichiers de cache trouvés (${cacheFiles.length}):`, cacheFiles);
                         
                         cacheFiles.forEach(cacheFile => {
                             fs.unlink(cacheFile, (err) => {

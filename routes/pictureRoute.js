@@ -37,10 +37,15 @@ router.get("/img", async (req, res) => {
         return res.status(400).send("Largeur invalide");
     }
 
-    const originalPath = path.join(IMAGES_DIR, file);
-    
+    // Nouveau format BDD : file = "photos/pmfu/doc_41_..." (relatif à FILES_DIR_ENV)
+    // Ancien format BDD : file = "pmfu/doc_41_..." (relatif à IMAGES_DIR) → fallback
+    let originalPath = path.join(FILES_DIR_ENV, file);
+    if (!fs.existsSync(originalPath)) {
+        originalPath = path.join(IMAGES_DIR, file);
+    }
+
     // Construire le nom du fichier de cache : {basename}_{width}.{extension}
-    // Exemple: photo.jpg -> photo_200.jpg
+    // Exemple: "photos/pmfu/doc_41_.jpg" -> "photos_pmfu_doc_41__200.jpg"
     const safeFileName = file.replace(/\//g, '_');
     const ext = path.extname(safeFileName); // .jpg
     const basename = path.basename(safeFileName, ext); // photo
