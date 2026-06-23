@@ -1352,7 +1352,7 @@ router.put("/put/table=docs", async (req, res) => {
                         // Convertir le chemin absolu en chemin relatif à partir de "mnt"
                         console.log("Chemin complet du fichier :", file.path);
 
-                        const cleanedPath = file.path.split('/').slice(-2).join('/'); // garde les deux derniers segments
+                        const cleanedPath = path.relative(FILES_DIR, file.path); // chemin relatif à FILES_DIR
                         console.log("Chemin relatif :", cleanedPath);
 
                         filesToInsert.push({
