@@ -117,12 +117,12 @@ app.use(cors({
 
 // Appliquer le rate limit apres CORS pour conserver les headers CORS en 429
 app.use((req, res, next) => {
-  const origin = req.headers.origin || '';
   const host = req.headers.host || '';
   const isLocal =
-    !origin ||
-    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin) ||
-    /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host);
+    /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host) ||
+    /^::1$/.test(req.ip) ||
+    /^127\.0\.0\.1$/.test(req.ip) ||
+    req.ip === '81.80.207.65';
 
   if (isLocal) {
     return next();
@@ -141,12 +141,12 @@ app.use((req, res, next) => {
 
 // app.use(cors()); // Middleware CORS
 app.options('*', (req, res, next) => {
-  const origin = req.headers.origin || '';
   const host = req.headers.host || '';
   const isLocal =
-    !origin ||
-    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin) ||
-    /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host);
+    /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host) ||
+    /^::1$/.test(req.ip) ||
+    /^127\.0\.0\.1$/.test(req.ip) ||
+    req.ip === '81.80.207.65';
 
   if (isLocal) {
     return next();

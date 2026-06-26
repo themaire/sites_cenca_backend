@@ -505,6 +505,30 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
                         message: "Erreur serveur",
                     });
                 });
+        } else if (TABLE === "docplan_documents") {
+            const queryObject = generateUpdateQuery("docplan.documents", UUID, updateData);
+            console.log(queryObject);
+            ExecuteQuerySite(
+                pool,
+                { query: queryObject, message: "sites/put/table=docplan_documents/uuid" },
+                "update",
+                (resultats, message) => {
+                    res.setHeader("Access-Control-Allow-Origin", "*");
+                    res.setHeader("Content-Type", "application/json; charset=utf-8");
+                    if (message === "ok") {
+                        res.status(200).json({
+                            success: true,
+                            message: "Mise à jour réussie.",
+                            data: resultats,
+                        });
+                    } else {
+                        res.status(500).json({
+                            success: false,
+                            message: "Erreur, la requête s'est mal exécutée.",
+                        });
+                    }
+                }
+            );
         } else {
             res.status(400).json({
                 success: false,
@@ -541,6 +565,13 @@ router.put("/put/table=:table/insert", (req, res) => {
         objectifs: "opegerer",
         operation_financeurs: "opegerer",
         operation_animaux: "opegerer",
+    };
+
+    // Mapping nom-route → nom complet de table pour les tables docplan
+    const DOCPLAN_TABLES = {
+        docplan_documents: "docplan.documents",
+        docplan_unites_gestion: "docplan.unites_gestion",
+        docplan_entites_coherentes: "docplan.entites_coherentes",
     };
 
     // Ajout d'un projet_mfu
@@ -681,6 +712,36 @@ router.put("/put/table=:table/insert", (req, res) => {
                         res.status(500).json({
                             success: false,
                             message: "Erreur, la requête s'est mal exécutée. Détails: " + message,
+                        });
+                    }
+                }
+            );
+        } else if (Object.keys(DOCPLAN_TABLES).includes(TABLE)) {
+            const WORKING_TABLE = DOCPLAN_TABLES[TABLE];
+            console.log("WORKING_TABLE (docplan) : " + WORKING_TABLE);
+
+            const queryObject = generateInsertQuery(WORKING_TABLE, INSERT_DATA, false);
+            console.log("SQL:", queryObject.text);
+            console.log("Values:", queryObject.values);
+
+            ExecuteQuerySite(
+                pool,
+                { query: queryObject, message: MESSAGE },
+                "insert",
+                (resultats, message) => {
+                    res.setHeader("Access-Control-Allow-Origin", "*");
+                    res.setHeader("Content-Type", "application/json; charset=utf-8");
+                    if (message === "ok") {
+                        res.status(201).json({
+                            success: true,
+                            message: "Insert réussie.",
+                            code: 0,
+                            data: resultats,
+                        });
+                    } else {
+                        res.status(500).json({
+                            success: false,
+                            message: "Erreur, la requête s'est mal exécutée.",
                         });
                     }
                 }

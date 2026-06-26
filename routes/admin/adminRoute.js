@@ -9,6 +9,30 @@ const pool = require("../../dbPool/poolConnect.js");
     
 const { generateUpdateQuery, getTableColums, generateCloneQuery } = require('../../fonctions/querys.js');
 const { handleDelete } = require('../../fonctions/routeHandlers.js');
+const { randomUUID } = require('crypto');
+
+// Récupérer les groupes d'un salarié
+router.get("/users/groups/:cd_salarie", (req, res) => {
+    const cd_salarie = req.params.cd_salarie;
+    const queryObject = {
+        text: `SELECT sg.salgro_id, sg.gro_id, g.gro_nom, g.gro_description
+               FROM admin.salarie_groupes sg
+               JOIN admin.groupes g ON sg.gro_id = g.gro_id
+               WHERE sg.cd_salarie = $1
+               ORDER BY g.gro_nom;`,
+        values: [cd_salarie]
+    };
+    ExecuteQuerySite(
+        pool,
+        { query: queryObject, message: "admin/users/groups/" + cd_salarie },
+        "select",
+        (resultats, message) => {
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.status(200).json(resultats);
+        }
+    );
+});
 
 // Récupérer des utilisateurs ( un ou plusieurs )
 router.get("/users/:mode/:cd_salarie?", (req, res) => {
@@ -71,7 +95,7 @@ router.put("/put/table=:table/clone", (req, res) => {
 
                     if (fields && fields.length > 0) {
                         // Générer un nouveau cd_salarie unique
-                        const newCdSalarie = uuidv4();
+                        const newCdSalarie = randomUUID();
                         
                         // Générer la requête de clonage avec le nouveau cd_salarie
                         const queryObject = generateCloneQuery(
@@ -216,6 +240,144 @@ router.put("/put/:type/:mode/:id?", (req, res) => {
             message: "Erreur interne du serveur.",
         });
     }
+});
+
+// Créer un nouveau salarié
+router.post("/post/user/create", (req, res) => {
+    const { nom, prenom, email, statut, identifiant, typ_fonction, sal_role, date_embauche, date_depart } = req.body;
+    const cd_salarie = randomUUID();
+    const statutBool = statut === true || statut === 'true' || statut === 'actif';
+    const queryObject = {
+        text: `INSERT INTO admin.salaries
+                   (cd_salarie, nom, prenom, email, statut, identifiant, typ_fonction, sal_role, date_embauche, date_depart)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+               RETURNING *;`,
+        values: [cd_salarie, nom, prenom, email, statutBool, identifiant, typ_fonction || null, sal_role || null, date_embauche ?? null, date_depart ?? null]
+    };
+    ExecuteQuerySite(
+        pool,
+        { query: queryObject, message: "admin/post/user/create" },
+        "insert",
+        (resultats, message) => {
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            if (message === "ok") {
+                res.status(201).json({
+                    success: true,
+                    message: "Utilisateur créé avec succès.",
+                    code: 0,
+                    data: resultats
+                });
+            } else {
+                res.status(500).json({
+                    success: false,
+                    message: "Erreur lors de la création de l'utilisateur.",
+                    code: 1,
+                    data: []
+                });
+            }
+        }
+    );
+});
+
+// Assigner un groupe à un salarié
+router.post("/post/user/group/:cd_salarie", (req, res) => {
+    const cd_salarie = req.params.cd_salarie;
+    const { gro_id } = req.body;
+    const queryObject = {
+        text: `INSERT INTO admin.salarie_groupes (cd_salarie, gro_id) VALUES ($1, $2);`,
+        values: [cd_salarie, gro_id]
+    };
+    ExecuteQuerySite(
+        pool,
+        { query: queryObject, message: "admin/post/user/group/" + cd_salarie },
+        "insert",
+        (resultats, message) => {
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            if (message === "ok") {
+                res.status(201).json({
+                    success: true,
+                    message: "Groupe assigné au salarié avec succès.",
+                    code: 0,
+                    data: resultats
+                });
+            } else {
+                res.status(500).json({
+                    success: false,
+                    message: "Erreur lors de l'assignation du groupe.",
+                    code: 1,
+                    data: []
+                });
+            }
+        }
+    );
+});
+
+// Créer un nouveau groupe
+router.post("/post/group/create", (req, res) => {
+    const { gro_nom, gro_description, gro_statut } = req.body;
+    const queryObject = {
+        text: `INSERT INTO admin.groupes (gro_nom, gro_description, gro_statut) VALUES ($1, $2, $3) RETURNING *;`,
+        values: [gro_nom, gro_description, gro_statut]
+    };
+    ExecuteQuerySite(
+        pool,
+        { query: queryObject, message: "admin/post/group/create" },
+        "insert",
+        (resultats, message) => {
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            if (message === "ok") {
+                res.status(201).json({
+                    success: true,
+                    message: "Groupe créé avec succès.",
+                    code: 0,
+                    data: resultats
+                });
+            } else {
+                res.status(500).json({
+                    success: false,
+                    message: "Erreur lors de la création du groupe.",
+                    code: 1,
+                    data: []
+                });
+            }
+        }
+    );
+});
+
+// Retirer un groupe d'un salarié via salgro_id
+router.delete("/delete/salarie_groupes/salgro_id=:salgro_id", (req, res) => {
+    const salgro_id = req.params.salgro_id;
+    const queryObject = {
+        text: `DELETE FROM admin.salarie_groupes WHERE salgro_id = $1;`,
+        values: [salgro_id]
+    };
+    ExecuteQuerySite(
+        pool,
+        { query: queryObject, message: "admin/delete/salarie_groupes/" + salgro_id },
+        "delete",
+        (resultats, message) => {
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            if (message === "ok") {
+                res.status(200).json({
+                    success: true,
+                    message: "Groupe retiré du salarié avec succès.",
+                    code: 0,
+                    data: resultats
+                });
+            } else {
+                res.status(500).json({
+                    success: false,
+                    message: "Erreur lors de la suppression du groupe.",
+                    code: 1,
+                    data: []
+                });
+            }
+        }
+    );
 });
 
 // Supprimer unutilisateur, un groupe, etc.

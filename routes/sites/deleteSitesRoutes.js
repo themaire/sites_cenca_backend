@@ -290,6 +290,50 @@ router.delete('/mfu/actes-multi/ref_uuid_acte=:acteUuid/ref_uuid_site=:siteUuid'
 //     }
 // );
 
+// Supprimer une entité cohérente de gestion docplan
+router.delete("/delete/docplan_entites_coherentes/uuid_ecg=:uuid_ecg", (req, res) => {
+    const queryObject = {
+        text: `DELETE FROM docplan.entites_coherentes WHERE uuid_ecg = $1;`,
+        values: [req.params.uuid_ecg]
+    };
+    ExecuteQuerySite(
+        pool,
+        { query: queryObject, message: "sites/delete/docplan_entites_coherentes" },
+        "delete",
+        (resultats, message) => {
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            if (message === "ok") {
+                res.status(200).json({ success: true, message: "Suppression réussie.", code: 0, data: resultats });
+            } else {
+                res.status(500).json({ success: false, message: "Erreur lors de la suppression.", code: 1 });
+            }
+        }
+    );
+});
+
+// Supprimer une unité de gestion docplan
+router.delete("/delete/docplan_unites_gestion/uuid_ug=:uuid_ug", (req, res) => {
+    const queryObject = {
+        text: `DELETE FROM docplan.unites_gestion WHERE uuid_ug = $1;`,
+        values: [req.params.uuid_ug]
+    };
+    ExecuteQuerySite(
+        pool,
+        { query: queryObject, message: "sites/delete/docplan_unites_gestion" },
+        "delete",
+        (resultats, message) => {
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            if (message === "ok") {
+                res.status(200).json({ success: true, message: "Suppression réussie.", code: 0, data: resultats });
+            } else {
+                res.status(500).json({ success: false, message: "Erreur lors de la suppression.", code: 1 });
+            }
+        }
+    );
+});
+
 // La route est maintenant gérée par handleDelete dans fonctions/routeHandlers.js
 // C'est plus propre et évite la duplication de code
 // On délègue la logique de suppression à handleDelete qui est un fichier à part, partagé entre plusieurs routes si besoin

@@ -157,3 +157,4 @@ monitoring/routes-config.json
 surveillance/routes-config.json
 fonctions/geo_api.js
 fonctions/geo_api_bttf.js
+ressources/

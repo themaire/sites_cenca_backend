@@ -29,6 +29,10 @@ function getRightId(table) {
         pkName = 'uuid_acte';
     } else if (table == 'parcelles_mfu') {
         pkName = 'uuid_parcelle';
+    } else if (table == 'documents') {
+        pkName = 'uuid_doc';
+    } else if (table == 'unites_gestion') {
+        pkName = 'uuid_ug';
     } else {
         pkName = table.slice(0, -1);
     }
