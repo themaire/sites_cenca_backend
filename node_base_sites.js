@@ -123,8 +123,9 @@ app.use((req, res, next) => {
     /^::1$/.test(req.ip) ||
     /^127\.0\.0\.1$/.test(req.ip) ||
     req.ip === '81.80.207.65';
+  const isMenuRoute = req.path.startsWith('/menu');
 
-  if (isLocal) {
+  if (isLocal || isMenuRoute) {
     return next();
   }
   return globalRateLimit(req, res, next);
@@ -147,8 +148,9 @@ app.options('*', (req, res, next) => {
     /^::1$/.test(req.ip) ||
     /^127\.0\.0\.1$/.test(req.ip) ||
     req.ip === '81.80.207.65';
+  const isMenuRoute = req.path.startsWith('/menu');
 
-  if (isLocal) {
+  if (isLocal || isMenuRoute) {
     return next();
   }
   return globalRateLimit(req, res, next);
@@ -172,6 +174,10 @@ const pictureRoute = require('./routes/pictureRoute');
 const apiGeoRoutes = require('./routes/apiGeoRoutes');
 
 const adminRoutes = require('./routes/admin/adminRoute.js');
+
+const chiroRoutesGet = require('./routes/chiro/getChiroRoutes.js');
+const chiroRoutesPut = require('./routes/chiro/putChiroRoutes.js');
+const chiroRoutesDelete = require('./routes/chiro/deleteChiroRoutes.js');
 
 // Configuration HTTPS (seulement en production)
 let httpsOptions = null;
@@ -208,6 +214,10 @@ async function run() {
     app.use('/sites', siteRoutesDelete);
 
     app.use('/sites', foncierRoutes);
+
+    app.use('/chiro', chiroRoutesGet);
+    app.use('/chiro', chiroRoutesPut);
+    app.use('/chiro', chiroRoutesDelete);
 
     app.use('/process', processRoutes);
     app.use('/picts', pictureRoute); // Monté le routeur pictureRoute.js sur /picts

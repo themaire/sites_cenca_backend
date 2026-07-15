@@ -905,6 +905,49 @@ router.get("/selectors_projets", (req, res) => {
     );
 });
 
+// PMFU Selectors de la barre de recherche des projets MFU
+router.get("/selectors_pmfu", (req, res) => {
+    distinctResearchRaw(
+        pool, [], "pmfu_responsable", "Responsable",
+        `SELECT DISTINCT left(s.prenom, 1) || ' ' || s.nom AS pmfu_responsable
+         FROM sitcenca.projets_mfu p
+         JOIN admin.salaries s ON p.pmfu_responsable = s.cd_salarie
+         ORDER BY pmfu_responsable;`,
+        (selectors) => {
+            distinctResearchRaw(
+                pool, selectors, "pmfu_commune_nom", "Commune",
+                `SELECT DISTINCT pmfu_commune_nom FROM sitcenca.projets_mfu
+                 WHERE pmfu_commune_nom IS NOT NULL
+                 ORDER BY pmfu_commune_nom;`,
+                (selectors) => {
+                    distinctResearchRaw(
+                        pool, selectors, "type_acte", "Type d'acte",
+                        `SELECT DISTINCT l.lib_libelle AS type_acte
+                         FROM sitcenca.projets_mfu p
+                         JOIN sitcenca.libelles l ON p.pmfu_type_acte = l.lib_id
+                         ORDER BY type_acte;`,
+                        (selectors) => {
+                            distinctResearchRaw(
+                                pool, selectors, "statut", "Statut",
+                                `SELECT DISTINCT l.lib_libelle AS statut
+                                 FROM sitcenca.projets_mfu p
+                                 JOIN sitcenca.libelles l ON p.pmfu_status = l.lib_id
+                                 ORDER BY statut;`,
+                                (selectors) => {
+                                    const json = JSON.stringify(selectors);
+                                    res.setHeader("Access-Control-Allow-Origin", "*");
+                                    res.setHeader("Content-type", "application/json; charset=UTF-8");
+                                    res.end(json);
+                                }
+                            );
+                        }
+                    );
+                }
+            );
+        }
+    );
+});
+
 // Les listes de choix pour les champs de formulaires
 router.get("/selectvalues=:list/:option?", (req, res) => {
     let { SelectFields, FromTable, where, message, json } = reset();
@@ -1131,6 +1174,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
     );
 });
 
+//Fiche travaux
 router.get("/bilan_exe/uuid_proj=:uuid", async (req, res) => {
     try {
         const uuid = req.params.uuid;
@@ -1205,7 +1249,7 @@ router.get("/pmfu/id=:id/:mode", (req, res) => {
     } else if (mode === "full") {
         SelectFields = 'SELECT p.pmfu_id, p.pmfu_nom, p.pmfu_responsable, p.pmfu_createur, p.pmfu_agence, p.pmfu_associe, p.pmfu_proch_etape, p.pmfu_dep, p.pmfu_territoire, ';
         SelectFields += 'p.pmfu_type_acte, p.pmfu_commune_insee, p.pmfu_commune_nom, p.pmfu_annee_debut, p.pmfu_proprietaire, p.pmfu_appui, p.pmfu_appui_desc, p.pmfu_quest_juri, p.pmfu_validation, ';
-        SelectFields += 'p.pmfu_mes_comp, p.pmfu_cout, p.pmfu_financements, p.pmfu_superficie, p.pmfu_priorite, p.pmfu_status, p.pmfu_annee_signature, p.pmfu_echeances, p.pmfu_creation, ';
+        SelectFields += 'p.pmfu_mes_comp, p.pmfu_cout, p.pmfu_financements, p.pmfu_surf_cadastrale, p.pmfu_surf_mfu, p.pmfu_priorite, p.pmfu_status, p.pmfu_annee_signature, p.pmfu_echeances, p.pmfu_creation, ';
         SelectFields += 'p.pmfu_derniere_maj, COUNT(*) FILTER (WHERE d.doc_type = 1) AS photos_site_nb, ';
         SelectFields += 'COUNT(*) FILTER (WHERE d.doc_type = 2) AS projet_acte_nb, COUNT(*) FILTER (WHERE d.doc_type = 3) AS decision_bureau_nb, COUNT(*) FILTER (WHERE d.doc_type = 4) AS note_bureau_nb, pmfu_parc_list ';
         FromTable = `FROM sitcenca.projets_mfu p `

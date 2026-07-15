@@ -176,13 +176,13 @@ router.get("/me", authenticateToken, (req, res) => {
   console.log("req.tokenInfos : ");
   console.log(req.tokenInfos);
 
-  const SelectFields = "SELECT sal.nom, sal.prenom, sal.identifiant, sal.cd_salarie, salgro.gro_id ";
+  const SelectFields = "SELECT sal.nom, sal.prenom, sal.identifiant, sal.cd_salarie, array_agg(salgro.gro_id) as groups ";
   
   let FromTable = "FROM admin.salaries sal ";
   FromTable +=    "LEFT JOIN admin.salarie_groupes salgro ON sal.cd_salarie = salgro.cd_salarie ";
   FromTable +=    "LEFT JOIN admin.groupes gro ON salgro.gro_id = gro.gro_id ";
   
-  const where = "WHERE sal.identifiant = $1 ORDER BY salgro.gro_id desc limit 1;";
+  const where = "WHERE sal.identifiant = $1 group by sal.nom, sal.prenom, sal.identifiant, sal.cd_salarie;";
 
   let queryObject = {
     text: joinQuery( SelectFields, FromTable, where ),
