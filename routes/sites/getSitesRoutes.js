@@ -916,7 +916,7 @@ router.get("/selectors_pmfu", (req, res) => {
         (selectors) => {
             distinctResearchRaw(
                 pool, selectors, "pmfu_commune_nom", "Commune",
-                `SELECT DISTINCT pmfu_commune_nom FROM sitcenca.projets_mfu
+                `SELECT DISTINCT unnest(pmfu_commune_nom) AS pmfu_commune_nom FROM sitcenca.projets_mfu
                  WHERE pmfu_commune_nom IS NOT NULL
                  ORDER BY pmfu_commune_nom;`,
                 (selectors) => {

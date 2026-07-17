@@ -19,6 +19,30 @@ const pool = require("../../dbPool/poolConnect.js");
 // Generateur de requetes SQL
 const { generateUpdateQuery, generateInsertQuery, generateCloneQuery, getTableColums, generateCloneCheckboxQuery } = require('../../fonctions/querys.js');
 
+// Colonnes de sitcenca.projets_mfu de type tableau (int4[] ou varchar[]) : une chaîne vide
+// n'est pas un littéral de tableau valide pour Postgres ("" ≠ "{}"), donc on la neutralise en null
+// avant de construire la requête, plutôt que de laisser pg planter avec "malformed array literal".
+const PMFU_ARRAY_COLUMNS = [
+    "pmfu_territoire",
+    "pmfu_appui",
+    "pmfu_financements",
+    "pmfu_parc_list",
+    "pmfu_proch_etape",
+    "pmfu_proprietaire",
+    "pmfu_agence",
+    "pmfu_commune_insee",
+    "pmfu_commune_nom",
+];
+
+function sanitizePmfuArrayColumns(data) {
+    for (const column of PMFU_ARRAY_COLUMNS) {
+        if (data[column] === "") {
+            data[column] = null;
+        }
+    }
+    return data;
+}
+
 const multer = require("multer");
 const shapefile = require("shapefile");
 const fs = require("fs");
@@ -483,7 +507,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
             const queryObject = generateUpdateQuery(
                 "sitcenca." + TABLE,
                 UUID,
-                updateData
+                sanitizePmfuArrayColumns(updateData)
             );
             ExecuteQuerySitePromise(pool, {
                 query: queryObject,
@@ -577,6 +601,7 @@ router.put("/put/table=:table/insert", (req, res) => {
     // Ajout d'un projet_mfu
     try {
         if (TABLE === "projets_mfu") {
+            sanitizePmfuArrayColumns(INSERT_DATA);
             console.log("data avant envoi :", INSERT_DATA.pmfu_id);
             if (INSERT_DATA.pmfu_id === 0) {
                 const selectField = "SELECT MAX(pmfu_id) AS max_pmfu_id";
