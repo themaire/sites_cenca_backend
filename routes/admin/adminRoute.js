@@ -224,8 +224,8 @@ router.put("/put/:type/:mode/:id?", (req, res) => {
                 } else {
                     const currentDateTime = new Date().toISOString();
                     console.log(`Échec de la requête à ${currentDateTime}`);
-                    console.log(updateQuery.text);
-                    console.log(updateQuery.values);
+                    console.log(queryObject.text);
+                    console.log(queryObject.values);
                     res.status(500).json({
                         success: false,
                         message: "Erreur, la requête s'est mal exécutée."

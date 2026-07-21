@@ -739,6 +739,46 @@ router.get("/localisations/uuid=:uuid/:mode", (req, res) => {
     ); // Retourne un ou plusieurs résultats
 });
 
+// GeoJSON des géométries des opérations associées à un projet
+router.get("/projets/uuid=:uuid/operations/geojson", async (req, res) => {
+    const sql = `
+        SELECT json_build_object(
+            'type', 'FeatureCollection',
+            'features', COALESCE(json_agg(
+                json_build_object(
+                    'type', 'Feature',
+                    'geometry', ST_AsGeoJSON(ST_Transform(COALESCE(loc.loc_poly, loc.loc_point, loc.loc_line), 4326))::json,
+                    'properties', json_build_object(
+                        'uuid_ope', op.uuid_ope,
+                        'loc_id', loc.loc_id,
+                        'code', op.code,
+                        'titre', op.titre,
+                        'type', concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)),
+                        'date_debut', to_char(op.date_debut, 'DD/MM/YYYY'),
+                        'surf', op.surf
+                    )
+                )
+            ) FILTER (WHERE loc.loc_poly IS NOT NULL OR loc.loc_point IS NOT NULL OR loc.loc_line IS NOT NULL), '[]')
+        ) AS geojson
+        FROM opegerer.operations op
+        LEFT JOIN opegerer.localisations loc ON loc.ref_uuid_ope = op.uuid_ope
+        WHERE op.ref_uuid_proj = $1;
+    `;
+    try {
+        const result = await pool.query(sql, [req.params.uuid]);
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.status(200).json(result.rows[0]?.geojson || { type: "FeatureCollection", features: [] });
+    } catch (err) {
+        console.error("Erreur SQL /sites/projets/uuid/operations/geojson:", err);
+        res.status(500).json({
+            success: false,
+            message: "Erreur lors de la récupération des géométries des opérations du projet.",
+            detail: err.message,
+        });
+    }
+});
+
 // Les objectifs
 router.get("/objectifs/uuid=:uuid/:mode", (req, res) => {
     let { selectFields, fromTable, where, message } = reset();

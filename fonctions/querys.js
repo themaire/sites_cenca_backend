@@ -33,6 +33,8 @@ function getRightId(table) {
         pkName = 'uuid_doc';
     } else if (table == 'unites_gestion') {
         pkName = 'uuid_ug';
+    } else if (table == 'news') {
+        pkName = 'id';
     } else {
         pkName = table.slice(0, -1);
     }
@@ -213,9 +215,12 @@ function getTableColums(tableSchema, tableName) {
  * @param {string} id2clone - ID de la ligne à dupliquer
  * @param {string} newId - Nouvelle valeur de la clé primaire
  * @param {string[]} excludeFieldsGroups - Liste des noms de champs à exclure de la duplication (optionnel)
+ * @param {Object} overrideValues - Dictionnaire { nom_colonne: nouvelle_valeur } pour forcer certaines colonnes
+ *                                  à une valeur donnée plutôt que de recopier celle de la ligne d'origine
+ *                                  (ex: rattacher une opération clonée au nouveau projet cloné). Optionnel.
  * @returns {object} - Objet { text, values } pour pg
  */
-function generateCloneQuery(table, pkName, columns, id2clone, newId = null, excludeFieldsGroups) {
+function generateCloneQuery(table, pkName, columns, id2clone, newId = null, excludeFieldsGroups, overrideValues = {}) {
     // columns est un tableau d'objets { column_name: '...' } venant de la fonction getTableColums qui sait récupérer les colonnes
     // On doit extraire les noms des colonnes de ces objets
     console.log('table :', table);
@@ -280,10 +285,14 @@ function generateCloneQuery(table, pkName, columns, id2clone, newId = null, excl
     const insertColumns = [pkName, ...columnsWithoutPk].join(', ');
 
     // On adapte le SELECT pour ajouter le suffixe à nom_mo (si pas exclu)
+    // et pour forcer les colonnes présentes dans overrideValues à une valeur donnée
+    // (ex: ref_uuid_proj pointant vers le nouveau projet cloné plutôt que l'ancien).
     const selectColumns = [
         newId,
         ...columnsWithoutPk.map(col => {
-            if (col === 'nom_mo') {
+            if (overrideValues && Object.prototype.hasOwnProperty.call(overrideValues, col)) {
+                return `'${overrideValues[col]}'`;
+            } else if (col === 'nom_mo') {
                 return `${col} || ' (cloné)'`;
             } else if (col === 'identifiant') {
                 return `${col} || '_cloned'`;

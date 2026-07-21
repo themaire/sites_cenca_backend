@@ -928,6 +928,160 @@ router.put("/put/table=:table/clone", (req, res) => {
     }
 });
 
+// Dupliquer un projet complet : le projet lui-même, son (ses) objectif(s) rattaché(s)
+// (opegerer.objectifs.projet) et toutes les opérations qui lui sont rattachées (ref_uuid_proj),
+// avec pour chacune ses financeurs et animaux.
+// S'appuie sur la même mécanique que la route de duplication ci-dessus (generateCloneQuery /
+// generateCloneCheckboxQuery), mais l'ensemble tourne dans une seule transaction : soit tout
+// est dupliqué, soit rien ne l'est (un échec en cours de route ne doit pas laisser un
+// projet cloné à moitié peuplé).
+router.put("/put/projet_complet/clone", async (req, res) => {
+    const INSERT_DATA = req.body;
+    const projetId = INSERT_DATA["id"];
+    const excludeFieldsGroups = INSERT_DATA["excludeFieldsGroups"];
+    const MESSAGE = "sites/put/projet_complet/clone";
+    console.log(MESSAGE + " - Body reçu :", INSERT_DATA);
+
+    if (!projetId) {
+        return res.status(400).json({
+            success: false,
+            message: "Identifiant du projet (id) manquant.",
+        });
+    }
+
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+
+        // 1. Cloner le projet lui-même
+        const projetColumnsQuery = getTableColums("opegerer", "projets");
+        const projetColumnsResult = await client.query(projetColumnsQuery.text, projetColumnsQuery.values);
+
+        if (!projetColumnsResult.rows.length) {
+            throw new Error("Impossible de récupérer les colonnes de opegerer.projets.");
+        }
+
+        const projetPk = projetColumnsResult.rows[0].column_name;
+        const newProjUUID = uuidv4();
+
+        const cloneProjetQuery = generateCloneQuery(
+            "opegerer.projets",
+            projetPk,
+            projetColumnsResult.rows,
+            projetId,
+            newProjUUID,
+            excludeFieldsGroups
+        );
+        const cloneProjetResult = await client.query(cloneProjetQuery.text, cloneProjetQuery.values);
+
+        if (cloneProjetResult.rowCount === 0) {
+            throw new Error("Le projet à dupliquer est introuvable (id : " + projetId + ").");
+        }
+
+        // 2. Cloner le(s) objectif(s) rattaché(s) au projet d'origine (opegerer.objectifs.projet)
+        const objectifsACloner = await client.query(
+            "SELECT uuid_objectif FROM opegerer.objectifs WHERE projet = $1",
+            [projetId]
+        );
+
+        let objectifsColumns = null;
+        const clonedObjectifs = [];
+
+        for (const { uuid_objectif: oldObjectifUUID } of objectifsACloner.rows) {
+            if (!objectifsColumns) {
+                const objectifsColumnsQuery = getTableColums("opegerer", "objectifs");
+                const objectifsColumnsResult = await client.query(objectifsColumnsQuery.text, objectifsColumnsQuery.values);
+                objectifsColumns = objectifsColumnsResult.rows;
+            }
+
+            const objectifsPk = objectifsColumns[0].column_name;
+            const newObjectifUUID = uuidv4();
+
+            const cloneObjectifQuery = generateCloneQuery(
+                "opegerer.objectifs",
+                objectifsPk,
+                objectifsColumns,
+                oldObjectifUUID,
+                newObjectifUUID,
+                excludeFieldsGroups,
+                { projet: newProjUUID }
+            );
+            await client.query(cloneObjectifQuery.text, cloneObjectifQuery.values);
+
+            clonedObjectifs.push({ ancien: oldObjectifUUID, nouveau: newObjectifUUID });
+        }
+
+        // 3. Récupérer les opérations rattachées au projet d'origine
+        const operationsACloner = await client.query(
+            "SELECT uuid_ope FROM opegerer.operations WHERE ref_uuid_proj = $1",
+            [projetId]
+        );
+
+        // 4. Cloner chaque opération en la rattachant au nouveau projet (ref_uuid_proj), avec ses financeurs/animaux
+        let operationsColumns = null;
+        const clonedOperations = [];
+
+        for (const { uuid_ope: oldOpeUUID } of operationsACloner.rows) {
+            if (!operationsColumns) {
+                const operationsColumnsQuery = getTableColums("opegerer", "operations");
+                const operationsColumnsResult = await client.query(operationsColumnsQuery.text, operationsColumnsQuery.values);
+                operationsColumns = operationsColumnsResult.rows;
+            }
+
+            const operationsPk = operationsColumns[0].column_name;
+            const newOpeUUID = uuidv4();
+
+            const cloneOperationQuery = generateCloneQuery(
+                "opegerer.operations",
+                operationsPk,
+                operationsColumns,
+                oldOpeUUID,
+                newOpeUUID,
+                excludeFieldsGroups,
+                { ref_uuid_proj: newProjUUID }
+            );
+            await client.query(cloneOperationQuery.text, cloneOperationQuery.values);
+
+            const cloneFinanceursQuery = generateCloneCheckboxQuery("opegerer.operation_financeurs", oldOpeUUID, newOpeUUID);
+            await client.query(cloneFinanceursQuery.text, cloneFinanceursQuery.values);
+
+            const cloneAnimauxQuery = generateCloneCheckboxQuery("opegerer.operation_animaux", oldOpeUUID, newOpeUUID);
+            await client.query(cloneAnimauxQuery.text, cloneAnimauxQuery.values);
+
+            clonedOperations.push({ ancien: oldOpeUUID, nouveau: newOpeUUID });
+        }
+
+        await client.query("COMMIT");
+
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.status(201).json({
+            success: true,
+            message: "Duplication réussie du projet " + projetId + " (" + clonedObjectifs.length + " objectif(s) et " + clonedOperations.length + " opération(s) dupliqué(s)).",
+            code: 0,
+            data: {
+                uuid_proj: newProjUUID,
+                objectifs: clonedObjectifs,
+                operations: clonedOperations,
+            },
+        });
+    } catch (error) {
+        try {
+            await client.query("ROLLBACK");
+        } catch (rollbackError) {
+            console.error("Erreur lors du ROLLBACK de la duplication du projet complet :", rollbackError);
+        }
+        console.error("Erreur lors de la duplication du projet complet : ", error);
+        res.status(500).json({
+            success: false,
+            message: "Erreur, la duplication du projet a échoué.",
+        });
+    } finally {
+        client.release();
+    }
+});
+
 // Nouvelle route pour gérer l'upload du fichier shapefile avec des données supplémentaires
 router.post(
     //// Paramètres

@@ -174,6 +174,8 @@ const pictureRoute = require('./routes/pictureRoute');
 const apiGeoRoutes = require('./routes/apiGeoRoutes');
 
 const adminRoutes = require('./routes/admin/adminRoute.js');
+const newsRoutesAdmin = require('./routes/admin/news/newsRoutes.js');
+const newsRoutes = require('./routes/newsRoutes.js');
 
 const chiroRoutesGet = require('./routes/chiro/getChiroRoutes.js');
 const chiroRoutesPut = require('./routes/chiro/putChiroRoutes.js');
@@ -207,7 +209,12 @@ async function run() {
     app.use('/menu', menuRoutes);
     app.use('/auth', userRoutes);
 
+    // newsRoutesAdmin est monté avant adminRoutes : sa route PUT /put/news/update/:id
+    // est plus spécifique que le PUT /put/:type/:mode/:id? générique de adminRoutes,
+    // qui la capturerait sinon en premier (et provoque un crash serveur sur un type inconnu).
+    app.use('/admin', newsRoutesAdmin);
     app.use('/admin', adminRoutes);
+    app.use('/news', newsRoutes);
 
     app.use('/sites', siteRoutesGet);
     app.use('/sites', siteRoutesPut);

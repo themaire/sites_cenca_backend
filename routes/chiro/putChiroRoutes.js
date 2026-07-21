@@ -25,7 +25,7 @@ router.post("/site", async (req, res) => {
         code, nom, nature, definition, configuration, habitat, periode,
         localisation, contact, proprietaire, type_proprietaire, description, interet,
         accessibilite, protection, date_protection, suivi_prc, priorisation,
-        insee, lat, lng
+        insee, lat, lng, x_lambert, y_lambert
     } = req.body;
 
     const client = await pool.connect();
@@ -58,11 +58,18 @@ router.post("/site", async (req, res) => {
             [id_site, insee]
         );
 
-        if (lat !== undefined && lng !== undefined) {
+        if (lat && lng) {
+            // Coordonnées carte : WGS84 → Lambert 93
             await client.query(`
                 INSERT INTO chiro.localisations (site, geom)
                 VALUES ($1, ST_Transform(ST_SetSRID(ST_MakePoint($2, $3), 4326), 2154))
             `, [id_site, lng, lat]);
+        } else if (x_lambert && y_lambert) {
+            // Coordonnées manuelles : déjà en Lambert 93
+            await client.query(`
+                INSERT INTO chiro.localisations (site, geom)
+                VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 2154))
+            `, [id_site, x_lambert, y_lambert]);
         }
 
         await client.query("COMMIT");
@@ -84,7 +91,7 @@ router.put("/site/:id", async (req, res) => {
         code, nom, nature, definition, configuration, habitat, periode,
         localisation, contact, proprietaire, type_proprietaire, description, interet,
         accessibilite, protection, date_protection, suivi_prc, priorisation,
-        insee, lat, lng
+        insee, lat, lng, x_lambert, y_lambert
     } = req.body;
 
     const client = await pool.connect();
@@ -120,12 +127,21 @@ router.put("/site/:id", async (req, res) => {
             suivi_prc || false, priorisation || false, id
         ]);
 
-        if (lat !== undefined && lng !== undefined) {
+        if ((lat && lng) || (x_lambert && y_lambert)) {
             await client.query("DELETE FROM chiro.localisations WHERE site = $1", [id]);
+        }
+        if (lat && lng) {
+            // Coordonnées carte : WGS84 → Lambert 93
             await client.query(`
                 INSERT INTO chiro.localisations (site, geom)
                 VALUES ($1, ST_Transform(ST_SetSRID(ST_MakePoint($2, $3), 4326), 2154))
             `, [id, lng, lat]);
+        } else if (x_lambert && y_lambert) {
+            // Coordonnées manuelles : déjà en Lambert 93
+            await client.query(`
+                INSERT INTO chiro.localisations (site, geom)
+                VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 2154))
+            `, [id, x_lambert, y_lambert]);
         }
 
         await client.query("COMMIT");
@@ -150,9 +166,9 @@ router.post("/releve", async (req, res) => {
 
     const sql = `
         INSERT INTO chiro.releves
-            (date_releve, insee, site, observateur_cite, habitat,
+            (uuid_releve, date_releve, insee, site, observateur_cite, habitat,
              programme, precision_loc, x, y, commentaire, compte_saisie, date_saisie)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+        VALUES (gen_random_uuid(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
         RETURNING uuid_releve
     `;
     try {
@@ -217,9 +233,9 @@ router.post("/releve/:uuid/observation", async (req, res) => {
 
         const obsResult = await client.query(`
             INSERT INTO chiro.observations
-                (releve, espece, nombre, type_observation, denombrement,
+                (uuid_observation, releve, espece, nombre, type_observation, denombrement,
                  objet, methode, statut_biologique, stade, sexe, etat_bio, commentaire)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            VALUES (gen_random_uuid(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
             RETURNING uuid_observation
         `, [
             req.params.uuid, espece, nombre, type_observation, denombrement,
@@ -230,8 +246,8 @@ router.post("/releve/:uuid/observation", async (req, res) => {
 
         if (mortalite_cause) {
             await client.query(`
-                INSERT INTO chiro.mortalites (observation, cause, test_rabique, resultat)
-                VALUES ($1,$2,$3,$4)
+                INSERT INTO chiro.mortalites (uuid_mortalite, observation, cause, test_rabique, resultat)
+                VALUES (gen_random_uuid(), $1,$2,$3,$4)
             `, [uuid_observation, mortalite_cause, test_rabique ?? null, resultat_test ?? null]);
         }
 
@@ -279,8 +295,8 @@ router.put("/observation/:uuid", async (req, res) => {
         await pool.query("DELETE FROM chiro.mortalites WHERE observation = $1", [uuid]);
         if (mortalite_cause) {
             await pool.query(`
-                INSERT INTO chiro.mortalites (observation, cause, test_rabique, resultat)
-                VALUES ($1,$2,$3,$4)
+                INSERT INTO chiro.mortalites (uuid_mortalite, observation, cause, test_rabique, resultat)
+                VALUES (gen_random_uuid(), $1,$2,$3,$4)
             `, [uuid, mortalite_cause, test_rabique || false, resultat_test || null]);
         }
 
