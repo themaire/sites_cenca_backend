@@ -755,6 +755,7 @@ router.get("/projets/uuid=:uuid/operations/geojson", async (req, res) => {
                         'titre', op.titre,
                         'action', op.action,
                         'action_2', op.action_2,
+                        'action_2_libelle', act2.libelle,
                         'type', concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)),
                         'date_debut', to_char(op.date_debut, 'DD/MM/YYYY'),
                         'surf', op.surf
@@ -764,6 +765,7 @@ router.get("/projets/uuid=:uuid/operations/geojson", async (req, res) => {
         ) AS geojson
         FROM opegerer.operations op
         LEFT JOIN opegerer.localisations loc ON loc.ref_uuid_ope = op.uuid_ope
+        LEFT JOIN ope.actions act2 ON act2.cd_action = op.action_2
         WHERE op.ref_uuid_proj = $1;
     `;
     try {

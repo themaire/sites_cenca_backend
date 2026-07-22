@@ -249,9 +249,9 @@ function geometryToSvg(geometry, color, bbox, w, h, { dashed = false, fillOpacit
 // document (rubrique "Type d'opération"), seul le libellé d'action_2 est affiché.
 function legendLabelFor(properties) {
     const primary = properties.code || properties.titre || properties.date_debut || "";
-    const type = String(properties.type || "").split(' / ')[1] || properties.type || "";
-    if (primary && type) return `${primary} – ${type}`;
-    return primary || type;
+    const label = properties.action_2_libelle || properties.type || "";
+    if (primary && label) return `${primary} – ${label}`;
+    return primary || label;
 }
 
 function computeVisualCentroid(geometry) {
@@ -279,7 +279,7 @@ function estimateTextWidth(text, fontSizePx, { bold = false } = {}) {
 // la légende affiche ses `MAX_LEGEND_ITEMS` premiers éléments dans cet ordre.
 function buildLegendSvg(rawFeatures, colorsByUuid, numbersByUuid, hasSiteContour, w, h) {
     const items = rawFeatures.slice(0, MAX_LEGEND_ITEMS);
-    const maxLabelChars = 44;
+    const maxLabelChars = 30;
     const labelStartX = 36;
     const padLeft = 10;
     const lineH = 23;
