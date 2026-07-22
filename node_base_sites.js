@@ -181,6 +181,10 @@ const chiroRoutesGet = require('./routes/chiro/getChiroRoutes.js');
 const chiroRoutesPut = require('./routes/chiro/putChiroRoutes.js');
 const chiroRoutesDelete = require('./routes/chiro/deleteChiroRoutes.js');
 
+const annuaireRoutesGet = require('./routes/annuaire/getAnnuaireRoutes.js');
+const annuaireRoutesPut = require('./routes/annuaire/putAnnuaireRoutes.js');
+const annuaireRoutesDelete = require('./routes/annuaire/deleteAnnuaireRoutes.js');
+
 // Configuration HTTPS (seulement en production)
 let httpsOptions = null;
 if (NODE_ENV === 'production') {
@@ -225,6 +229,10 @@ async function run() {
     app.use('/chiro', chiroRoutesGet);
     app.use('/chiro', chiroRoutesPut);
     app.use('/chiro', chiroRoutesDelete);
+
+    app.use('/annuaire', annuaireRoutesGet);
+    app.use('/annuaire', annuaireRoutesPut);
+    app.use('/annuaire', annuaireRoutesDelete);
 
     app.use('/process', processRoutes);
     app.use('/picts', pictureRoute); // Monté le routeur pictureRoute.js sur /picts
