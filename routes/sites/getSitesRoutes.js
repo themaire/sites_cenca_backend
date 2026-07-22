@@ -585,7 +585,7 @@ router.get("/operations/uuid=:uuid/:mode", (req, res) => {
     where = 'where ';
     if (req.params.mode == 'lite') {
 
-        selectFields = `SELECT op.uuid_ope, concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)) as type, op.nom_mo, op.quantite, opegerer.get_libelle(op.unite) as unite_str, op.code, op.titre, op.description, op.remarque, op.surf, to_char(op.date_debut, 'DD/MM/YYYY') as date_debut_str, `;
+        selectFields = `SELECT op.uuid_ope, op.action, op.action_2, concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)) as type, op.nom_mo, op.quantite, opegerer.get_libelle(op.unite) as unite_str, op.code, op.titre, op.description, op.remarque, op.surf, to_char(op.date_debut, 'DD/MM/YYYY') as date_debut_str, `;
         selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_financeurs WHERE uuid_ope = op.uuid_ope ) AS financeurs, financeur_description, `;
         selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_animaux WHERE uuid_ope = op.uuid_ope ) AS animaux, financeur_description `;
         fromTable += "AS op ";
@@ -753,6 +753,8 @@ router.get("/projets/uuid=:uuid/operations/geojson", async (req, res) => {
                         'loc_id', loc.loc_id,
                         'code', op.code,
                         'titre', op.titre,
+                        'action', op.action,
+                        'action_2', op.action_2,
                         'type', concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)),
                         'date_debut', to_char(op.date_debut, 'DD/MM/YYYY'),
                         'surf', op.surf

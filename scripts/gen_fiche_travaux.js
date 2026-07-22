@@ -1,6 +1,14 @@
 const { AlignmentType, ImageRun, convertInchesToTwip, Header, Footer, SectionType, PageNumber, WidthType, Table, TableRow, TableCell, ShadingType, Document, HeadingLevel, LevelFormat, Packer, Paragraph, TextRun, UnderlineType } = require("docx");
 const fs = require("fs");
 const path = require('path');
+const { generateOperationsMapImage } = require("../fonctions/mapGenerator.js");
+
+// Taille d'impression de la carte de localisation des opérations (dernière page)
+const CM_TO_PX = 96 / 2.54;
+const MAP_WIDTH_CM = 27;
+const MAP_HEIGHT_CM = 13.5;
+const MAP_WIDTH_PX = Math.round(MAP_WIDTH_CM * CM_TO_PX);
+const MAP_HEIGHT_PX = Math.round(MAP_HEIGHT_CM * CM_TO_PX);
 
 // Couleurs
 const bleuFonce = "1a397b";
@@ -24,10 +32,52 @@ function tableCellNoBorder(options = {}) {
     });
 }
 
+// Parse une date au format "JJ/MM/AAAA" (ou fallback Date native), utilisé pour trier
+// les opérations chronologiquement partout dans le document (tableau, détails, carte).
+function parseOperationDate(d) {
+    if (!d) return 0;
+    const [j, m, an] = String(d).split('/');
+    return an && m && j ? new Date(an, m - 1, j) : new Date(d);
+}
+
+// Ordre unique des opérations (par date de début croissante) : sert à la fois pour
+// l'affichage "Opération n°X" du corps du document et pour la numérotation des
+// badges sur la carte de localisation, afin que les deux se correspondent.
+function sortOperationsByDate(operations) {
+    return [...operations].sort((a, b) => parseOperationDate(a.date_debut_str) - parseOperationDate(b.date_debut_str));
+}
+
+// Clé de rapprochement entre une opération de bilan.operations (action, action_2,
+// date_debut_str) et une "feature" de la carte (action, action_2, date_debut) :
+// plus fiable que uuid_ope seul, dont la valeur peut diverger entre les deux routes
+// (opération vs localisations) selon les données saisies.
+function operationMatchKey(action, action2, dateDebutStr) {
+    return `${action ?? ''}|${action2 ?? ''}|${dateDebutStr ?? ''}`;
+}
+
 // Création du document
-function generateFicheTravauxWord(bilan) {
+async function generateFicheTravauxWord(bilan) {
     // console.log("Génération de la fiche avec ce bilan :", bilan);
     // console.log("Financeurs :", bilan.operations.map(op => op.financeurs).flat());
+
+    const sortedOperations = sortOperationsByDate(bilan.operations);
+    const operationNumberByUuid = {};
+    const operationNumberByKey = {};
+    sortedOperations.forEach((op, i) => {
+        operationNumberByUuid[op.uuid_ope] = i + 1;
+        operationNumberByKey[operationMatchKey(op.action, op.action_2, op.date_debut_str)] = i + 1;
+    });
+
+    let operationsMapBuffer = null;
+    try {
+        operationsMapBuffer = await generateOperationsMapImage(bilan.operations_geojson, bilan.site?.geojson, {
+            aspectRatio: MAP_WIDTH_PX / MAP_HEIGHT_PX,
+            numberByUuid: operationNumberByUuid,
+            numberByKey: operationNumberByKey,
+        });
+    } catch (err) {
+        console.error("Erreur lors de la génération de la carte des opérations :", err.message);
+    }
 
     const header = new Table({
                     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -393,7 +443,7 @@ function generateFicheTravauxWord(bilan) {
                             }),
                             // Lignes d'opérations
                             //...bilan.operations.map((op, idx) =>
-                            ...[...bilan.operations].sort((a, b) => { const p = d => { if (!d) return 0; const [j,m,an] = String(d).split('/'); return an && m && j ? new Date(an, m-1, j) : new Date(d); }; return p(a.date_debut_str) - p(b.date_debut_str); }).map((op, idx) =>
+                            ...sortedOperations.map((op, idx) =>
                                 new TableRow({
                                     children: [
                                         new TableCell({ children: [new Paragraph(String((op.type || "").split(' / ')[1] || ""))] }),
@@ -444,7 +494,7 @@ function generateFicheTravauxWord(bilan) {
                     }),
 
                     // Boucle des opérations réalisées
-                    ...[...bilan.operations].sort((a, b) => { const p = d => { if (!d) return 0; const [j,m,an] = String(d).split('/'); return an && m && j ? new Date(an, m-1, j) : new Date(d); }; return p(a.date_debut_str) - p(b.date_debut_str); }).flatMap((op, i) => [
+                    ...sortedOperations.flatMap((op, i) => [
                         new Paragraph({
                             text: `Opération n°${i + 1}`,
                             style: "TitreColore",
@@ -644,11 +694,29 @@ function generateFicheTravauxWord(bilan) {
                         }),
                 },
                 children: [
-                    // Paragraphes de séparation pour placer la cartographie au format image
                     new Paragraph({
-                        alignment: AlignmentType.CENTER,
-                        spacing: { after: 80 }
+                        text: "CARTE DE LOCALISATION DES OPÉRATIONS",
+                        style: "TitreColore",
+                        spacing: { before: 240 }
                     }),
+                    ...(operationsMapBuffer
+                        ? [new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            spacing: { before: 120 },
+                            children: [
+                                new ImageRun({
+                                    data: operationsMapBuffer,
+                                    type: "png",
+                                    transformation: { width: MAP_WIDTH_PX, height: MAP_HEIGHT_PX },
+                                })
+                            ]
+                        })]
+                        : [new Paragraph({
+                            alignment: AlignmentType.CENTER,
+                            spacing: { before: 200 },
+                            style: "aside",
+                            text: "Carte non disponible : aucune géométrie d'opération n'a été saisie pour ce projet."
+                        })]),
                 ],
                 footers: {
                     default: new Footer({

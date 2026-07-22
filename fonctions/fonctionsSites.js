@@ -620,8 +620,9 @@ async function getBilan(uuid) {
             op.uuid_ope
         );
     }
+    const operations_geojson = await getData("operations_geojson", uuid);
 
-    return { projet, site, communes, objectifs, operations, operations_full };
+    return { projet, site, communes, objectifs, operations, operations_full, operations_geojson };
 }
 
 function getData(type, uuid, hostname, port = process.env.NODE_PORT) {
@@ -653,6 +654,8 @@ function getData(type, uuid, hostname, port = process.env.NODE_PORT) {
             path = "/sites/operations/uuid=" + uuid + "/full?webapp=1";
         } else if (type === "commune") {
             path = "/sites/commune/uuid=" + uuid;
+        } else if (type === "operations_geojson") {
+            path = "/sites/projets/uuid=" + uuid + "/operations/geojson";
         }
 
         const options = {
