@@ -17,7 +17,7 @@ function sendError(res, message, err) {
 
 // ─── GET /annuaire ────────────────────────────────────────────────────────────
 // Liste des contacts (lite), avec compétences/étiquettes agrégées.
-// Filtres optionnels : typ_personne, validite, q (recherche sur le nom)
+// Filtres optionnels : typ_personne, validite, q (recherche sur nom/adresse/mail/téléphone)
 router.get("/", async (req, res) => {
     const { typ_personne, validite, q } = req.query;
 
@@ -27,7 +27,11 @@ router.get("/", async (req, res) => {
 
     if (typ_personne) { conditions.push(`a.typ_personne = $${i++}`); values.push(typ_personne); }
     if (validite !== undefined) { conditions.push(`a.validite = $${i++}`); values.push(validite === "true" || validite === "1"); }
-    if (q) { conditions.push(`a.nom ILIKE $${i++}`); values.push(`%${q}%`); }
+    if (q) {
+        conditions.push(`(a.nom ILIKE $${i} OR a.adresse ILIKE $${i} OR a.mail ILIKE $${i} OR a.telephone ILIKE $${i})`);
+        values.push(`%${q}%`);
+        i++;
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -40,7 +44,7 @@ router.get("/", async (req, res) => {
         FROM ann.annuaire a
         LEFT JOIN ann.typ_personnes tp ON a.typ_personne = tp.cd_type
         LEFT JOIN LATERAL (
-            SELECT json_agg(json_build_object('cd_type', te.cd_type, 'libelle', te.libelle) ORDER BY te.libelle) AS etiquettes
+            SELECT json_agg(json_build_object('typ_etiquette', te.cd_type, 'libelle', te.libelle) ORDER BY te.libelle) AS etiquettes
             FROM ann.etiquettes e
             JOIN ann.typ_etiquettes te ON e.typ_etiquette = te.cd_type
             WHERE e.annuaire = a.uuid_ann
