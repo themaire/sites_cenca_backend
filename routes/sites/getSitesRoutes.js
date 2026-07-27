@@ -585,20 +585,21 @@ router.get("/operations/uuid=:uuid/:mode", (req, res) => {
     where = 'where ';
     if (req.params.mode == 'lite') {
 
-        selectFields = `SELECT op.uuid_ope, op.action, op.action_2, concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)) as type, op.nom_mo, op.quantite, opegerer.get_libelle(op.unite) as unite_str, op.code, op.titre, op.description, op.remarque, op.surf, to_char(op.date_debut, 'DD/MM/YYYY') as date_debut_str, `;
+        selectFields = `SELECT op.uuid_ope, op.action, op.action_2, concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)) as type, op.ref_uuid_ann, mo.nom as nom_mo, op.quantite, opegerer.get_libelle(op.unite) as unite_str, op.code, op.titre, op.description, op.remarque, op.surf, to_char(op.date_debut, 'DD/MM/YYYY') as date_debut_str, `;
         selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_financeurs WHERE uuid_ope = op.uuid_ope ) AS financeurs, financeur_description, `;
         selectFields += `(SELECT json_agg(opegerer.get_libelle(checkbox_id) ORDER BY opegerer.get_libelle(checkbox_id)) FROM opegerer.operation_animaux WHERE uuid_ope = op.uuid_ope ) AS animaux, financeur_description `;
-        fromTable += "AS op ";
+        fromTable += "AS op LEFT JOIN ann.annuaire mo ON mo.uuid_ann = op.ref_uuid_ann ";
         where += "op.ref_uuid_proj = $1 ";
         where += "ORDER BY op.date_debut ASC;";
 
     } else if (req.params.mode == 'full') {
-        selectFields = 'SELECT uuid_ope, code, titre, inscrit_pdg, rmq_pdg, description, interv_zh, surf, lin, app_fourr, pression_moy, ugb_moy, nbjours, ';
-        selectFields += 'charge_moy, charge_inst, remarque, validite, action, objectif, typ_intervention, date_debut, date_fin, date_approx, ben_participants, ben_heures, ';
-        selectFields += 'ref_uuid_proj, date_ajout, ref_loc_id, obj_ope, action_2, nom_mo, cadre_intervention, cadre_intervention_detail, financeur_description, quantite, unite, ';
-        selectFields += 'exportation_fauche, total_exporte_fauche, productivite_fauche, effectif_paturage, nb_jours_paturage, chargement_paturage, abroutissement_paturage, recouvrement_ligneux_paturage, nom_parc, interv_cloture, type_intervention_hydro, ';
-        selectFields += 'opegerer.get_libelle(cadre_intervention) as cadre_intervention_str, opegerer.get_libelle(cadre_intervention_detail) as cadre_intervention_detail_str, to_char(date_debut, \'DD/MM/YYYY\') as date_debut_str, to_char(date_fin, \'DD/MM/YYYY\') as date_fin_str ';
-        where += 'uuid_ope = $1;';
+        selectFields = 'SELECT op.uuid_ope, op.code, op.titre, op.inscrit_pdg, op.rmq_pdg, op.description, op.interv_zh, op.surf, op.lin, op.app_fourr, op.pression_moy, op.ugb_moy, op.nbjours, ';
+        selectFields += 'op.charge_moy, op.charge_inst, op.remarque, op.validite, op.action, op.objectif, op.typ_intervention, op.date_debut, op.date_fin, op.date_approx, op.ben_participants, op.ben_heures, ';
+        selectFields += 'op.ref_uuid_proj, op.date_ajout, op.ref_loc_id, op.obj_ope, op.action_2, op.ref_uuid_ann, mo.nom as nom_mo, op.cadre_intervention, op.cadre_intervention_detail, op.financeur_description, op.quantite, op.unite, ';
+        selectFields += 'op.exportation_fauche, op.total_exporte_fauche, op.productivite_fauche, op.effectif_paturage, op.nb_jours_paturage, op.chargement_paturage, op.abroutissement_paturage, op.recouvrement_ligneux_paturage, op.nom_parc, op.interv_cloture, op.type_intervention_hydro, ';
+        selectFields += 'opegerer.get_libelle(op.cadre_intervention) as cadre_intervention_str, opegerer.get_libelle(op.cadre_intervention_detail) as cadre_intervention_detail_str, to_char(op.date_debut, \'DD/MM/YYYY\') as date_debut_str, to_char(op.date_fin, \'DD/MM/YYYY\') as date_fin_str ';
+        fromTable += "AS op LEFT JOIN ann.annuaire mo ON mo.uuid_ann = op.ref_uuid_ann ";
+        where += 'op.uuid_ope = $1;';
     }
 
     executeQueryAndRespond(
