@@ -10,6 +10,7 @@ const {
     ExecuteQuerySite,
     ExecuteQuerySitePromise,
     updateEspaceSite,
+    insertEspaceSite,
     convertToWKT,
     detectShapefileGeometryType,
     extractZipFile,
@@ -600,7 +601,79 @@ router.put("/put/table=:table/insert", (req, res) => {
 
     // Ajout d'un projet_mfu
     try {
-        if (TABLE === "projets_mfu") {
+        if (TABLE === "espace_site") {
+            // Un site va toujours de pair avec un espace (FK sitcenca.sites.espace -> esp.espaces.uuid_espace) :
+            // on crée d'abord l'espace, puis le site qui lui est rattaché. Les deux UUID sont générés ici,
+            // côté backend, jamais fournis par le client.
+            const espaceFields = [
+                "date_crea_espace",
+                "id_espace",
+                "nom",
+                "surface",
+                "carto_hab",
+                "zh",
+                "typ_espace",
+                "bassin_agence",
+                "rgpt",
+                "typ_geologie",
+                "id_source",
+                "id_crea",
+                "url",
+                "maj_admin",
+            ];
+            const siteFields = [
+                "code",
+                "prem_ctr",
+                "ref_fcen",
+                "pourc_gere",
+                "surf_actes",
+                "url_cen",
+                "validite",
+                "typ_site",
+                "responsable",
+                "date_crea_site",
+                "id_mnhn",
+                "modif_admin",
+                "actuel",
+                "url_mnhn",
+                "parties_gerees",
+                "typ_ouverture",
+                "description_site",
+                "sensibilite",
+                "remq_sensibilite",
+                "ref_public",
+            ];
+            // Les alias ci-dessus reprennent les noms utilisés par la route GET (espa.date_crea as date_crea_espace,
+            // site.date_crea as date_crea_site) : on les remappe vers le vrai nom de colonne ("date_crea" dans les
+            // deux tables) avant de construire les requêtes INSERT.
+            const columnAliases = {
+                date_crea_espace: "date_crea",
+                date_crea_site: "date_crea",
+            };
+
+            const espaceData = {};
+            const siteData = {};
+
+            Object.keys(INSERT_DATA).forEach((key) => {
+                if (espaceFields.includes(key)) {
+                    espaceData[columnAliases[key] || key] = INSERT_DATA[key];
+                } else if (siteFields.includes(key)) {
+                    siteData[columnAliases[key] || key] = INSERT_DATA[key];
+                }
+            });
+
+            const newUuidEspace = uuidv4();
+            const newUuidSite = uuidv4();
+
+            espaceData.uuid_espace = newUuidEspace;
+            siteData.uuid_site = newUuidSite;
+            siteData.espace = newUuidEspace; // Rattachement au nouvel espace
+
+            const espaceQuery = generateInsertQuery("esp.espaces", espaceData, false);
+            const siteQuery = generateInsertQuery("sitcenca.sites", siteData, false);
+
+            insertEspaceSite(pool, res, espaceQuery, siteQuery, newUuidEspace, newUuidSite);
+        } else if (TABLE === "projets_mfu") {
             sanitizePmfuArrayColumns(INSERT_DATA);
             console.log("data avant envoi :", INSERT_DATA.pmfu_id);
             if (INSERT_DATA.pmfu_id === 0) {

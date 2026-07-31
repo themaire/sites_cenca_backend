@@ -325,6 +325,51 @@ async function updateEspaceSite(pool, res, espaceQuery, siteQuery) {
     );
 }
 
+/**
+ * Fonction pour créer un espace et le site qui lui est rattaché en une seule transaction.
+ * Un site ne peut pas exister sans son espace parent (FK sitcenca.sites.espace -> esp.espaces.uuid_espace),
+ * donc les deux INSERT doivent réussir ensemble ou échouer ensemble.
+ * @param {*} pool La connexion à la base de données
+ * @param {*} res La réponse HTTP
+ * @param {*} espaceQuery La requête pour créer l'espace
+ * @param {*} siteQuery La requête pour créer le site
+ * @param {string} newUuidEspace L'UUID généré pour le nouvel espace
+ * @param {string} newUuidSite L'UUID généré pour le nouveau site
+ */
+async function insertEspaceSite(pool, res, espaceQuery, siteQuery, newUuidEspace, newUuidSite) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query(espaceQuery.text, espaceQuery.values);
+        await client.query(siteQuery.text, siteQuery.values);
+        await client.query('COMMIT');
+
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.status(201).json({
+            success: true,
+            message: "Création réussie.",
+            code: 0,
+            data: { uuid_espace: newUuidEspace, uuid_site: newUuidSite },
+        });
+    } catch (error) {
+        try {
+            await client.query('ROLLBACK');
+        } catch (rollbackError) {
+            console.error("Erreur lors du rollback de création espace/site :", rollbackError);
+        }
+
+        console.error("Erreur lors de la création de l'espace/site :", error);
+        res.status(500).json({
+            success: false,
+            message: "Erreur, la requête s'est mal exécutée.",
+            code: 1,
+        });
+    } finally {
+        client.release();
+    }
+}
+
 function executeQueryAndRespond(
     pool,
     SelectFields,
@@ -699,6 +744,7 @@ module.exports = {
     distinctSiteResearch,
     distinctResearchRaw,
     updateEspaceSite,
+    insertEspaceSite,
     executeQueryAndRespond,
     reset,
     detectShapefileGeometryType,
