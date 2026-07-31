@@ -26,6 +26,50 @@ const { joinQuery, selectQuery, selectListTravauxQuery, ExecuteQuerySite, distin
 const { generateFicheTravauxWord } = require("../../scripts/gen_fiche_travaux.js");
 const pool = require("../../dbPool/poolConnect.js");
 
+// Liste des sites diffusables (GeoJSON) pour le site vitrine (studio web externe)
+// Accès protégé par une clé statique passée en paramètre GET "key" (DIFFUSION_API_KEY)
+router.get("/sites_diffusables", async (req, res) => {
+    const apiKey = req.query.key;
+
+    if (!apiKey || apiKey !== process.env.DIFFUSION_API_KEY) {
+        return res.status(401).json({ error: "Clé d'accès manquante ou invalide." });
+    }
+
+    const sql = `
+        SELECT json_build_object(
+            'type', 'FeatureCollection',
+            'features', COALESCE(json_agg(
+                json_build_object(
+                    'type', 'Feature',
+                    'geometry', ST_AsGeoJSON(ST_Transform(ST_PointOnSurface(geom), 4326))::json,
+                    'properties', json_build_object(
+                        'nom_site', nom_site,
+                        'code_site', code_site,
+                        'commune', commune,
+                        'surface', surface,
+                        'milieu_naturel_principal', milieu_naturel_principal
+                    )
+                )
+            ) FILTER (WHERE geom IS NOT NULL), '[]')
+        ) AS geojson
+        FROM sitcenca.v_sites_diffusable;
+    `;
+
+    try {
+        const result = await pool.query(sql);
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.status(200).json(result.rows[0]?.geojson || { type: "FeatureCollection", features: [] });
+    } catch (err) {
+        console.error("Erreur SQL /sites/sites_diffusables:", err);
+        res.status(500).json({
+            success: false,
+            message: "Erreur lors de la récupération des sites diffusables.",
+            detail: err.message,
+        });
+    }
+});
+
 router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
     // A FAIRE POUR PLUS TARD : adapter la fonction executeQueryAndRespond() (utilisée de partout sur toutes le routes) pour qu'elle puisse prendre en compte les paramètres de la requête
 
@@ -114,7 +158,7 @@ router.get("/uuid=:uuid", (req, res) => {
     FromTable +=
         "LEFT JOIN sitcenca.typ_sites as tsite ON site.typ_site = tsite.cd_type ";
     FromTable +=
-        "LEFT JOIN esp.geometries as geo ON geo.espace = espa.uuid_espace ";
+        "LEFT JOIN esp.geometries as geo ON geo.espace = espa.uuid_espace AND geo.validite IS NOT FALSE ";
     FromTable +=
         "LEFT JOIN esp.typ_geomnatures geona ON geo.typ_nature = geona.cd_type ";
     where = "where uuid_site = $1";

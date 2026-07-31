@@ -158,3 +158,5 @@ surveillance/routes-config.json
 fonctions/geo_api.js
 fonctions/geo_api_bttf.js
 ressources/
+
+extraction_fonciere/
