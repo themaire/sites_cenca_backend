@@ -25,7 +25,9 @@ router.get("/releves", async (req, res) => {
         if (espece) {
             // Jointure observations nécessaire pour filtrer par espèce
             const sql = `
-                SELECT lr.*
+                SELECT distinct lr.uuid_releve, lr.insee, lr.commune, lr.site, lr.date_releve,
+                         lr.orga, lr.nbesp, lr.nbobs, lr.id_site,
+                         lr.code_site_chiro, lr.nom_site
                 FROM chiro.liste_releves lr
                 JOIN chiro.observations o ON o.releve = lr.uuid_releve
                 WHERE ($1::varchar IS NULL OR lr.insee = $1)
@@ -33,7 +35,7 @@ router.get("/releves", async (req, res) => {
                   AND ($3::text IS NULL OR EXTRACT(YEAR FROM lr.date_releve)::text = $3)
                   AND ($4::varchar IS NULL OR o.espece = $4)
                 GROUP BY lr.uuid_releve, lr.insee, lr.commune, lr.site, lr.date_releve,
-                         lr.orga, lr.nbesp, lr.nbobs, lr.id_site, lr.geom,
+                         lr.orga, lr.nbesp, lr.nbobs, lr.id_site,
                          lr.code_site_chiro, lr.nom_site
                 ORDER BY lr.date_releve DESC
                 LIMIT 500
@@ -50,7 +52,8 @@ router.get("/releves", async (req, res) => {
             if (annee)   { conditions.push(`EXTRACT(YEAR FROM date_releve)::text = $${i++}`); values.push(annee); }
 
             const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-            const sql = `SELECT * FROM chiro.liste_releves ${where} ORDER BY date_releve DESC LIMIT 500`;
+            const sql = `SELECT distinct uuid_releve, insee, commune, site, date_releve,
+                         orga, nbesp, nbobs, id_site, code_site_chiro, nom_site FROM chiro.liste_releves ${where} ORDER BY date_releve DESC LIMIT 500`;
             result = await pool.query(sql, values);
         }
         sendJson(res, result.rows);
