@@ -246,80 +246,66 @@ async function distinctResearchRaw(pool, selectors, property, title, sqlText, ca
 
 /**
  * Fonction pour mettre à jour les informations d'un espace et d'un site d'un seul coup.
+ * Une des deux requêtes peut être null (formulaire qui ne touche qu'une table) : elle est alors sautée.
  * @param {*} pool La connexion à la base de données
  * @param {*} res La réponse HTTP
- * @param {*} espaceQuery La requête pour mettre à jour l'espace
- * @param {*} siteQuery La requête pour mettre à jour le site
+ * @param {*} espaceQuery La requête pour mettre à jour l'espace (ou null)
+ * @param {*} siteQuery La requête pour mettre à jour le site (ou null)
  */
 async function updateEspaceSite(pool, res, espaceQuery, siteQuery) {
-    // console.log(espaceQuery);
-    // console.log(siteQuery);
+    const sendSuccess = (resultats) => {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.status(200).json({
+            success: true,
+            message: "Mise à jour réussie.",
+            code: 0,
+            data: resultats,
+        });
+    };
 
-    // Exécuter les requêtes UPDATE
+    const sendFailure = (tableName, query, code) => {
+        const currentDateTime = new Date().toISOString();
+        console.log(
+            `Échec de la requête de la table ${tableName} à ${currentDateTime}`
+        );
+        console.log(query.text);
+        console.log(query.values);
+        res.status(500).json({
+            success: false,
+            message: "Erreur, la requête s'est mal exécutée.",
+            ...(code !== undefined && { code }),
+        });
+    };
+
+    const updateSite = (espaceResultats) => {
+        if (!siteQuery) return sendSuccess(espaceResultats);
+        ExecuteQuerySite(
+            pool,
+            { query: siteQuery, message: "site/put/table=espace_site/uuid" },
+            "update",
+            (resultats, message) => {
+                if (message === "ok") {
+                    sendSuccess(resultats);
+                } else {
+                    sendFailure("sites", siteQuery, 1);
+                }
+            }
+        );
+    };
+
+    if (!espaceQuery) return updateSite();
+
     ExecuteQuerySite(
         pool,
         { query: espaceQuery, message: "espace/put/table=espace_site/uuid" },
         "update",
         (resultats, message) => {
-            console.log(
-                "resultats suite à la requete table espaces : " + resultats
-            );
-            // if (resultats !== false) {
             if (message === "ok") {
-                console.log("DEBUG PUT ESTPACE OK");
-                ExecuteQuerySite(
-                    pool,
-                    {
-                        query: siteQuery,
-                        message: "site/put/table=espace_site/uuid",
-                    },
-                    "update",
-                    (resultats, message) => {
-                        res.setHeader("Access-Control-Allow-Origin", "*");
-                        res.setHeader(
-                            "Content-Type",
-                            "application/json; charset=utf-8"
-                        );
-
-                        if (message === "ok") {
-                            res.status(200).json({
-                                success: true,
-                                message: "Mise à jour réussie.",
-                                code: 0,
-                                data: resultats,
-                            });
-                            console.log("message : " + message);
-                            console.log("resultats : " + resultats);
-                        } else {
-                            const currentDateTime = new Date().toISOString();
-                            console.log(
-                                `Échec de la requête de la table sites à ${currentDateTime}`
-                            );
-                            console.log(siteQuery.text);
-                            console.log(siteQuery.values);
-                            res.status(500).json({
-                                success: false,
-                                message:
-                                    "Erreur, la requête s'est mal exécutée.",
-                                code: 1,
-                            });
-                        }
-                    }
-                );
+                updateSite(resultats);
             } else {
-                console.log("DEBUG PUT ESPACE FAIL");
                 console.log("message : " + message);
-
-                const currentDateTime = new Date().toISOString();
-                console.log(
-                    `Échec de la requête de la table espaces à ${currentDateTime}`
-                );
-                console.log(espaceQuery.text);
-                console.log(espaceQuery.values);
-                res.status(500).json({
-                    success: false,
-                    message: "Erreur, la requête s'est mal exécutée.",
-                });
+                sendFailure("espaces", espaceQuery);
             }
         }
     );

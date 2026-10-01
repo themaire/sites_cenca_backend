@@ -175,6 +175,25 @@ router.get("/uuid=:uuid", (req, res) => {
     ); // Full car on veut un seul résultat
 });
 
+// Conservateurs bénévoles du site (contacts de l'annuaire, via sitcenca.conservateurs)
+router.get("/conservateur/uuid_site=:uuid_site", async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT a.uuid_ann, a.nom, a.telephone, a.mail, a.adresse
+               FROM sitcenca.conservateurs c
+               JOIN ann.annuaire a ON a.uuid_ann = c.societe
+              WHERE c.site = $1
+              ORDER BY a.nom`,
+            [req.params.uuid_site]
+        );
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        return res.status(200).json(result.rows);
+    } catch (error) {
+        console.error("Erreur lors de la lecture des conservateurs du site " + req.params.uuid_site + " :", error);
+        return res.status(500).json({ success: false, message: "Erreur lors de la lecture des conservateurs du site.", code: 1 });
+    }
+});
+
 // Communes
 router.get("/commune/uuid=:uuid", (req, res) => {
     let { SelectFields, FromTable, where, message } = reset();
@@ -1062,6 +1081,8 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         "opegerer.typ_objectifope",
         "opegerer.typ_objectifs",
         "sitcenca.typ_mfu",
+        "esp.typ_espaces",
+        "sitcenca.typ_sites",
     ];
 
     // Liste des libelles de la table commune des libelles
@@ -1081,10 +1102,9 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         "priorite",
         "status",
         "prochaine_etape",
-        "territoire"
     ];
 
-    // Handle typ_proprietaires table specifically - before simpleTables check
+    // Tables avec des noms de champs non normalisées
     if (list == "docplan.typ_documents") {
         SelectFields += "cd_type, libelle ";
         where = "order by libelle;";
@@ -1119,8 +1139,7 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         SelectFields += "cd_programme as cd_type, cd_programme || ' - ' || libelle as libelle ";
 
     } else if ( // Tables de libelles
-        list == "opegerer.libelles" ||
-        list == "sitcenca.libelles"
+        list == "opegerer.libelles" || list == "sitcenca.libelles"
     ) {
         SelectFields += "lib_id as cd_type, lib_libelle as libelle ";
 
@@ -1133,7 +1152,18 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         } else {
             SelectFields += "cd_salarie as cd_type, prenom || ' ' || nom as libelle, case when typ_fonction not in ('COM', 'COMP', 'DIR', 'GEOM', 'RAF', 'SC', 'SECR', 'STAG') then 1 else 0 end as is_ope ";
         }
-
+    
+    } else if (list == "terr.bassins_agences") {
+        SelectFields += "cd_bassin as cd_type, libelle ";
+        order = "libelle";
+    
+    } else if (list == "esp.typ_rgpt") {
+        SelectFields += "cd_rgpt as cd_type, libelle ";
+        order = "libelle";
+    
+    } else if (list == "sitcenca.typ_ouvertures") {
+        SelectFields += "cd_type, libelle ";
+        order = "libelle";
     }
 
     FromTable = "FROM " + list + " ";
