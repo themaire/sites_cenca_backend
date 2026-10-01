@@ -167,6 +167,7 @@ const siteRoutesPut = require('./routes/sites/putSitesRoutes.js');
 const { authenticateToken } = require('./fonctions/fonctionsAuth.js');
 
 const foncierRoutes = require('./routes/sites/foncierRoutes.js');
+const checkUrlRoutes = require('./routes/sites/checkUrlRoutes.js');
 const siteRoutesDelete = require('./routes/sites/deleteSitesRoutes.js');
 const userRoutes = require('./routes/admin/userRoutes.js');
 const processRoutes = require('./routes/processRoutes');
@@ -225,6 +226,7 @@ async function run() {
     app.use('/sites', siteRoutesDelete);
 
     app.use('/sites', foncierRoutes);
+    app.use('/sites', checkUrlRoutes); // Vérification des liens hypertexte (GET /sites/check-url?url=...)
 
     app.use('/chiro', chiroRoutesGet);
     app.use('/chiro', chiroRoutesPut);
