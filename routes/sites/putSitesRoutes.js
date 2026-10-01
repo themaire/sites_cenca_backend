@@ -18,6 +18,10 @@ const pool = require("../../dbPool/poolConnect.js");
 
 // Generateur de requetes SQL
 const { generateUpdateQuery, generateInsertQuery, generateCloneQuery, getTableColums, generateCloneCheckboxQuery } = require('../../fonctions/querys.js');
+const { authenticateToken } = require("../../fonctions/fonctionsAuth.js");
+
+// Code INSEE d'une commune : 5 caractères, 2A/2B pour la Corse
+const INSEE_REGEX = /^\d[\dAB]\d{3}$/;
 
 // Colonnes de sitcenca.projets_mfu de type tableau (int4[] ou varchar[]) : une chaîne vide
 // n'est pas un littéral de tableau valide pour Postgres ("" ≠ "{}"), donc on la neutralise en null
@@ -362,18 +366,27 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
             // console.log(espaceData);
             // console.log(siteData);
 
+            // Un formulaire peut ne modifier qu'une des deux tables :
+            // on ne génère l'UPDATE que pour les tables qui ont des colonnes à modifier.
+            if (!Object.keys(espaceData).length && !Object.keys(siteData).length) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Aucune colonne modifiable fournie.",
+                });
+            }
+
             // Générer les requêtes UPDATE pour chaque table
             // Ne PAS oublier d'ajouter l'UUID de la bonne table
-            const espaceQuery = generateUpdateQuery(
-                "esp.espaces",
-                updateData.uuid_espace,
-                espaceData
-            );
-            const siteQuery = generateUpdateQuery(
-                "sitcenca.sites",
-                UUID,
-                siteData
-            );
+            const espaceQuery = Object.keys(espaceData).length
+                ? generateUpdateQuery(
+                      "esp.espaces",
+                      updateData.uuid_espace,
+                      espaceData
+                  )
+                : null;
+            const siteQuery = Object.keys(siteData).length
+                ? generateUpdateQuery("sitcenca.sites", UUID, siteData)
+                : null;
 
             updateEspaceSite(pool, res, espaceQuery, siteQuery);
         } else if (["projets", "operations", "objectifs"].includes(TABLE)) {
@@ -569,7 +582,7 @@ router.put("/put/table=:table/uuid=:uuid", (req, res) => {
 });
 
 // Ajouter un site, un acte, une parcelle, une operation ...
-router.put("/put/table=:table/insert", (req, res) => {
+router.put("/put/table=:table/insert", async (req, res) => {
     // console.log("La requête : ", req);
     const TABLE = req.params.table;
     const INSERT_DATA = req.body; // Récupérer l'objet JSON envoyé
@@ -694,6 +707,123 @@ router.put("/put/table=:table/insert", (req, res) => {
                         }
                     }
                 );
+            }
+        } else if (TABLE === "espace_site") {
+            // Cas spécial : "espace_site" n'est pas une vraie table. La création d'un site
+            // impose de créer une ligne dans esp.espaces ET une ligne dans sitcenca.sites
+            // (rattachée via sites.espace), dans une seule transaction : si l'une des deux
+            // requêtes échoue, l'autre est annulée (voir le mapping des champs déjà utilisé
+            // pour l'update du même nom spécial ci-dessus, route /put/table=espace_site/uuid).
+            const espaceFields = [
+                "nom",
+                "surface",
+                "typ_espace",
+                "bassin_agence",
+                "zh",
+                "rgpt",
+            ];
+            const siteFields = [
+                "code",
+                "responsable",
+                "typ_site",
+                "validite",
+                "prem_ctr",
+                "ref_public",
+                "id_mnhn",
+                "ref_fcen",
+                "description_site",
+                "sensibilite",
+                "remq_sensibilite",
+                "typ_ouverture",
+                "url_cen",
+                "url_mnhn",
+                "ref_pmfu_id",
+                "parties_gerees"
+            ];
+
+            const espaceData = {};
+            const siteData = {};
+
+            Object.keys(INSERT_DATA).forEach((key) => {
+                if (espaceFields.includes(key)) {
+                    espaceData[key] = INSERT_DATA[key];
+                } else if (siteFields.includes(key)) {
+                    siteData[key] = INSERT_DATA[key];
+                }
+            });
+
+            // Validation minimale des champs requis par le formulaire de création
+            const REQUIRED_TEXT_FIELDS = {
+                nom: espaceData.nom,
+                surface: espaceData.surface,
+                code: siteData.code,
+                responsable: siteData.responsable,
+                typ_site: siteData.typ_site,
+                description_site: siteData.description_site,
+            };
+            // Site en gestion (typ_site = 1) : le n° PMFU est obligatoire
+            if (String(siteData.typ_site) === "1") {
+                REQUIRED_TEXT_FIELDS.ref_pmfu_id = siteData.ref_pmfu_id;
+            }
+            const missingField = Object.keys(REQUIRED_TEXT_FIELDS).find(
+                (key) =>
+                    REQUIRED_TEXT_FIELDS[key] === undefined ||
+                    REQUIRED_TEXT_FIELDS[key] === null ||
+                    REQUIRED_TEXT_FIELDS[key] === ""
+            );
+            if (missingField || siteData.validite === undefined || siteData.validite === null) {
+                res.status(400).json({
+                    success: false,
+                    message:
+                        "Champ requis manquant : " + (missingField || "validite") + ".",
+                });
+                return;
+            }
+
+            // Génération des UUID côté serveur
+            const uuid_espace = uuidv4();
+            const uuid_site = uuidv4();
+            espaceData.uuid_espace = uuid_espace;
+            siteData.uuid_site = uuid_site;
+            siteData.espace = uuid_espace; // FK vers esp.espaces
+
+            const espaceQuery = generateInsertQuery("esp.espaces", espaceData, false);
+            const siteQuery = generateInsertQuery("sitcenca.sites", siteData, false);
+
+            const client = await pool.connect();
+            try {
+                await client.query("BEGIN");
+                await client.query(espaceQuery.text, espaceQuery.values);
+                await client.query(siteQuery.text, siteQuery.values);
+                await client.query("COMMIT");
+
+                res.setHeader("Access-Control-Allow-Origin", "*");
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.status(201).json({
+                    success: true,
+                    code: 0,
+                    message: "Site créé avec succès",
+                    data: { uuid_espace, uuid_site },
+                });
+            } catch (error) {
+                try {
+                    await client.query("ROLLBACK");
+                } catch (rollbackError) {
+                    console.error(
+                        "Erreur lors du ROLLBACK de la création du site (espace_site) :",
+                        rollbackError
+                    );
+                }
+                console.error(
+                    "Erreur lors de la création du site (espace_site) :",
+                    error
+                );
+                res.status(500).json({
+                    success: false,
+                    message: "Erreur, la création du site a échoué.",
+                });
+            } finally {
+                client.release();
             }
         } else if (Object.keys(TABLES).includes(TABLE)) {
             const WORKING_TABLE = TABLES[TABLE] + "." + TABLE;
@@ -1644,6 +1774,92 @@ router.put("/put/table=docs", async (req, res) => {
     } catch (err) {
         console.error("Erreur serveur :", err);
         return res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Rattacher une commune à un site (via son espace : esp.localisations)
+// Corps : { "insee": "51108" }
+router.post("/commune/uuid_site=:uuid_site", authenticateToken, async (req, res) => {
+    const uuidSite = req.params.uuid_site;
+    const insee = String(req.body?.insee ?? "").trim();
+
+    if (!INSEE_REGEX.test(insee)) {
+        return res.status(400).json({ success: false, message: "Code INSEE invalide : " + insee + ".", code: 1 });
+    }
+
+    try {
+        const result = await pool.query(
+            `INSERT INTO esp.localisations (commune, espace)
+             SELECT $2, s.espace FROM sitcenca.sites s WHERE s.uuid_site = $1
+             RETURNING commune, espace`,
+            [uuidSite, insee]
+        );
+        if (!result.rowCount) {
+            return res.status(404).json({ success: false, message: "Site introuvable.", code: 1 });
+        }
+        return res.status(201).json({
+            success: true,
+            code: 0,
+            message: "Commune " + insee + " rattachée au site.",
+            data: result.rows[0],
+        });
+    } catch (error) {
+        if (error.code === "23505") {
+            return res.status(409).json({ success: false, message: "La commune " + insee + " est déjà rattachée à ce site.", code: 1 });
+        }
+        if (error.code === "23503") {
+            return res.status(400).json({ success: false, message: "Commune " + insee + " inconnue de la table des communes (terr.ign_commune).", code: 1 });
+        }
+        console.error("Erreur lors du rattachement de la commune " + insee + " au site " + uuidSite + " :", error);
+        return res.status(500).json({ success: false, message: "Erreur lors du rattachement de la commune.", code: 1 });
+    }
+});
+
+// Rattacher un conservateur bénévole (contact de l'annuaire) à un site
+// Corps : { "uuid_ann": "…" }. Le contact reçoit au passage l'étiquette CB (Conservateur bénévole).
+router.post("/conservateur/uuid_site=:uuid_site", authenticateToken, async (req, res) => {
+    const uuidSite = req.params.uuid_site;
+    const uuidAnn = String(req.body?.uuid_ann ?? "").trim();
+
+    if (!uuidAnn) {
+        return res.status(400).json({ success: false, message: "Aucun contact (uuid_ann) fourni.", code: 1 });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+        const result = await client.query(
+            "INSERT INTO sitcenca.conservateurs (societe, site) VALUES ($1, $2) RETURNING societe AS uuid_ann, site AS uuid_site",
+            [uuidAnn, uuidSite]
+        );
+        await client.query(
+            "INSERT INTO ann.etiquettes (annuaire, typ_etiquette) VALUES ($1, 'CB') ON CONFLICT DO NOTHING",
+            [uuidAnn]
+        );
+        await client.query("COMMIT");
+        return res.status(201).json({
+            success: true,
+            code: 0,
+            message: "Conservateur rattaché au site.",
+            data: result.rows[0],
+        });
+    } catch (error) {
+        try {
+            await client.query("ROLLBACK");
+        } catch (rollbackError) {
+            console.error("Erreur rollback rattachement conservateur :", rollbackError);
+        }
+        if (error.code === "23505") {
+            return res.status(409).json({ success: false, message: "Ce conservateur est déjà rattaché à ce site.", code: 1 });
+        }
+        if (error.code === "23503") {
+            const message = error.constraint === "site_fk" ? "Site introuvable." : "Contact introuvable dans l'annuaire.";
+            return res.status(404).json({ success: false, message, code: 1 });
+        }
+        console.error("Erreur lors du rattachement du conservateur " + uuidAnn + " au site " + uuidSite + " :", error);
+        return res.status(500).json({ success: false, message: "Erreur lors du rattachement du conservateur.", code: 1 });
+    } finally {
+        client.release();
     }
 });
 

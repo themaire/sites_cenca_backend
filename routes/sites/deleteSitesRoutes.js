@@ -16,6 +16,7 @@ router.use((req, res, next) => {
 });
 
 const { handleDelete } = require('../../fonctions/routeHandlers.js');
+const { authenticateToken } = require("../../fonctions/fonctionsAuth.js");
 
 
 // Fonctions et connexion à PostgreSQL
@@ -332,6 +333,238 @@ router.delete("/delete/docplan_unites_gestion/uuid_ug=:uuid_ug", (req, res) => {
             }
         }
     );
+});
+
+// Données rattachées à un site (ou à son espace) qui empêchent sa suppression.
+// On ne supprime que les sites "vides" (ex. créés par erreur) : si une de ces tables
+// contient des lignes, la route répond 409 avec la liste, sans rien supprimer.
+// ref = "site" → comparé à uuid_site, ref = "espace" → comparé à uuid_espace.
+// sql (optionnel) → sous-requête de comptage complète quand le lien n'est pas une simple colonne
+// ($1 = uuid_site, $2 = uuid_espace).
+const SITE_DELETE_BLOCKERS = [
+    { table: "opegerer.projets", colonne: "site", ref: "site", libelle: "projets (et leurs opérations)" },
+    {
+        // Projets "autres" : rattachés à l'espace via la localisation de leurs opérations
+        // (opeautres.localisations.cd_localisation = uuid_espace, cf. vue ope.listeprojets)
+        table: "opeautres.projets",
+        libelle: "projets autres (et leurs opérations)",
+        sql: `SELECT count(DISTINCT ope.projet)
+                FROM opeautres.localisations loc
+                JOIN opeautres.operations ope ON ope.uuid_ope::text = loc.uuid_ope::text
+               WHERE loc.cd_localisation::text = $2`,
+    },
+    { table: "opegerer.historiques", colonne: "site", ref: "site", libelle: "historiques d'opérations" },
+    { table: "sitcenca.actes_mfu", colonne: "site", ref: "site", libelle: "actes MFU" },
+    { table: "sitcenca.actes_mfu_multi", colonne: "ref_uuid_site", ref: "site", libelle: "rattachements à des actes MFU multi-sites" },
+    { table: "sitcenca.conservateurs", colonne: "site", ref: "site", libelle: "conservateurs" },
+    { table: "sitcenca.agriculteurs_contrats", colonne: "site", ref: "site", libelle: "contrats agriculteurs" },
+    { table: "docplan.documents", colonne: "site", ref: "site", libelle: "documents de planification" },
+    { table: "docplan.sites_ecg", colonne: "site", ref: "site", libelle: "entités cohérentes de gestion" },
+    { table: "librevo.entites", colonne: "site", ref: "site", libelle: "entités libre évolution" },
+    { table: "mescomp.sites_mc", colonne: "site", ref: "site", libelle: "mesures compensatoires" },
+    { table: "librevo.localisation", colonne: "espace", ref: "espace", libelle: "localisations libre évolution" },
+    { table: "n2000.ao_espaces", colonne: "espace", ref: "espace", libelle: "Natura 2000 : AO espaces" },
+    { table: "n2000.contrats", colonne: "espace", ref: "espace", libelle: "Natura 2000 : contrats" },
+    { table: "n2000.docob", colonne: "espace", ref: "espace", libelle: "Natura 2000 : DOCOB" },
+];
+
+// Compte les données rattachées qui empêchent la suppression du site.
+// db = pool ou client de transaction. Renvoie [{ table, libelle, nombre }] (vide si supprimable).
+async function getSiteDeleteDependances(db, uuidSite, uuidEspace) {
+    const countSql = SITE_DELETE_BLOCKERS.map(
+        (b, i) =>
+            b.sql
+                ? `(${b.sql}) AS c${i}`
+                : `(SELECT count(*) FROM ${b.table} WHERE ${b.colonne}::text = $${b.ref === "site" ? 1 : 2}) AS c${i}`
+    ).join(", ");
+    const counts = (await db.query("SELECT " + countSql, [uuidSite, uuidEspace])).rows[0];
+    return SITE_DELETE_BLOCKERS.map((b, i) => ({
+        table: b.table,
+        libelle: b.libelle,
+        nombre: parseInt(counts["c" + i], 10),
+    })).filter((d) => d.nombre > 0);
+}
+
+// Contenu propre à l'espace, qui partirait en cascade avec lui (informatif, non bloquant).
+async function getSiteCascadeContent(db, uuidEspace) {
+    const result = await db.query(
+        `SELECT
+            (SELECT count(*) FROM esp.geometries WHERE espace = $1) AS geometries,
+            (SELECT count(*) FROM esp.milieux_naturels WHERE espace = $1) AS milieux_naturels,
+            (SELECT count(*) FROM esp.amenagements WHERE espace = $1) AS amenagements,
+            (SELECT coalesce(json_agg(json_build_object('insee', loca.commune, 'nom', com.nom) ORDER BY com.nom), '[]'::json)
+               FROM esp.localisations loca
+               LEFT JOIN terr.listecommunes com ON loca.commune = com.insee_com
+              WHERE loca.espace = $1) AS communes`,
+        [uuidEspace]
+    );
+    const row = result.rows[0];
+    return {
+        geometries: parseInt(row.geometries, 10),
+        milieux_naturels: parseInt(row.milieux_naturels, 10),
+        amenagements: parseInt(row.amenagements, 10),
+        communes: row.communes,
+    };
+}
+
+// Éclaireur : le site est-il supprimable ? (aucune suppression, lecture seule)
+// → { supprimable, site: { uuid_site, uuid_espace, code, nom }, dependances: [...], supprime_avec_le_site: {...} }
+router.get("/delete/site/uuid_site=:uuid", authenticateToken, async (req, res) => {
+    const uuidSite = req.params.uuid;
+    try {
+        const siteResult = await pool.query(
+            `SELECT site.uuid_site, site.espace, site.code, espa.nom
+               FROM sitcenca.sites site
+               LEFT JOIN esp.espaces espa ON espa.uuid_espace = site.espace
+              WHERE site.uuid_site = $1`,
+            [uuidSite]
+        );
+        if (!siteResult.rowCount) {
+            return res.status(404).json({ success: false, message: "Site introuvable.", code: 1 });
+        }
+        const { espace: uuidEspace, code, nom } = siteResult.rows[0];
+
+        const dependances = await getSiteDeleteDependances(pool, uuidSite, uuidEspace);
+        const supprimeAvecLeSite = await getSiteCascadeContent(pool, uuidEspace);
+
+        return res.status(200).json({
+            success: true,
+            code: 0,
+            data: {
+                supprimable: dependances.length === 0,
+                site: { uuid_site: uuidSite, uuid_espace: uuidEspace, code, nom },
+                dependances,
+                supprime_avec_le_site: supprimeAvecLeSite,
+            },
+        });
+    } catch (error) {
+        console.error("Erreur lors de la vérification de suppression du site " + uuidSite + " :", error);
+        return res.status(500).json({ success: false, message: "Erreur lors de la vérification du site.", code: 1 });
+    }
+});
+
+// Supprimer un site ET son espace (symétrique de la création /put/table=espace_site/insert).
+// La suppression de esp.espaces entraîne en cascade : sitcenca.sites, esp.geometries,
+// esp.centroides, esp.localisations (communes), esp.milieux_naturels, esp.amenagements.
+router.delete("/delete/site/uuid_site=:uuid", authenticateToken, async (req, res) => {
+    const uuidSite = req.params.uuid;
+
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+
+        // Verrouille la ligne du site le temps de la vérification et de la suppression
+        const siteResult = await client.query(
+            "SELECT uuid_site, espace, code FROM sitcenca.sites WHERE uuid_site = $1 FOR UPDATE",
+            [uuidSite]
+        );
+        if (!siteResult.rowCount) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ success: false, message: "Site introuvable.", code: 1 });
+        }
+        const { espace: uuidEspace, code } = siteResult.rows[0];
+
+        // Comptage des données rattachées (même vérification que la route éclaireur GET)
+        const dependances = await getSiteDeleteDependances(client, uuidSite, uuidEspace);
+
+        if (dependances.length) {
+            await client.query("ROLLBACK");
+            return res.status(409).json({
+                success: false,
+                code: 1,
+                message:
+                    "Suppression impossible : le site " + code + " a des données rattachées (" +
+                    dependances.map((d) => d.nombre + " " + d.libelle).join(", ") + ").",
+                data: { dependances },
+            });
+        }
+
+        await client.query("DELETE FROM sitcenca.sites WHERE uuid_site = $1", [uuidSite]);
+        if (uuidEspace) {
+            // Historique technique des ajouts de géométrie (rempli par le trigger tg_fill_histo_geom) :
+            // sa clé étrangère sans cascade bloquerait la suppression des géométries de l'espace.
+            await client.query(
+                `DELETE FROM esp.histo_add_geometrie
+                 WHERE geom_id IN (SELECT geom_id FROM esp.geometries WHERE espace = $1)`,
+                [uuidEspace]
+            );
+            await client.query("DELETE FROM esp.espaces WHERE uuid_espace = $1", [uuidEspace]);
+        }
+
+        await client.query("COMMIT");
+
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        return res.status(200).json({
+            success: true,
+            code: 0,
+            message: "Site " + code + " supprimé.",
+            data: { uuid_site: uuidSite, uuid_espace: uuidEspace },
+        });
+    } catch (error) {
+        try {
+            await client.query("ROLLBACK");
+        } catch (rollbackError) {
+            console.error("Erreur rollback suppression site :", rollbackError);
+        }
+        console.error("Erreur lors de la suppression du site " + uuidSite + " :", error);
+        return res.status(500).json({ success: false, message: "Erreur lors de la suppression du site.", code: 1 });
+    } finally {
+        client.release();
+    }
+});
+
+// Retirer une commune rattachée à un site (via son espace : esp.localisations)
+router.delete("/commune/uuid_site=:uuid_site/insee=:insee", authenticateToken, async (req, res) => {
+    const { uuid_site: uuidSite, insee } = req.params;
+
+    if (!/^\d[\dAB]\d{3}$/.test(insee)) {
+        return res.status(400).json({ success: false, message: "Code INSEE invalide : " + insee + ".", code: 1 });
+    }
+
+    try {
+        const result = await pool.query(
+            `DELETE FROM esp.localisations l
+             USING sitcenca.sites s
+             WHERE s.uuid_site = $1 AND l.espace = s.espace AND l.commune = $2
+             RETURNING l.commune`,
+            [uuidSite, insee]
+        );
+        if (!result.rowCount) {
+            return res.status(404).json({ success: false, message: "La commune " + insee + " n'est pas rattachée à ce site.", code: 1 });
+        }
+        return res.status(200).json({
+            success: true,
+            code: 0,
+            message: "Commune " + insee + " retirée du site.",
+            data: result.rows[0],
+        });
+    } catch (error) {
+        console.error("Erreur lors du retrait de la commune " + insee + " du site " + uuidSite + " :", error);
+        return res.status(500).json({ success: false, message: "Erreur lors du retrait de la commune.", code: 1 });
+    }
+});
+
+// Détacher un conservateur d'un site (le contact et son étiquette CB restent dans l'annuaire)
+router.delete("/conservateur/uuid_site=:uuid_site/uuid_ann=:uuid_ann", authenticateToken, async (req, res) => {
+    const { uuid_site: uuidSite, uuid_ann: uuidAnn } = req.params;
+    try {
+        const result = await pool.query(
+            "DELETE FROM sitcenca.conservateurs WHERE site = $1 AND societe = $2 RETURNING societe AS uuid_ann",
+            [uuidSite, uuidAnn]
+        );
+        if (!result.rowCount) {
+            return res.status(404).json({ success: false, message: "Ce conservateur n'est pas rattaché à ce site.", code: 1 });
+        }
+        return res.status(200).json({
+            success: true,
+            code: 0,
+            message: "Conservateur détaché du site.",
+            data: result.rows[0],
+        });
+    } catch (error) {
+        console.error("Erreur lors du retrait du conservateur " + uuidAnn + " du site " + uuidSite + " :", error);
+        return res.status(500).json({ success: false, message: "Erreur lors du retrait du conservateur.", code: 1 });
+    }
 });
 
 // La route est maintenant gérée par handleDelete dans fonctions/routeHandlers.js
