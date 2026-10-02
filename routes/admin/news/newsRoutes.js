@@ -82,7 +82,9 @@ router.post("/post/news/create", authenticateToken, (req, res) => {
 // Modifier une news
 router.put("/put/news/update/:id", authenticateToken, (req, res) => {
     const ID = req.params.id;
-    const UPDATE_DATA = { ...req.body, date_modification: new Date() };
+    // Les champs calculés (réactions, commentaires, lecture) ne sont pas des colonnes de gestint.news
+    const { reactions, nb_commentaires, lu, ...champs } = req.body;
+    const UPDATE_DATA = { ...champs, date_modification: new Date() };
 
     try {
         const queryObject = generateUpdateQuery("gestint.news", ID, UPDATE_DATA);
