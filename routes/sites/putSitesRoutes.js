@@ -19,6 +19,7 @@ const pool = require("../../dbPool/poolConnect.js");
 // Generateur de requetes SQL
 const { generateUpdateQuery, generateInsertQuery, generateCloneQuery, getTableColums, generateCloneCheckboxQuery } = require('../../fonctions/querys.js');
 const { authenticateToken } = require("../../fonctions/fonctionsAuth.js");
+const { construireNomDocument } = require("../../fonctions/fonctionsFichiers.js");
 
 // Code INSEE d'une commune : 5 caractères, 2A/2B pour la Corse
 const INSEE_REGEX = /^\d[\dAB]\d{3}$/;
@@ -70,11 +71,17 @@ const CACHE_DIR = path.resolve(FILES_DIR, "cache");
 console.log("Dossier cache:", CACHE_DIR);
 
 let uploadFolders = {};
+let uploadLibnoms = {}; // lib_field -> libnom_id (type de l'objet parent : pmfu, travaux...)
 
 async function loadUploadFolders() {
     const rows = await ExecuteQuerySitePromise(pool, {
-        query: "SELECT lib_path, lib_field FROM files.libelles",
+        query: "SELECT lib_path, lib_field, libnom_id FROM files.libelles",
     });
+
+    uploadLibnoms = rows.rows.reduce((acc, row) => {
+        acc[row.lib_field] = row.libnom_id;
+        return acc;
+    }, {});
 
     uploadFolders = rows.rows.reduce((acc, row) => {
         acc[row.lib_field] = row.lib_path;
@@ -141,14 +148,23 @@ const storagePmfu = multer.diskStorage({
 
         cb(null, folder);
     },
+    // Nom selon le type de document (voir construireNomDocument) : ex. 26-10-08_10072_IMG-1234.jpg
+    // ref_id doit précéder les fichiers dans le FormData pour être déjà lu ici.
     filename: (req, file, cb) => {
         const refId = req.body.ref_id;
-        const now = new Date();
-        const date = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${now.getMilliseconds()}`;
-        // const extension = path.extname(file.originalname).toLowerCase();
+        if (!refId) {
+            return cb(new Error("ref_id manquant (il doit précéder les fichiers dans le formulaire)"));
+        }
+        const dossier = path.join(FILES_DIR, uploadFolders[file.fieldname] || "autres");
 
-        const filename = `doc_${refId}_${date}_${file.originalname}`;
-        cb(null, filename);
+        construireNomDocument({
+            libnomId: uploadLibnoms[file.fieldname],
+            refId,
+            originalname: file.originalname,
+            dossier,
+        })
+            .then((nom) => cb(null, nom))
+            .catch(cb);
     },
 });
 
@@ -1670,6 +1686,7 @@ router.put("/put/table=docs", async (req, res) => {
     try {
         // Charger les champs Multer dynamiques depuis la DB
         await loadMulterFieldsConfig();
+        await loadUploadFolders(); // dossiers et types (libnom_id) utilisés pour nommer les fichiers
         const multerMiddlewareDoc = createMulterMiddlewareDoc();
 
         // Exécuter le middleware Multer
