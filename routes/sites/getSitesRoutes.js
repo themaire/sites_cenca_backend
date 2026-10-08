@@ -1102,15 +1102,48 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         "priorite",
         "status",
         "prochaine_etape",
+        "territoire",
     ];
+
+    // Sécurité (injection SQL) : `list` est concaténé dans le FROM, il doit donc être
+    // une des tables connues de cette route. Ajouter ici toute nouvelle table de liste de choix.
+    const allowedLists = [
+        ...simpleTables,
+        "docplan.typ_documents",
+        "sitcenca.typ_proprietaires",
+        "ope.actions",
+        "ope.financeurs",
+        "ope.typ_interventions",
+        "opegerer.typ_amenagements",
+        "typ_travauxsol",
+        "opegerer.typ_troupeaux",
+        "ope.listprogrammes",
+        "opegerer.libelles",
+        "sitcenca.libelles",
+        "files.libelles",
+        "admin.salaries",
+        "terr.bassins_agences",
+        "esp.typ_rgpt",
+        "sitcenca.typ_ouvertures",
+    ];
+    if (!allowedLists.includes(list)) {
+        return res.status(400).json({ success: false, message: "Liste de choix inconnue : " + list });
+    }
+    // files.libelles attend un identifiant numérique en option
+    if (list == "files.libelles" && option !== undefined && !/^\d+$/.test(option)) {
+        return res.status(400).json({ success: false, message: "Option invalide pour files.libelles : " + option });
+    }
+    const values = []; // Paramètres de la requête ($1, ...) : jamais de valeur utilisateur dans le texte SQL
 
     // Tables avec des noms de champs non normalisées
     if (list == "docplan.typ_documents") {
         SelectFields += "cd_type, libelle ";
         where = "order by libelle;";
+
     } else if (list == "sitcenca.typ_proprietaires") {
         SelectFields += "cd_type, libelle ";
         where = "order by cd_type;";
+        
     } else if (simpleTables.includes(list)) {
         SelectFields += "cd_type, libelle ";
 
@@ -1213,10 +1246,11 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
                 libnom_nom = option || base;
             }
 
-            // Construire la clause WHERE en utilisant `libnom_nom`
+            // Construire la clause WHERE en utilisant `libnom_nom` (passé en paramètre $1)
+            values.push(libnom_nom);
             where = "";
             where +=
-                "where libnom_id = (SELECT libnom_id FROM " + list + "_nom" + " where libnom_nom = '" + libnom_nom + "')";
+                "where libnom_id = (SELECT libnom_id FROM " + list + "_nom" + " where libnom_nom = $1)";
 
             const mapKey = modifier || base;
             if (optionLibIdMap[mapKey]) {
@@ -1225,8 +1259,9 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
 
             where += " order by lib_ordre;";
 
-        } else if (list == "files.libelles") {
-            where = "where libnom_id =" + option + " order by lib_ordre;";
+        } else if (list == "files.libelles" && option !== undefined) {
+            values.push(option);
+            where = "where libnom_id = $1 order by lib_ordre;";
 
         } else if (list == "admin.salaries" && option == undefined) {
             where = "where statut is true order by prenom;";
@@ -1264,7 +1299,12 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
 
     const queryObject = {
         text: joinQuery(SelectFields, FromTable, where),
+        values,
     };
+
+    // Les listes de choix évoluent (ajout d'une valeur en base) : le navigateur ne doit pas
+    // garder la réponse en cache, sinon la nouvelle valeur n'apparaît qu'après un Ctrl + Maj + R.
+    res.setHeader("Cache-Control", "no-store");
 
     ExecuteQuerySite(
         pool,
