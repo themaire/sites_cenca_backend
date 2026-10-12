@@ -10,10 +10,14 @@ const {
     ExecuteQuerySite,
     ExecuteQuerySitePromise,
     updateEspaceSite,
-    convertToWKT,
-    detectShapefileGeometryType,
-    extractZipFile,
 } = require("../../fonctions/fonctionsSites.js");
+const {
+    ImportGeometrieError,
+    extraireShapefile,
+    lireGeometriesShapefile,
+    detecterSridPrj,
+    insererLocalisation,
+} = require("../../fonctions/importGeometries.js");
 const pool = require("../../dbPool/poolConnect.js");
 
 // Generateur de requetes SQL
@@ -49,10 +53,8 @@ function sanitizePmfuArrayColumns(data) {
 }
 
 const multer = require("multer");
-const shapefile = require("shapefile");
 const fs = require("fs");
 const path = require("path");
-const unzipper = require("unzipper");
 // const { exit } = require("process");
 // const { get } = require("http");
 // Obtenir le dossier racine du projet
@@ -205,51 +207,42 @@ const fileFilter = (req, file, cb) => {
         cb(new Error("Format de fichier non supporté."));
     }
 };
-// Configuration de multer pour gérer l'upload de fichiers
-// Configuration Multer modifiée pour les shapefiles zippés
-const multerMiddlewareZip = multer({
-    dest: "uploads/",
-    fileFilter: (req, file, cb) => {
-        if (
-            file.mimetype === "application/zip" ||
-            file.originalname.endsWith(".zip")
-        ) {
-            cb(null, true);
-        } else {
-            cb(
-                new Error(
-                    "Format de fichier non supporté. Seuls les .zip sont acceptés."
-                )
-            );
-        }
-    },
-}).fields([
-    { name: "file", maxCount: 1 },
-    { name: "type_geometry", maxCount: 1 },
-]);
+// Configuration Multer pour les fichiers géographiques (shapefile zippé ou GeoJSON)
+const TAILLE_MAX_FICHIER_GEO = 50 * 1024 * 1024; // 50 Mo
 
-// Configuration Multer pour les fichiers GeoJSON
-const multerMiddlewareGeoJSON = multer({
-    dest: "uploads/",
-    fileFilter: (req, file, cb) => {
-        if (
-            file.mimetype === "application/json" ||
-            file.mimetype === "application/geo+json" ||
-            file.originalname.endsWith(".geojson") ||
-            file.originalname.endsWith(".json")
-        ) {
-            cb(null, true);
-        } else {
-            cb(
-                new Error(
-                    "Format de fichier non supporté. Seuls les .geojson et .json sont acceptés."
-                )
-            );
-        }
-    },
-}).fields([
-    { name: "file", maxCount: 1 },
-]);
+function multerFichierGeo(extensions, libelle) {
+    return multer({
+        dest: "uploads/",
+        limits: { fileSize: TAILLE_MAX_FICHIER_GEO, files: 1 },
+        fileFilter: (req, file, cb) => {
+            const ext = path.extname(file.originalname).toLowerCase();
+            if (extensions.includes(ext)) {
+                cb(null, true);
+            } else {
+                cb(new ImportGeometrieError(`Format de fichier non supporté. Seuls les ${libelle} sont acceptés.`));
+            }
+        },
+    }).single("file");
+}
+
+/**
+ * Enveloppe un middleware multer pour renvoyer ses erreurs (format, taille) en JSON 400
+ * au lieu de la page d'erreur HTML d'Express.
+ */
+function avecMulter(middleware) {
+    return (req, res, next) => {
+        middleware(req, res, (err) => {
+            if (!err) return next();
+            const message = err.code === "LIMIT_FILE_SIZE"
+                ? `Fichier trop volumineux (${TAILLE_MAX_FICHIER_GEO / 1024 / 1024} Mo maximum).`
+                : err.message;
+            res.status(400).json({ success: false, message });
+        });
+    };
+}
+
+const multerMiddlewareZip = avecMulter(multerFichierGeo([".zip"], ".zip"));
+const multerMiddlewareGeoJSON = avecMulter(multerFichierGeo([".geojson", ".json"], ".geojson et .json"));
 
 /**
  * Middleware Multer pour l'upload de documents
@@ -263,60 +256,6 @@ function createMulterMiddlewareDoc() {
 }
 
 let multerMiddlewareDoc = createMulterMiddlewareDoc();
-
-/**
- * Fonction commune pour insérer une géométrie dans la base de données
- * @param {Object} wktData - Données WKT {type, EWKT}
- * @param {string} uuid_ope - UUID de l'opération
- * @param {Object} properties - Propriétés additionnelles de la géométrie
- * @returns {Promise<Object>} - Résultat de l'insertion
- */
-async function insertGeometryToDB(wktData, uuid_ope, properties = {}) {
-    // Détermination de la colonne de géométrie
-    let geomColumn = "";
-    if (wktData.type.trim().endsWith("POLYGON")) {
-        geomColumn = "loc_poly";
-    } else if (wktData.type === "POINT") {
-        geomColumn = "loc_point";
-    } else if (wktData.type === "LINESTRING") {
-        geomColumn = "loc_line";
-    } else {
-        throw new Error(`Type de géométrie non supporté: ${wktData.type}`);
-    }
-
-    console.log(`Type de géométrie:`, wktData.type);
-    console.log(`Colonne cible:`, geomColumn);
-    console.log(`WKT:`, wktData.EWKT);
-
-    // Créer l'objet de requête
-    const queryObject = {
-        text: `INSERT INTO opegerer.localisations (${geomColumn}, ref_uuid_ope) VALUES (ST_GeomFromEWKT($1), $2);`,
-        values: [wktData.EWKT, uuid_ope],
-    };
-
-    // Exécuter la requête
-    return new Promise((resolve, reject) => {
-        ExecuteQuerySite(
-            pool,
-            {
-                query: queryObject,
-                message: `insert ${wktData.type} to opegerer.localisations`,
-            },
-            "insert",
-            (resultats, message) => {
-                if (message === "ok") {
-                    resolve({
-                        success: true,
-                        type: wktData.type,
-                        data: resultats,
-                    });
-                } else {
-                    reject(new Error(message));
-                }
-            }
-        );
-    });
-}
 
 // Mettre à jour un site, un acte, un projet, une operation ...
 router.put("/put/table=:table/uuid=:uuid", (req, res) => {
@@ -1228,455 +1167,127 @@ router.put("/put/projet_complet/clone", async (req, res) => {
     }
 });
 
-// Nouvelle route pour gérer l'upload du fichier shapefile avec des données supplémentaires
+/**
+ * Vérifie la présence du fichier et de l'uuid de l'opération,
+ * commun aux routes d'import de géométrie.
+ */
+function verifierRequeteImportGeo(req, res, next) {
+    if (!req.file) {
+        return res.status(400).json({ success: false, message: "Aucun fichier n'a été envoyé" });
+    }
+    if (typeof req.body.uuid_ope !== "string" || req.body.uuid_ope.trim() === "") {
+        fs.promises.rm(req.file.path, { force: true }).catch(() => {});
+        return res.status(400).json({ success: false, message: "UUID de l'opération manquant (uuid_ope requis)" });
+    }
+    next();
+}
+
+/** Réponse commune aux routes d'import de géométrie */
+function repondreImportGeo(res, resultat) {
+    const mesure = resultat.surface_m2 !== null
+        ? ` (${(resultat.surface_m2 / 10000).toFixed(2)} ha)`
+        : resultat.longueur_m !== null ? ` (${Math.round(resultat.longueur_m)} m)` : "";
+    res.status(200).json({
+        success: true,
+        message: `${resultat.nb_entites} entité(s) de type ${resultat.type} importée(s)${mesure}.`,
+        data: resultat,
+    });
+}
+
+function repondreErreurImportGeo(res, error) {
+    console.error("Erreur import géométrie :", error);
+    const status = error instanceof ImportGeometrieError ? error.status : 500;
+    res.status(status).json({
+        success: false,
+        message: status === 500 ? "Erreur serveur lors de l'import de la géométrie." : error.message,
+    });
+}
+
+// Import d'une emprise d'opération depuis un shapefile zippé.
+// Le type de géométrie et la projection (.prj) sont lus dans le fichier ;
+// le champ type_geometry envoyé par le front n'est plus utilisé.
 router.post(
-    //// Paramètres
-    // 1 - La route
     "/put/ope_shapefile",
-
-    // 2 - Multer
+    authenticateToken,
     multerMiddlewareZip,
-
-    // 3  - Middleware de validation
-    // pour vérifier si le type de géométrie est présent
-    // Sinon, renvoyer une erreur 400 et on ne fait pas la suite (le next() n'est pas appelé)
-    (req, res, next) => {
-        console.log("");
-        console.log("Requête reçue pour le traitement d'un shapefile");
-        // console.log('Headers:', req.headers);
-        // console.log('Content-Type:', req.headers['content-type']);
-        console.log("Body raw:", req.body);
-        console.log("Files:", req.files);
-        // console.log('Fields:', req.fields);()
-
-        // Bien vérifier si le type de géométrie est présent
-        // if (!req.body.type_geometry && !req.fields?.type_geometry) {
-        //     return res.status(400).json({
-        //         success: false,
-        //         message: "Le type de géométrie est requis"
-        //     });
-        // }
-        // Vérification si le fichier est présent
-        if (!req.files?.file?.[0]) {
-            return res.status(400).json({
-                success: false,
-                message: "Aucun fichier n'a été envoyé",
-            });
-        }
-        next();
-    },
-
-    // Handler principal
+    verifierRequeteImportGeo,
     async (req, res) => {
+        const zipPath = req.file.path;
+        let dossierTravail = null;
+
         try {
-            // Variables envoyées par le client
-            // Fichier reçu
-            const filePath = req.files.file[0].path; // Chemin du fichier reçu sur le serveur (a effacer apres décompression)
-            const originalname = req.files.file[0].originalname; // Nom du fichier reçu
-            const fileName = originalname.split(".").slice(0, -1).join("."); // Nom du fichier reçu avec l'extension
+            console.log(`Import shapefile « ${req.file.originalname} » pour l'opération ${req.body.uuid_ope}`);
 
-            const uploadPath = path.join(__dirname, "../../uploads");
-            const extractPath = path.join(uploadPath, "extracted"); // Où les zip sont mis les zip extraits
-            // const extractedFolder = path.join(extractPath, fileName); // Chemin du zip extrait
+            // Un dossier par requête : deux imports simultanés ne se marchent plus dessus
+            const racineExtraction = path.join(__dirname, "../../uploads/extracted");
+            await fs.promises.mkdir(racineExtraction, { recursive: true });
+            dossierTravail = await fs.promises.mkdtemp(path.join(racineExtraction, "shp-"));
 
-            if (!fs.existsSync(uploadPath)) {
-                fs.mkdirSync(uploadPath, { recursive: true });
-            }
-            if (!fs.existsSync(extractPath)) {
-                fs.mkdirSync(extractPath, { recursive: true });
+            const { shp, prj } = await extraireShapefile(zipPath, dossierTravail);
+            const contenuPrj = prj ? await fs.promises.readFile(prj, "utf8") : null;
+            const srid = detecterSridPrj(contenuPrj);
+            if (contenuPrj && !srid) {
+                console.warn("Projection .prj non reconnue, déduite des coordonnées :", contenuPrj.slice(0, 200));
             }
 
-            let workingPath = "";
-            let zippedFolder = "";
-
-            // Infos envoyées par le client
-            let typeGeometry =
-                req.body.type_geometry || req.fields.type_geometry;
-            const uuid_ope = req.body.uuid_ope || req.fields.uuid_ope;
-
-            // Debug
-            console.log(
-                "Chemin du fichier reçu par le client : " +
-                filePath +
-                ". De type : " +
-                req.files.file[0].mimetype
-            );
-            console.log("Vrai nom du fichier reçu : ", originalname);
-            console.log(
-                "Vrai nom du fichier reçu (sans l'extension) : ",
-                fileName
-            );
-            console.log("Type de géométrie déclaré : ", typeGeometry);
-            console.log("Où les zip sont mis les zip extraits : ", extractPath);
-            // console.log('Chemin du zip extrait : ', extractedFolder);
-            console.log("");
-
-            // Utiliser await pour récupérer la valeur retournée par la fonction extractZipFile
-            zippedFolder = await extractZipFile(filePath, extractPath);
-            console.log("Fichier zip extrait avec succès");
-
-            if (zippedFolder != "") {
-                // Si la personne a zippé un dossier
-                workingPath = path.join(extractPath, zippedFolder);
-            } else if (zippedFolder == "") {
-                // Si la personne a zippé les fichiers du shapefile directement
-                workingPath = extractPath;
-            }
-            console.log("Chemin d'extraction : ", workingPath);
-
-            // Supprimer le répertoire de destination s'il existe et n'est pas vide
-            // const destPath = '/home/nico/Documents/sites_cenca/node_pgsql/uploads/extracted/shapefile';
-            // if (fs.existsSync(destPath)) {
-            //     await fs.promises.rm(destPath, { recursive: true, force: true });
-            // }
-
-            // Renommer
-            const files = await fs.promises.readdir(workingPath); // Obtenir la liste des fichiers extraits
-            console.log("Fichiers extraits:", files);
-            for (const file of files) {
-                const extension = path.extname(file);
-                const oldPath = path.join(workingPath, file);
-                const newPath = path.join(workingPath, `shapefile${extension}`);
-
-                await fs.promises.rename(oldPath, newPath);
-                console.log(
-                    `Fichier renommé: ${file} -> shapefile${extension}`
-                );
-            }
-
-            // exit(0);
-            // await fs.promises.rm(workingPath, { recursive: true });
-
-            // Lire le fichier shapefile
-            const shpFile = path.join(workingPath, "shapefile.shp");
-            const dbfFile = path.join(workingPath, "shapefile.dbf");
-
-            // Test de la nature du shapefile
-            typeGeometry = await detectShapefileGeometryType(shpFile, dbfFile);
-            console.log("Type de géométrie détecté :", typeGeometry);
-
-            // Lecture et test d'ouverture puis du contenu du shapefile
-            let features = [];
-            await shapefile
-                .open(shpFile, dbfFile)
-                .then((source) =>
-                    source.read().then(function log(result) {
-                        if (result.done) {
-                            // Présence d'une couche de polygone(s) dans le shapefile
-                            if (
-                                typeof typeGeometry === "string" &&
-                                typeGeometry.trim().endsWith("POLYGON") &&
-                                features.length > 1
-                            ) {
-                                throw new Error(
-                                    `Plus d'une géométrie dans le fichier shapefile (${features.length} trouvées au lieu de 1 maximum).`
-                                );
-                            }
-                            return;
-                        }
-                        features.push(result.value);
-                        return source.read().then(log);
-                    })
-                )
-                .catch((error) => {
-                    // Log détaillé de l'erreur en cas de dépassement de 1 géométrie
-                    throw new Error(error.message);
-                });
-
-            if (features.length === 0) {
-                throw new Error(
-                    "Aucune géométrie trouvée dans le fichier shapefile"
-                );
-            }
-
-            let insertResults = [];
-            let insertErrors = [];
-
-            // Insérer les géométries dans la base de données
-            for (let i = 0; i < features.length; i++) {
-                try {
-                    // Convertir les coordonnées en WKT
-                    const WKTData = convertToWKT(
-                        features[i].geometry.coordinates,
-                        typeGeometry
-                    );
-
-                    console.log(`\n=== Traitement géométrie [${i}] ===`);
-
-                    // Utiliser la fonction commune d'insertion
-                    const result = await insertGeometryToDB(
-                        WKTData,
-                        uuid_ope,
-                        features[i].properties
-                    );
-
-                    insertResults.push(result);
-                } catch (e) {
-                    console.error(`Erreur insertion géométrie [${i}]:`, e.message);
-                    insertErrors.push({ success: false, message: e.message });
-                }
-            }
-
-            // Après la boucle, une seule réponse HTTP
-            if (insertErrors.length === 0) {
-                res.status(200).json({
-                    success: true,
-                    message: `${insertResults.length} géométrie(s) importée(s) avec succès.`,
-                    data: insertResults,
-                });
-            } else {
-                res.status(500).json({
-                    success: false,
-                    message: "Erreur(s) lors de l'import.",
-                    errors: insertErrors,
-                });
-            }
+            const geometries = await lireGeometriesShapefile(shp);
+            const resultat = await insererLocalisation(pool, geometries, req.body.uuid_ope.trim(), srid);
+            console.log("Import shapefile réussi :", resultat);
+            repondreImportGeo(res, resultat);
         } catch (error) {
-            // Log détaillé de l'erreur
-            console.error("Erreur détaillée:", error);
-
-            // Réponse appropriée selon le type d'erreur
-            res.status(error.message.includes("géométrie") ? 400 : 500).json({
-                success: false,
-                message: error.message,
-            });
+            repondreErreurImportGeo(res, error);
         } finally {
-            // Nettoyage des fichiers temporaires
-            // if (filePath) {
-            //     await fs.promises.rm(workingPath, { force: true });
-            // }
-
-            const cleanUpFolder = path.join(__dirname, "../../uploads/extracted");
-            try {
-                const things = await fs.promises.readdir(cleanUpFolder);
-                for (const thing of things) {
-                    await fs.promises.rm(path.join(cleanUpFolder, thing), {
-                        recursive: true,
-                        force: true,
-                    });
-                }
-            } catch (cleanupError) {
-                console.error(
-                    "Erreur lors du nettoyage des fichiers temporaires:",
-                    cleanupError
-                );
+            await fs.promises.rm(zipPath, { force: true }).catch(() => {});
+            if (dossierTravail) {
+                await fs.promises.rm(dossierTravail, { recursive: true, force: true }).catch(() => {});
             }
         }
     }
 );
 
-// Nouvelle route pour gérer l'upload du fichier GeoJSON
+// Import d'une emprise d'opération depuis un fichier GeoJSON.
+// Projection lue dans le membre "crs" ; à défaut WGS84 (norme GeoJSON) ou Lambert 93 selon les coordonnées.
 router.post(
     "/put/ope_geojson",
-
-    // Multer pour fichiers GeoJSON
+    authenticateToken,
     multerMiddlewareGeoJSON,
-
-    // Middleware de validation
-    (req, res, next) => {
-        console.log("");
-        console.log("Requête reçue pour le traitement d'un fichier GeoJSON");
-        console.log("Body:", req.body);
-        console.log("Files:", req.files);
-
-        // Vérification si le fichier est présent
-        if (!req.files?.file?.[0]) {
-            return res.status(400).json({
-                success: false,
-                message: "Aucun fichier n'a été envoyé",
-            });
-        }
-        next();
-    },
-
-    // Handler principal
+    verifierRequeteImportGeo,
     async (req, res) => {
-        let filePath = null;
+        const filePath = req.file.path;
 
         try {
-            // Récupération des paramètres
-            filePath = req.files.file[0].path;
-            const originalname = req.files.file[0].originalname;
-            const uuid_ope = req.body.uuid_ope || req.fields?.uuid_ope;
+            console.log(`Import GeoJSON « ${req.file.originalname} » pour l'opération ${req.body.uuid_ope}`);
 
-            console.log("Fichier GeoJSON reçu:", originalname);
-            console.log("Chemin temporaire:", filePath);
-            console.log("UUID opération:", uuid_ope);
-
-            if (!uuid_ope) {
-                throw new Error("UUID de l'opération manquant (uuid_ope requis)");
-            }
-
-            // Lecture du fichier GeoJSON
-            const fileContent = await fs.promises.readFile(filePath, "utf8");
-            let geojsonData;
-
+            let geojson;
             try {
-                geojsonData = JSON.parse(fileContent);
+                geojson = JSON.parse(await fs.promises.readFile(filePath, "utf8"));
             } catch (parseError) {
-                throw new Error(
-                    `Fichier JSON invalide: ${parseError.message}`
-                );
+                throw new ImportGeometrieError(`Fichier JSON invalide : ${parseError.message}`);
             }
 
-            console.log("\n=== Analyse du GeoJSON ===");
-            console.log("Type:", geojsonData.type);
-            console.log("CRS:", JSON.stringify(geojsonData.crs));
-
-            // Extraction du SRID depuis le CRS si présent
-            let srid = 4326; // Par défaut WGS84
-            if (geojsonData.crs && geojsonData.crs.properties && geojsonData.crs.properties.name) {
-                const crsName = geojsonData.crs.properties.name;
-                // Format: "urn:ogc:def:crs:EPSG::2154" ou "EPSG:2154"
-                const epsgMatch = crsName.match(/EPSG::?(\d+)/i);
-                if (epsgMatch) {
-                    srid = parseInt(epsgMatch[1]);
-                    console.log(`SRID détecté depuis CRS: ${srid}`);
-                }
-            }
-
-            // Validation de la structure GeoJSON
-            if (!geojsonData.type) {
-                throw new Error(
-                    "Format GeoJSON invalide: propriété 'type' manquante"
-                );
-            }
-
-            let features = [];
-
-            // Gestion des différents types GeoJSON
-            if (geojsonData.type === "FeatureCollection") {
-                if (!Array.isArray(geojsonData.features)) {
-                    throw new Error(
-                        "FeatureCollection invalide: 'features' doit être un tableau"
-                    );
-                }
-                features = geojsonData.features;
-            } else if (geojsonData.type === "Feature") {
-                features = [geojsonData];
-            } else if (["Point", "LineString", "Polygon", "MultiPoint", "MultiLineString", "MultiPolygon"].includes(geojsonData.type)) {
-                // Géométrie directe (sans Feature wrapper)
-                features = [{
-                    type: "Feature",
-                    geometry: geojsonData,
-                    properties: {}
-                }];
+            let geometries;
+            if (geojson?.type === "FeatureCollection" && Array.isArray(geojson.features)) {
+                geometries = geojson.features.map((f) => f?.geometry);
+            } else if (geojson?.type === "Feature") {
+                geometries = [geojson.geometry];
+            } else if (geojson?.type && Array.isArray(geojson.coordinates)) {
+                geometries = [geojson]; // Géométrie directe, sans Feature
             } else {
-                throw new Error(
-                    `Type GeoJSON non supporté: ${geojsonData.type}`
-                );
+                throw new ImportGeometrieError(`Format GeoJSON non supporté (type : ${geojson?.type ?? "absent"}).`);
             }
 
-            if (features.length === 0) {
-                throw new Error("Aucune géométrie trouvée dans le fichier GeoJSON");
-            }
+            // Format: "urn:ogc:def:crs:EPSG::2154" ou "EPSG:2154"
+            const crs = geojson.crs?.properties?.name;
+            const epsg = typeof crs === "string" ? crs.match(/EPSG:{1,2}(\d+)/i) : null;
+            const srid = epsg ? parseInt(epsg[1], 10) : /CRS84$/i.test(crs || "") ? 4326 : null;
 
-            console.log(`${features.length} géométrie(s) détectée(s)`);
-
-            // Validation et détection du type de géométrie
-            let typeGeometry = null;
-            for (const feature of features) {
-                if (!feature.geometry || !feature.geometry.type) {
-                    throw new Error("Feature sans géométrie détecté");
-                }
-
-                const geomType = feature.geometry.type.toUpperCase();
-                console.log(`Type géométrie dans feature: ${geomType}`);
-                console.log(`Coordonnées:`, JSON.stringify(feature.geometry.coordinates).substring(0, 200));
-
-                if (!typeGeometry) {
-                    typeGeometry = geomType;
-                } else if (typeGeometry !== geomType) {
-                    throw new Error(
-                        `Types de géométrie mixtes non supportés: ${typeGeometry} et ${geomType}`
-                    );
-                }
-            }
-
-            console.log("Type de géométrie final détecté:", typeGeometry);
-
-            // Restriction pour les polygones : une seule géométrie
-            if (typeGeometry.includes("POLYGON") && features.length > 1) {
-                throw new Error(
-                    `Pour les polygones, une seule géométrie est autorisée (${features.length} trouvées)`
-                );
-            }
-
-            let insertResults = [];
-            let insertErrors = [];
-
-            // Insertion des géométries
-            for (let i = 0; i < features.length; i++) {
-                try {
-                    const feature = features[i];
-
-                    console.log(`\n=== Traitement géométrie GeoJSON [${i}] ===`);
-                    console.log(`Type: ${feature.geometry.type}`);
-                    console.log(`Nombre de coordonnées (depth):`, JSON.stringify(feature.geometry.coordinates).length);
-
-                    // Convertir en WKT (la fonction utilise le SRID hardcodé pour l'instant)
-                    const WKTData = convertToWKT(
-                        feature.geometry.coordinates,
-                        typeGeometry
-                    );
-
-                    // Remplacer le SRID si différent de 2154
-                    if (srid !== 2154) {
-                        WKTData.EWKT = WKTData.EWKT.replace(/SRID=\d+/, `SRID=${srid}`);
-                        console.log(`SRID ajusté à ${srid}`);
-                    }
-
-                    console.log(`WKT généré:`, WKTData.EWKT.substring(0, 200));
-
-                    // Utiliser la fonction commune d'insertion
-                    const result = await insertGeometryToDB(
-                        WKTData,
-                        uuid_ope,
-                        feature.properties || {}
-                    );
-
-                    insertResults.push(result);
-                } catch (e) {
-                    console.error(`Erreur insertion géométrie [${i}]:`, e.message);
-                    insertErrors.push({ success: false, message: e.message });
-                }
-            }
-
-            // Réponse finale
-            if (insertErrors.length === 0) {
-                res.status(200).json({
-                    success: true,
-                    message: `${insertResults.length} géométrie(s) GeoJSON importée(s) avec succès.`,
-                    data: insertResults,
-                });
-            } else {
-                res.status(500).json({
-                    success: false,
-                    message: "Erreur(s) lors de l'import GeoJSON.",
-                    errors: insertErrors,
-                    partialSuccess: insertResults.length > 0 ? insertResults : undefined,
-                });
-            }
+            const resultat = await insererLocalisation(pool, geometries, req.body.uuid_ope.trim(), srid);
+            console.log("Import GeoJSON réussi :", resultat);
+            repondreImportGeo(res, resultat);
         } catch (error) {
-            console.error("Erreur détaillée:", error);
-
-            res.status(error.message.includes("géométrie") || error.message.includes("JSON") ? 400 : 500).json({
-                success: false,
-                message: error.message,
-            });
+            repondreErreurImportGeo(res, error);
         } finally {
-            // Nettoyage du fichier temporaire
-            if (filePath) {
-                try {
-                    await fs.promises.rm(filePath, { force: true });
-                    console.log("Fichier temporaire GeoJSON supprimé");
-                } catch (cleanupError) {
-                    console.error(
-                        "Erreur lors du nettoyage du fichier temporaire:",
-                        cleanupError
-                    );
-                }
-            }
+            await fs.promises.rm(filePath, { force: true }).catch(() => {});
         }
     }
 );
