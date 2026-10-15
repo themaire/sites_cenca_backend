@@ -23,7 +23,7 @@ if (!fs.existsSync(CACHE_DIR)) {
 // Fonctions et connexion à PostgreSQL
 const { joinQuery, selectQuery, selectListTravauxQuery, ExecuteQuerySite, distinctSiteResearch, distinctResearchRaw,
     executeQueryAndRespond, reset, getBilan, } = require("../../fonctions/fonctionsSites.js");
-const { generateFicheTravauxWord } = require("../../scripts/gen_fiche_travaux.js");
+const { generateFicheTravauxWord, nomFichierFicheTravaux } = require("../../scripts/gen_fiche_travaux.js");
 const pool = require("../../dbPool/poolConnect.js");
 
 // Liste des sites diffusables (GeoJSON) pour le site vitrine (studio web externe)
@@ -1360,22 +1360,17 @@ router.get("/gen_fiche_travaux/uuid_proj=:uuid", async (req, res) => {
         }
         const buffer = await generateFicheTravauxWord(bilan);
 
-        const sanitize = (str) =>
-            String(str)
-                .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "") // enlève les accents
-                .replace(/[^\w\d_\-]/g, "_"); // remplace tout sauf lettres, chiffres, _ et - par _
-
-        const nom_site_sain = sanitize(bilan.site.nom);
-
         res.setHeader(
             "Content-Type",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         );
+        // ex. 2026_fiche_travaux_Milieu-Entretenir_10072.docx (voir nomFichierFicheTravaux)
         res.setHeader(
             "Content-Disposition",
-            `attachment; filename=fiche_travaux_${bilan.objectifs[0].obj_ope_str}-${nom_site_sain}.docx`
+            `attachment; filename="${nomFichierFicheTravaux(bilan)}"`
         );
+        // Rendre Content-Disposition lisible par le front (requête cross-origin)
+        res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
         res.send(buffer);
     } catch (error) {
         console.error("Erreur lors de la génération du Word :", error); // Log complet côté serveur

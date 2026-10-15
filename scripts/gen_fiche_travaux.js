@@ -2,6 +2,7 @@ const { AlignmentType, ImageRun, convertInchesToTwip, Header, Footer, SectionTyp
 const fs = require("fs");
 const path = require('path');
 const { generateOperationsMapImage } = require("../fonctions/mapGenerator.js");
+const { slugifier } = require("../fonctions/fonctionsFichiers.js");
 
 // Taille d'impression de la carte de localisation des opérations (dernière page)
 const CM_TO_PX = 96 / 2.54;
@@ -56,6 +57,33 @@ function operationMatchKey(action, action2, dateDebutStr) {
 }
 
 // Création du document
+// Morceaux communs à la référence (pied de page) et au nom du fichier téléchargé
+function morceauxReferenceFiche(bilan) {
+    return {
+        annee: bilan.projet?.annee || "sans-annee",
+        objectif: slugifier(bilan.objectifs?.[0]?.obj_ope_str) || "sans-objectif",
+        codeSite: slugifier(bilan.site?.code) || "sans-site",
+    };
+}
+
+/**
+ * Référence lisible de la fiche, affichée en pied de page.
+ * ex. "2026 - fiche travaux - Milieu-Entretenir - code site : 10072"
+ */
+function referenceFicheTravaux(bilan) {
+    const { annee, objectif, codeSite } = morceauxReferenceFiche(bilan);
+    return `${annee} - fiche travaux - ${objectif} - code site : ${codeSite}`;
+}
+
+/**
+ * Nom du fichier .docx téléchargé (route gen_fiche_travaux), sans espace ni ":"
+ * (interdit sous Windows). ex. "2026_fiche_travaux_Milieu-Entretenir_10072.docx"
+ */
+function nomFichierFicheTravaux(bilan) {
+    const { annee, objectif, codeSite } = morceauxReferenceFiche(bilan);
+    return `${annee}_fiche_travaux_${objectif}_${codeSite}.docx`;
+}
+
 async function generateFicheTravauxWord(bilan) {
     // console.log("Génération de la fiche avec ce bilan :", bilan);
     // console.log("Financeurs :", bilan.operations.map(op => op.financeurs).flat());
@@ -124,11 +152,9 @@ async function generateFicheTravauxWord(bilan) {
     const footer = new Paragraph({
                             alignment: AlignmentType.CENTER,
                             children: [
-                                new TextRun({ text: "Conservatoire d'espaces naturels de Champagne-Ardenne"}),
-                                new TextRun({ break: 1 }),
-                                new TextRun({ text: "9, rue Gustave Eiffel - 10430 Rosières-près-Troyes"}),
-                                new TextRun({ break: 1 }),
-                                new TextRun({ text: "03 25 80 50 50     |      http://cen-champagne-ardenne.org"}),
+                                new TextRun({
+                                    children: [referenceFicheTravaux(bilan)],
+                                }),
                                 new TextRun({ break: 1 }),
                                 new TextRun({
                                     children: ["Page ", PageNumber.CURRENT, " / ", PageNumber.TOTAL_PAGES],
@@ -740,5 +766,6 @@ async function generateFicheTravauxWord(bilan) {
 }
 
 module.exports = {
-    generateFicheTravauxWord
+    generateFicheTravauxWord,
+    nomFichierFicheTravaux
 };

@@ -76,6 +76,7 @@ let uploadFolders = {};
 let uploadLibnoms = {}; // lib_field -> libnom_id (type de l'objet parent : pmfu, travaux...)
 
 async function loadUploadFolders() {
+    // Récupérer les libelles depuis la base de données pour construire le mapping lib_field -> libnom_id et lib_field -> lib_path
     const rows = await ExecuteQuerySitePromise(pool, {
         query: "SELECT lib_path, lib_field, libnom_id FROM files.libelles",
     });

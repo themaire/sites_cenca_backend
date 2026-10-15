@@ -14,6 +14,19 @@ const LIBNOM_TRAVAUX = 3;
 const MAX_NOM_ORIGINAL = 60;
 
 /**
+ * Rend un texte utilisable dans un nom de fichier / une URL.
+ * "Milieu - Entretenir (été)" -> "Milieu-Entretenir-ete"
+ */
+function slugifier(texte) {
+    return String(texte ?? "")
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "") // accents
+        .replace(/[^A-Za-z0-9_-]+/g, "-") // espaces, apostrophes, #, %, ...
+        .replace(/-{2,}/g, "-")
+        .replace(/^[-_]+|[-_]+$/g, "");
+}
+
+/**
  * Nettoie le nom d'origine d'un fichier pour l'utiliser dans un nom de fichier / une URL.
  * "Compte rendu réunion (v2).PDF" -> { nom: "Compte-rendu-reunion-v2", ext: ".pdf" }
  * @param {string} originalname - file.originalname reçu par multer
@@ -24,13 +37,7 @@ function nettoyerNomOriginal(originalname) {
     const nomRecu = utf8.includes("�") ? originalname : utf8;
 
     const ext = path.extname(nomRecu).toLowerCase();
-    const nom = path
-        .basename(nomRecu, path.extname(nomRecu))
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "") // accents
-        .replace(/[^A-Za-z0-9_-]+/g, "-") // espaces, apostrophes, #, %, ...
-        .replace(/-{2,}/g, "-")
-        .replace(/^[-_]+|[-_]+$/g, "")
+    const nom = slugifier(path.basename(nomRecu, path.extname(nomRecu)))
         .slice(0, MAX_NOM_ORIGINAL)
         .replace(/[-_]+$/, "");
 
@@ -116,6 +123,7 @@ function fichiersCacheDuDocument(docPath, cacheDir) {
 }
 
 module.exports = {
+    slugifier,
     nettoyerNomOriginal,
     construireNomDocument,
     nomFichierCache,
