@@ -1,0 +1,17 @@
+{
+  "name": "cenca-mcp-lecture",
+  "version": "1.0.0",
+  "description": "Serveur MCP local en lecture seule sur la base CENCA",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "dotenv": "^18.0.8",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  }
+}
