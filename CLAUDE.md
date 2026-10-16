@@ -37,6 +37,8 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 | `FILES_DIR_ENV` | Path for static file serving (default: `./files`) |
 | `LIZMAP_USER`, `LIZMAP_PASSWORD` | External Lizmap WFS authentication |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Monitoring alerts |
+| `OLLAMA_URL`, `OLLAMA_MODEL`, `OLLAMA_NUM_CTX` | Chatbot LLM: one or more LAN Ollama servers (comma-separated, first reachable wins), model tag, context size |
+| `MCP_URL`, `MCP_API_TOKEN` | Chatbot access to the `mcp/` server (same token as `mcp/.env`) |
 
 ## Architecture
 
@@ -58,6 +60,7 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 | `/process` | `routes/processRoutes.js` | File upload → Python pipeline trigger |
 | `/picts` | `routes/pictureRoute.js` | Image upload/resize/serve |
 | `/docs` | `routes/docsRoutes.js` | Markdown docs served as HTML |
+| `/chat` | `routes/chatRoutes.js` | Chatbot (JWT): local LLM via Ollama + whitelisted MCP business tools, SSE stream |
 | `/files` | static | Static file serving from `FILES_DIR_ENV` |
 | `/metrics` | express-prom-bundle | Prometheus metrics |
 
@@ -105,3 +108,7 @@ Read-only MCP server giving Claude SQL access to the database. Self-contained su
 - **Geometry**: All spatial data is stored in SRID=2154 (Lambert 93). Use `convertToWKT()` to convert GeoJSON coordinates to EWKT before inserting.
 - **CORS**: Origins are allowlisted in `node_base_sites.js`. Add new allowed origins there.
 - **Rate limiting**: Applied globally (200 req / 5 min) but skipped for localhost requests.
+
+### Chatbot (`/chat`)
+
+`routes/chatRoutes.js` runs a tool-calling loop on a local LLM (Ollama, Gemma 4) and streams the answer as SSE events (`outil`, `texte`, `fin`, `erreur`). Data comes only from the `mcp/` server, reached as an MCP **client** over HTTP (`fonctions/clientMcp.js`); the MCP is never mounted in `node_base_sites.js`. `OUTILS_AUTORISES` in `clientMcp.js` whitelists the predefined business tools: `executer_requete` (free SQL) and schema-introspection tools are deliberately excluded. The MCP's `documentation_base` is injected into the system prompt. The conversation history is held by the front end (stateless backend). In Docker, `node_app` sits on the `monitoring` bridge: add that bridge subnet to `ALLOWED_IPS` in `mcp/.env`. Front-end instructions: `documentation/chatbot/instructions_front_claude_code.md`.
