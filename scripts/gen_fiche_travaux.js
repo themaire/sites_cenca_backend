@@ -1,6 +1,7 @@
-const { AlignmentType, ImageRun, convertInchesToTwip, Header, Footer, SectionType, PageNumber, WidthType, Table, TableRow, TableCell, ShadingType, Document, HeadingLevel, LevelFormat, Packer, Paragraph, TextRun, UnderlineType } = require("docx");
+const { AlignmentType, ImageRun, convertInchesToTwip, Header, Footer, SectionType, PageNumber, WidthType, Table, TableRow, TableCell, TableBorders, TableLayoutType, VerticalAlign, ShadingType, Document, HeadingLevel, LevelFormat, Packer, Paragraph, TextRun, UnderlineType } = require("docx");
 const fs = require("fs");
 const path = require('path');
+const sharp = require("sharp");
 const { generateOperationsMapImage } = require("../fonctions/mapGenerator.js");
 const { slugifier } = require("../fonctions/fonctionsFichiers.js");
 
@@ -10,6 +11,18 @@ const MAP_WIDTH_CM = 27;
 const MAP_HEIGHT_CM = 13.5;
 const MAP_WIDTH_PX = Math.round(MAP_WIDTH_CM * CM_TO_PX);
 const MAP_HEIGHT_PX = Math.round(MAP_HEIGHT_CM * CM_TO_PX);
+
+// Page des photos avant / après travaux (paysage, juste avant la carte)
+// Seules les photos dont le nom d'origine commence par FT_avant ou FT_apres (FT_après,
+// casse indifférente) sont retenues. Une fois déposé, le fichier est renommé
+// "AA-MM-JJ_<code site>_<nom d'origine sans accents>" (cf. construireNomDocument).
+const TAG_PHOTO_FICHE = /^\d{2}-\d{2}-\d{2}_(?:[^_]+_)?FT_(avant|apres)(?=[-_.]|$)/i;
+const FILES_DIR = process.env.FILES_DIR_ENV || path.join(__dirname, "..", "files");
+const PHOTOS_MAX_PAR_COLONNE = 2;
+const PHOTO_LARGEUR_MAX_CM = 13;
+const PHOTOS_HAUTEUR_ZONE_CM = 12.5; // hauteur disponible sous les titres de colonnes
+const PHOTOS_ESPACE_CM = 0.4; // espace entre deux photos d'une même colonne
+const PAYSAGE_LARGEUR_UTILE_TWIP = 16838 - 2 * 720; // A4 paysage moins les marges
 
 // Couleurs
 const bleuFonce = "1a397b";
@@ -54,6 +67,91 @@ function sortOperationsByDate(operations) {
 // (opération vs localisations) selon les données saisies.
 function operationMatchKey(action, action2, dateDebutStr) {
     return `${action ?? ''}|${action2 ?? ''}|${dateDebutStr ?? ''}`;
+}
+
+/**
+ * Sélectionne et prépare les photos de la page "avant / après travaux".
+ * La colonne est donnée par le tag du nom de fichier (FT_avant / FT_apres) ; on garde les
+ * plus anciennes déposées (doc_id croissant). Chaque image est pivotée selon l'EXIF et
+ * réduite pour alléger le .docx. Une photo illisible est ignorée sans bloquer la fiche.
+ * @param {Object[]} docs - lignes files.docs (doc_id, doc_path) des photos du projet
+ * @returns {Promise<{avant: Object[], apres: Object[]}>} images {data, largeur, hauteur} en pixels
+ */
+async function preparerPhotosTravaux(docs) {
+    const colonnes = { avant: [], apres: [] };
+    const tagues = [...(docs ?? [])]
+        .sort((a, b) => a.doc_id - b.doc_id)
+        .map((doc) => ({ doc, tag: path.basename(doc.doc_path || "").match(TAG_PHOTO_FICHE) }))
+        .filter(({ tag }) => tag);
+
+    for (const { doc, tag } of tagues) {
+        const colonne = colonnes[tag[1].toLowerCase()];
+        if (colonne.length >= PHOTOS_MAX_PAR_COLONNE) continue;
+        try {
+            const { data, info } = await sharp(path.join(FILES_DIR, doc.doc_path))
+                .rotate()
+                .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true }) // ~230 dpi à 13 cm
+                .jpeg({ quality: 80 })
+                .toBuffer({ resolveWithObject: true });
+            colonne.push({ data, largeur: info.width, hauteur: info.height });
+        } catch (err) {
+            console.error(`Photo de la fiche travaux ignorée (${doc.doc_path}) :`, err.message);
+        }
+    }
+    return colonnes;
+}
+
+/** Paragraphes d'une colonne de photos : une seule photo occupe toute la hauteur de la cellule */
+function paragraphesColonnePhotos(photos) {
+    if (photos.length === 0) {
+        return [new Paragraph({ alignment: AlignmentType.CENTER, style: "aside", text: "Aucune photo sélectionnée" })];
+    }
+    const hauteurMaxCm = (PHOTOS_HAUTEUR_ZONE_CM - PHOTOS_ESPACE_CM * (photos.length - 1)) / photos.length;
+    return photos.map((photo, i) => {
+        const echelle = Math.min(
+            (PHOTO_LARGEUR_MAX_CM * CM_TO_PX) / photo.largeur,
+            (hauteurMaxCm * CM_TO_PX) / photo.hauteur
+        );
+        return new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: i > 0 ? Math.round(PHOTOS_ESPACE_CM * 567) : 0 }, // 1 cm = 567 twips
+            children: [
+                new ImageRun({
+                    data: photo.data,
+                    type: "jpg",
+                    transformation: {
+                        width: Math.round(photo.largeur * echelle),
+                        height: Math.round(photo.hauteur * echelle),
+                    },
+                }),
+            ],
+        });
+    });
+}
+
+/** Tableau sans bordure à deux colonnes : avant travaux | après travaux */
+function tableauPhotosTravaux(photos) {
+    const largeurColonne = Math.floor(PAYSAGE_LARGEUR_UTILE_TWIP / 2);
+    const titre = (texte) => tableCellNoBorder({
+        width: { size: largeurColonne, type: WidthType.DXA },
+        children: [new Paragraph({ text: texte, style: "HeaderTable", alignment: AlignmentType.CENTER, spacing: { after: 120 } })],
+    });
+    const cellulePhotos = (liste) => tableCellNoBorder({
+        width: { size: largeurColonne, type: WidthType.DXA },
+        verticalAlign: VerticalAlign.TOP,
+        children: paragraphesColonnePhotos(liste),
+    });
+
+    return new Table({
+        width: { size: PAYSAGE_LARGEUR_UTILE_TWIP, type: WidthType.DXA },
+        columnWidths: [largeurColonne, largeurColonne],
+        layout: TableLayoutType.FIXED,
+        borders: TableBorders.NONE,
+        rows: [
+            new TableRow({ children: [titre("AVANT TRAVAUX"), titre("APRÈS TRAVAUX")] }),
+            new TableRow({ children: [cellulePhotos(photos.avant), cellulePhotos(photos.apres)] }),
+        ],
+    });
 }
 
 // Création du document
@@ -106,6 +204,10 @@ async function generateFicheTravauxWord(bilan) {
     } catch (err) {
         console.error("Erreur lors de la génération de la carte des opérations :", err.message);
     }
+
+    // Page photos ajoutée seulement s'il y a au moins une photo taguée FT_avant / FT_apres
+    const photosTravaux = await preparerPhotosTravaux(bilan.photos_travaux);
+    const avecPagePhotos = photosTravaux.avant.length + photosTravaux.apres.length > 0;
 
     const header = new Table({
                     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -705,6 +807,37 @@ async function generateFicheTravauxWord(bilan) {
                     ]),// Fin de la boucle des opérations
                 ] 
             }, // Fin de la deuxième section
+
+            // Section photos avant / après travaux (optionnelle)
+            ...(avecPagePhotos
+                ? [{
+                    properties: {
+                        type: SectionType.NEXT_PAGE,
+                        page: {
+                            margin: { top: 720, right: 720, bottom: 720, left: 720 },
+                            size: { orientation: "landscape" }
+                        },
+                    },
+                    headers: {
+                        default: new Header({
+                            children: [header]
+                        }),
+                    },
+                    children: [
+                        new Paragraph({
+                            text: "PHOTOS AVANT / APRÈS TRAVAUX",
+                            style: "TitreColore",
+                            spacing: { before: 240, after: 120 }
+                        }),
+                        tableauPhotosTravaux(photosTravaux),
+                    ],
+                    footers: {
+                        default: new Footer({
+                            children: [footer]
+                        }),
+                    }
+                }]
+                : []),
 
             {
                 properties: {
