@@ -609,7 +609,7 @@ async function getBilan(uuid) {
     const operations_geojson = await getData("operations_geojson", uuid);
 
     // Photos avant / après travaux du projet (files.docs) : la fiche ne garde que celles
-    // taguées FT_avant / FT_apres. Sans photos, la fiche se génère quand même.
+    // taguées FT_ / TR_ avant / apres. Sans photos, la fiche se génère quand même.
     let photos_travaux = [];
     try {
         const [avant, apres] = await Promise.all([

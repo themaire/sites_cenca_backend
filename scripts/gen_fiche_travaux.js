@@ -13,10 +13,10 @@ const MAP_WIDTH_PX = Math.round(MAP_WIDTH_CM * CM_TO_PX);
 const MAP_HEIGHT_PX = Math.round(MAP_HEIGHT_CM * CM_TO_PX);
 
 // Page des photos avant / après travaux (paysage, juste avant la carte)
-// Seules les photos dont le nom d'origine commence par FT_avant ou FT_apres (FT_après,
+// Seules les photos dont le nom d'origine commence par FT_avant / FT_apres ou TR_avant / TR_apres (après,
 // casse indifférente) sont retenues. Une fois déposé, le fichier est renommé
 // "AA-MM-JJ_<code site>_<nom d'origine sans accents>" (cf. construireNomDocument).
-const TAG_PHOTO_FICHE = /^\d{2}-\d{2}-\d{2}_(?:[^_]+_)?FT_(avant|apres)(?=[-_.]|$)/i;
+const TAG_PHOTO_FICHE = /^\d{2}-\d{2}-\d{2}_(?:[^_]+_)?(?:FT|TR)_(avant|apres)(?=[-_.]|$)/i;
 const FILES_DIR = process.env.FILES_DIR_ENV || path.join(__dirname, "..", "files");
 const PHOTOS_MAX_PAR_COLONNE = 2;
 const PHOTO_LARGEUR_MAX_CM = 13;
@@ -71,7 +71,7 @@ function operationMatchKey(action, action2, dateDebutStr) {
 
 /**
  * Sélectionne et prépare les photos de la page "avant / après travaux".
- * La colonne est donnée par le tag du nom de fichier (FT_avant / FT_apres) ; on garde les
+ * La colonne est donnée par le tag du nom de fichier (FT_ ou TR_ + avant / apres) ; on garde les
  * plus anciennes déposées (doc_id croissant). Chaque image est pivotée selon l'EXIF et
  * réduite pour alléger le .docx. Une photo illisible est ignorée sans bloquer la fiche.
  * @param {Object[]} docs - lignes files.docs (doc_id, doc_path) des photos du projet
@@ -205,7 +205,7 @@ async function generateFicheTravauxWord(bilan) {
         console.error("Erreur lors de la génération de la carte des opérations :", err.message);
     }
 
-    // Page photos ajoutée seulement s'il y a au moins une photo taguée FT_avant / FT_apres
+    // Page photos ajoutée seulement s'il y a au moins une photo taguée FT_ / TR_ avant / apres
     const photosTravaux = await preparerPhotosTravaux(bilan.photos_travaux);
     const avecPagePhotos = photosTravaux.avant.length + photosTravaux.apres.length > 0;
 
