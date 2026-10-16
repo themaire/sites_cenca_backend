@@ -160,3 +160,6 @@ fonctions/geo_api_bttf.js
 ressources/
 
 extraction_fonciere/
+
+# Worktrees git créés par Claude Code
+.claude/worktrees/
