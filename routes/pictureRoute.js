@@ -3,6 +3,7 @@ const router = express.Router();
 const sharp = require("sharp");
 const fs = require("fs");
 const path = require("path");
+const { nomFichierCache } = require("../fonctions/fonctionsFichiers.js");
 
 // Charger les variables d'environnement
 require('dotenv').config();
@@ -44,13 +45,9 @@ router.get("/img", async (req, res) => {
         originalPath = path.join(IMAGES_DIR, file);
     }
 
-    // Construire le nom du fichier de cache : {basename}_{width}.{extension}
-    // Exemple: "photos/pmfu/doc_41_.jpg" -> "photos_pmfu_doc_41__200.jpg"
-    const safeFileName = file.replace(/\//g, '_');
-    const ext = path.extname(safeFileName); // .jpg
-    const basename = path.basename(safeFileName, ext); // photo
-    const cacheFileName = `${basename}_${w}${ext}`; // photo_200.jpg
-    const cachePath = path.join(CACHE_DIR, cacheFileName);
+    // Nom du fichier de cache (même calcul que la suppression, voir fonctionsFichiers.js)
+    // Exemple: "photos/travaux/avant/26-10-08_10072_IMG-1234.jpg" -> "photos_travaux_avant_26-10-08_10072_IMG-1234_200.jpg"
+    const cachePath = path.join(CACHE_DIR, nomFichierCache(file, w));
 
     try {
         // Vérifie si le fichier existe déjà en cache

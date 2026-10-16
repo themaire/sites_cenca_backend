@@ -2,16 +2,19 @@
 
 ## 📋 Vue d'ensemble
 
-Deux routes permettent l'import de géométries vers la table `opegerer.localisations` :
+Deux routes permettent l'import de l'emprise d'une opération dans la table `opegerer.localisations` :
 - **`/put/ope_shapefile`** : Upload de shapefiles zippés
 - **`/put/ope_geojson`** : Upload de fichiers GeoJSON
+
+Les deux routes sont **protégées par JWT** (`Authorization: Bearer <token>`, ajouté par l'intercepteur Angular)
+et partagent le module `fonctions/importGeometries.js`.
+
+**Un import = une ligne** dans `opegerer.localisations` : toutes les entités du fichier sont fusionnées
+en une seule géométrie `MultiPolygon`, `MultiLineString` ou `MultiPoint`.
 
 ---
 
 ## 🗺️ Route `/put/ope_shapefile`
-
-### Description
-Import d'un shapefile compressé (.zip) contenant les fichiers `.shp`, `.dbf`, `.shx`, etc.
 
 ### Endpoint
 ```
@@ -21,20 +24,29 @@ POST /sites/put/ope_shapefile
 ### Paramètres (FormData)
 | Paramètre | Type | Requis | Description |
 |-----------|------|--------|-------------|
-| `file` | File | ✅ | Fichier ZIP contenant le shapefile |
+| `file` | File | ✅ | Fichier ZIP contenant le shapefile (50 Mo max) |
 | `uuid_ope` | String | ✅ | UUID de l'opération de référence |
-| `type_geometry` | String | ❌ | Type de géométrie (détecté auto si absent mais normalement donné) |
+| `type_geometry` | String | ❌ | Ignoré : le type est lu dans le fichier |
 
-### Formats supportés
-- ✅ `.zip` (application/zip)
+### Contenu de l'archive
+- Un **seul** shapefile (`.shp` obligatoire, `.prj` fortement conseillé), à la racine ou dans un dossier
+- Les fichiers `__MACOSX/` et `._*` sont ignorés ; seuls `.shp .shx .dbf .prj .cpg` sont extraits
+- Les attributs (`.dbf`) ne sont pas utilisés
 
-### Contraintes
-- **Polygones** : 1 seule géométrie maximum
-- **Points/Lignes** : Multiple géométries acceptées
+### Projection (fichier `.prj`)
+| `.prj` | SRID retenu |
+|--------|-------------|
+| Lambert 93 (ESRI ou OGC) | 2154 |
+| Coniques CC42 à CC50 | 3942 à 3950 |
+| Lambert II étendu | 27572 |
+| WGS84 / Pseudo-Mercator / UTM 31N | 4326 / 3857 / 32631 |
+| WKT OGC avec `AUTHORITY["EPSG", …]` final | ce code EPSG |
+| absent ou non reconnu | déduit des coordonnées (degrés → 4326, sinon 2154) |
 
 ### Exemple cURL
 ```bash
 curl -X POST http://localhost:8887/sites/put/ope_shapefile \
+  -H "Authorization: Bearer $TOKEN" \
   -F "file=@mon_shapefile.zip" \
   -F "uuid_ope=123e4567-e89b-12d3-a456-426614174000"
 ```
@@ -42,9 +54,6 @@ curl -X POST http://localhost:8887/sites/put/ope_shapefile \
 ---
 
 ## 🌍 Route `/put/ope_geojson`
-
-### Description
-Import d'un fichier GeoJSON standard.
 
 ### Endpoint
 ```
@@ -54,73 +63,48 @@ POST /sites/put/ope_geojson
 ### Paramètres (FormData)
 | Paramètre | Type | Requis | Description |
 |-----------|------|--------|-------------|
-| `file` | File | ✅ | Fichier GeoJSON (.geojson ou .json) |
+| `file` | File | ✅ | Fichier GeoJSON (`.geojson` ou `.json`, 50 Mo max) |
 | `uuid_ope` | String | ✅ | UUID de l'opération de référence |
 
-### Formats supportés
-- ✅ `.geojson` (application/geo+json)
-- ✅ `.json` (application/json)
-
 ### Types GeoJSON acceptés
-- **FeatureCollection** : Collection de géométries
-- **Feature** : Géométrie unique avec propriétés
-- **Geometry** : Point, LineString, Polygon, MultiPoint, MultiLineString, MultiPolygon
+- **FeatureCollection**, **Feature**, ou géométrie directe
+- Géométries : Point, LineString, Polygon, MultiPoint, MultiLineString, MultiPolygon (avec ou sans Z)
 
-### Contraintes
-- **Polygones** : 1 seule géométrie maximum
-- **Points/Lignes** : Multiple géométries acceptées
-- Tous les features doivent avoir le **même type de géométrie**
-
-### Exemple GeoJSON valide
-```json
-{
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [4.5, 48.5],
-            [4.6, 48.5],
-            [4.6, 48.6],
-            [4.5, 48.6],
-            [4.5, 48.5]
-          ]
-        ]
-      },
-      "properties": {
-        "nom": "Zone test"
-      }
-    }
-  ]
-}
-```
+### Projection
+- Lue dans le membre `crs` (`urn:ogc:def:crs:EPSG::2154`, `EPSG:2154`, `…CRS84`) — c'est ce qu'écrit QGIS
+- Sans `crs` : déduite des coordonnées (degrés → WGS84, norme GeoJSON ; sinon Lambert 93)
 
 ### Exemple cURL
 ```bash
 curl -X POST http://localhost:8887/sites/put/ope_geojson \
+  -H "Authorization: Bearer $TOKEN" \
   -F "file=@ma_zone.geojson" \
   -F "uuid_ope=123e4567-e89b-12d3-a456-426614174000"
 ```
 
 ---
 
-## ⚙️ Traitement commun
+## ⚙️ Traitement commun : `insererLocalisation()`
 
-Les deux routes utilisent la **fonction commune** `insertGeometryToDB()` :
+La conversion est confiée à PostGIS, à partir du GeoJSON (plus de WKT construit à la main) :
 
-### Mapping colonnes PostgreSQL
+```
+ST_GeomFromGeoJSON → ST_Force2D → ST_SetSRID(srid source) → ST_Transform(2154)
+  polygones      : ST_MakeValid puis ST_UnaryUnion  (répare et fusionne les chevauchements)
+  points / lignes: ST_Collect
+→ ST_CollectionExtract → ST_Multi
+```
+
 | Type géométrie | Colonne BDD |
 |---------------|-------------|
-| POLYGON / MULTIPOLYGON | `loc_poly` |
-| POINT / MULTIPOINT | `loc_point` |
-| LINESTRING / MULTILINESTRING | `loc_line` |
+| POLYGON / MULTIPOLYGON | `loc_poly` geometry(MultiPolygon, 2154) |
+| LINESTRING / MULTILINESTRING | `loc_line` geometry(MultiLineString, 2154) |
+| POINT / MULTIPOINT | `loc_point` geometry(MultiPoint, 2154) |
 
-### Système de coordonnées
-- **Entrée** : WGS84 (EPSG:4326) par défaut
-- **Stockage** : EWKT dans PostGIS
+Contrôles, dans **une transaction** (tout ou rien) :
+- l'opération `uuid_ope` existe (sinon 404)
+- un seul type (point, ligne ou polygone) dans le fichier
+- la géométrie obtenue n'est pas vide et tombe dans l'emprise du Lambert 93 (détecte une mauvaise projection)
 
 ---
 
@@ -130,99 +114,40 @@ Les deux routes utilisent la **fonction commune** `insertGeometryToDB()` :
 ```json
 {
   "success": true,
-  "message": "2 géométrie(s) importée(s) avec succès.",
-  "data": [
-    {
-      "success": true,
-      "type": "POLYGON",
-      "data": { ... }
-    }
-  ]
-}
-```
-
-### ❌ Erreur validation (400)
-```json
-{
-  "success": false,
-  "message": "Format GeoJSON invalide: propriété 'type' manquante"
-}
-```
-
-### ❌ Erreur serveur (500)
-```json
-{
-  "success": false,
-  "message": "Erreur(s) lors de l'import.",
-  "errors": [
-    { "success": false, "message": "..." }
-  ]
-}
-```
-
----
-
-## 🔍 Logs de débogage
-
-Les deux routes génèrent des logs détaillés :
-```
-[SHAPEFILE] Requête reçue pour le traitement d'un shapefile
-[SHAPEFILE] Type de géométrie détecté : POLYGON
-[SHAPEFILE] === Traitement géométrie [0] ===
-[COMMON] Type de géométrie: POLYGON
-[COMMON] Colonne cible: loc_poly
-[COMMON] WKT: SRID=4326;POLYGON((4.5 48.5, ...))
-```
-
----
-
-## 🚀 Côté Frontend Angular
-
-### Service d'upload
-```typescript
-uploadShapefile(file: File, uuidOpe: string): Observable<any> {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('uuid_ope', uuidOpe);
-  
-  return this.http.post('/sites/put/ope_shapefile', formData);
-}
-
-uploadGeoJSON(file: File, uuidOpe: string): Observable<any> {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('uuid_ope', uuidOpe);
-  
-  return this.http.post('/sites/put/ope_geojson', formData);
-}
-```
-
-### Sélection automatique
-```typescript
-handleFileUpload(file: File, uuidOpe: string) {
-  const extension = file.name.split('.').pop()?.toLowerCase();
-  
-  if (extension === 'zip') {
-    this.uploadShapefile(file, uuidOpe).subscribe(...);
-  } else if (extension === 'geojson' || extension === 'json') {
-    this.uploadGeoJSON(file, uuidOpe).subscribe(...);
-  } else {
-    console.error('Format non supporté');
+  "message": "2 entité(s) de type ligne importée(s) (300 m).",
+  "data": {
+    "loc_id": 441,
+    "type": "ligne",
+    "srid_source": 2154,
+    "nb_entites": 2,
+    "nb_geometries": 4,
+    "surface_m2": null,
+    "longueur_m": 300.2
   }
 }
 ```
 
+### ❌ Erreurs
+| Code | Cas |
+|------|-----|
+| 400 | fichier absent, mauvaise extension, trop gros, `uuid_ope` absent, JSON/zip illisible, plusieurs shapefiles, types mélangés, géométrie invalide, hors de France |
+| 401 / 403 | token absent, expiré ou blacklisté |
+| 404 | opération introuvable |
+| 500 | erreur serveur (détail dans les logs) |
+
+```json
+{ "success": false, "message": "Le fichier mélange des lignes et des polygones : un seul type de géométrie par import." }
+```
+
 ---
 
-## 📝 Notes importantes
+## 📝 Notes
 
-1. **Nettoyage automatique** : Les fichiers temporaires sont supprimés après traitement
-2. **Validation stricte** : Format et structure validés avant insertion
-3. **Code factorisé** : La logique d'insertion est commune aux deux routes
-4. **Extensible** : Facile d'ajouter d'autres formats (KML, GPX, etc.)
+1. **Fichiers temporaires** : chaque import shapefile est extrait dans son propre dossier `uploads/extracted/shp-XXXX`,
+   supprimé à la fin avec le fichier uploadé (deux imports simultanés ne se gênent plus)
+2. **Extraction sûre** : les noms des fichiers extraits sont générés (`shapefile.<ext>`), jamais repris de l'archive
 
 ---
 
-**Date de création** : 27 janvier 2026  
-**Auteur** : GitHub Copilot  
-**Version** : 1.0
+**Date de création** : 27 janvier 2026
+**Mise à jour** : 12 octobre 2026 — conversion PostGIS, fusion en une ligne, reprojection, transaction, JWT
