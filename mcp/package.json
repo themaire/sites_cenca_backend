@@ -1,0 +1,20 @@
+{
+  "name": "cenca-mcp-sites",
+  "version": "1.0.0",
+  "main": "serveur_mcp.js",
+  "scripts": {
+    "start": "node serveur_mcp.js",
+    "test": "node --test test/"
+  },
+  "author": "Nicolas ELIE",
+  "license": "ISC",
+  "description": "Serveur MCP (lecture seule) sur la base PostgreSQL/PostGIS des sites du CENCA",
+  "private": true,
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "dotenv": "^16.6.1",
+    "express": "^5.3.0",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  }
+}
