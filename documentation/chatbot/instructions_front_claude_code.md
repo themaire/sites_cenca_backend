@@ -35,7 +35,7 @@ Le backend fait tourner un LLM local, **Gemma 4 via Ollama**. Ce LLM n'accède a
   |---|---|---|
   | `outil` | `{ "nom": "fiche_site", "arguments": { "site": "51BOIS01" } }` | Le modèle lance une requête métier. À afficher discrètement (« Recherche : fiche_site… ») et à conserver pour le dépliant « Requêtes utilisées ». |
   | `texte` | `{ "texte": "morceau" }` | Morceau de la réponse en Markdown, à concaténer au fil de l'eau. |
-  | `fin` | `{ "outils": ["fiche_site"], "duree_ms": 5321 }` | Fin normale. |
+  | `fin` | `{ "outils": ["fiche_site"], "duree_ms": 5321, "modele": "gemma4" }` | Fin normale (`modele` = modèle qui a répondu, à afficher discrètement, ex. en infobulle). |
   | `erreur` | `{ "message": "Aucun serveur Ollama n'est joignable." }` | Fin en erreur, message lisible à afficher. |
 
 - Si on interrompt la requête (`AbortController.abort()`), le backend arrête le modèle. Il faut le faire à la fermeture du panneau et sur « Nouvelle conversation » pendant une génération.

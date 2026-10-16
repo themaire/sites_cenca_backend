@@ -19,9 +19,8 @@ const { listerOutils, appelerOutil, documentationBase } = require('../fonctions/
 
 const router = express.Router();
 
-// Un ou plusieurs serveurs Ollama du LAN, séparés par des virgules : le premier joignable est utilisé
-const OLLAMA_URLS = (process.env.OLLAMA_URL || 'http://127.0.0.1:11434')
-    .split(',').map(s => s.trim()).filter(Boolean);
+// Serveurs Ollama du LAN, par ordre de préférence, séparés par des virgules.
+// Modèle propre à un serveur possible avec « | » : http://pi5:11434|gemma4:e2b (sinon OLLAMA_MODEL).
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4';
 const OLLAMA_NUM_CTX = Number(process.env.OLLAMA_NUM_CTX || 32768);
 
@@ -29,21 +28,38 @@ const TOURS_OUTILS_MAX = 8;       // appels au modèle avec outils avant de forc
 const MESSAGES_MAX = 20;          // historique conservé (le front porte la conversation)
 const LONGUEUR_MESSAGE_MAX = 4000;
 
-const clientsOllama = OLLAMA_URLS.map(host => ({ host, client: new Ollama({ host }) }));
+const serveursOllama = (process.env.OLLAMA_URL || 'http://127.0.0.1:11434')
+    .split(',').map(s => s.trim()).filter(Boolean)
+    .map((entree, rang) => {
+        const [host, modele] = entree.split('|').map(s => s.trim());
+        return { rang, host, modele: modele || OLLAMA_MODEL, client: new Ollama({ host }), enCours: 0 };
+    });
 
 /**
- * Premier serveur Ollama qui répond (GET /api/version, 2 s max), ou null.
+ * Choisit le serveur Ollama le moins occupé parmi ceux qui répondent (GET /api/version, 2 s max).
+ * « Occupé » = nombre de conversations que ce backend y fait tourner en ce moment ;
+ * à charge égale, l'ordre de OLLAMA_URL décide (serveur principal d'abord).
+ * Le serveur choisi est réservé (enCours + 1) : l'appelant doit appeler liberer() à la fin.
+ * Renvoie null si aucun serveur ne répond.
  */
-async function serveurOllamaDisponible() {
-    for (const serveur of clientsOllama) {
+async function choisirServeurOllama() {
+    const candidats = [...serveursOllama].sort((a, b) => a.enCours - b.enCours || a.rang - b.rang);
+    for (const serveur of candidats) {
+        // Réservé avant le test : deux questions simultanées ne visent pas le même serveur
+        serveur.enCours++;
         try {
             const reponse = await fetch(`${serveur.host}/api/version`, { signal: AbortSignal.timeout(2000) });
             if (reponse.ok) return serveur;
         } catch {
             console.warn(`[chat] Ollama injoignable : ${serveur.host}`);
         }
+        serveur.enCours--;
     }
     return null;
+}
+
+function liberer(serveur) {
+    if (serveur) serveur.enCours = Math.max(0, serveur.enCours - 1);
 }
 
 // Le LLM est coûteux en calcul : limite propre au chat, par utilisateur
@@ -94,14 +110,14 @@ function historiqueValide(messages) {
 /**
  * Message d'erreur lisible pour l'utilisateur.
  */
-function messageErreur(err, etape) {
+function messageErreur(err, etape, serveur) {
     const code = err?.cause?.code || err?.code;
     if (etape === 'mcp') return "Le serveur de requêtes métier (MCP) est injoignable.";
     if (code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'EHOSTUNREACH' || /fetch failed/i.test(err?.message)) {
         return 'Aucun serveur Ollama n\'est joignable.';
     }
     if (err?.status_code === 404 || /not found/i.test(err?.message)) {
-        return `Le modèle « ${OLLAMA_MODEL} » est introuvable sur le serveur Ollama.`;
+        return `Le modèle « ${serveur?.modele || OLLAMA_MODEL} » est introuvable sur le serveur Ollama ${serveur?.host || ''}.`;
     }
     return 'Erreur du chatbot : ' + (err?.message || err);
 }
@@ -139,11 +155,13 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
     });
 
     let etape = 'mcp';
+    let serveur = null;
     try {
         const [outils, systeme] = await Promise.all([listerOutils(), promptSysteme()]);
         etape = 'ollama';
 
-        const serveur = await serveurOllamaDisponible();
+        // Toute la conversation (tous les tours d'outils) reste sur le même serveur
+        serveur = await choisirServeurOllama();
         if (!serveur) throw Object.assign(new Error('aucun serveur Ollama joignable'), { code: 'ECONNREFUSED' });
         const ollama = serveur.client;
 
@@ -153,7 +171,7 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
             // Dernier tour : plus d'outils, le modèle doit conclure avec ce qu'il a
             const avecOutils = tour < TOURS_OUTILS_MAX;
             fluxEnCours = await ollama.chat({
-                model: OLLAMA_MODEL,
+                model: serveur.modele,
                 messages,
                 tools: avecOutils ? outils : undefined,
                 stream: true,
@@ -195,14 +213,15 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
             }
         }
 
-        envoyer('fin', { outils: outilsAppeles, duree_ms: Date.now() - debut });
+        envoyer('fin', { outils: outilsAppeles, duree_ms: Date.now() - debut, modele: serveur.modele });
     } catch (err) {
         if (!interrompu) {
             console.error(`Erreur chatbot (${etape}) :`, err);
-            envoyer('erreur', { message: messageErreur(err, etape) });
+            envoyer('erreur', { message: messageErreur(err, etape, serveur) });
         }
     } finally {
-        console.log(`[chat] ${identifiant} (${OLLAMA_MODEL}) : ${outilsAppeles.length} outil(s) [${outilsAppeles.join(', ')}] en ${Date.now() - debut} ms${interrompu ? ' (interrompu)' : ''}`);
+        liberer(serveur);
+        console.log(`[chat] ${identifiant} (${serveur ? `${serveur.modele} @ ${serveur.host}` : 'aucun serveur'}) : ${outilsAppeles.length} outil(s) [${outilsAppeles.join(', ')}] en ${Date.now() - debut} ms${interrompu ? ' (interrompu)' : ''}`);
         if (!interrompu) res.end();
     }
 });
