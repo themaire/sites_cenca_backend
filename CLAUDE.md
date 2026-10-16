@@ -94,6 +94,10 @@ The `/api-geo` routes aggregate three external sources:
 
 A separate Docker service (`surveillance/`) runs a Node.js monitoring agent that polls API routes and sends Telegram alerts on failure.
 
+### MCP server (`mcp/`)
+
+Read-only MCP server giving Claude SQL access to the database. Self-contained sub-project: own `package.json`, `.env`, pool, `Dockerfile`. Runs as service `mcp_sites` in the root `docker-compose.yml` with `network_mode: host` (deliberately on no compose network, isolated from `node_app`/`surveillance`); listens on `MCP_HOST:MCP_PORT` (8891). Never import it from `node_base_sites.js` nor reuse the backend pool. Offline tests: `cd mcp && npm test`. Business knowledge for Claude lives in `mcp/documentation/base_sites_cenca.md`. See `mcp/README.md`.
+
 ## Key Conventions
 
 - **Authentication**: Apply `authenticateToken` from `fonctionsSites.js` to protect routes. It attaches decoded JWT payload to `req.tokenInfos`.

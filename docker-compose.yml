@@ -48,6 +48,30 @@ services:
       - ./surveillance/routes-config.json:/app/surveillance/routes-config.json
       - ./.env:/app/.env:ro
 
+  # Serveur MCP lecture seule pour Claude (voir mcp/README.md).
+  # Volontairement HORS du réseau "monitoring" : network_mode host l'exclut de tout réseau du compose,
+  # il ne voit pas node_app/prometheus/surveillance et eux ne le voient pas.
+  # Il écoute directement sur MCP_HOST:MCP_PORT (mcp/.env, 127.0.0.1 par défaut) et ALLOWED_IPS voit
+  # les vraies adresses clientes. Pas de "ports:" : Docker ne peut pas l'exposer en contournant le pare-feu.
+  # Propre .env (rôle PostgreSQL dédié), propre pool : ne partage rien avec le backend.
+  mcp_sites:
+    build: ./mcp
+    image: cenca-mcp-sites:latest
+    container_name: cenca_mcp_sites
+    network_mode: host
+    env_file: ./mcp/.env
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
 networks:
   monitoring:
     driver: bridge
