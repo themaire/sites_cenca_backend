@@ -16,12 +16,15 @@ npm install
 npm start
 # equivalent: node node_base_sites.js
 
-# Docker (development)
-docker-compose up
+# Development (outside Docker): npm install + npm start, port 8887
+./start.sh dev
 
-# Docker (production — HTTPS + SSL certs)
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Docker (production — HTTPS + SSL certs): docker-compose.yml is the complete prod config
+docker-compose up -d
+# equivalent, kept for start.sh prod: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
+
+There is deliberately no `docker-compose.override.yml`: docker-compose loads it automatically, which once made a plain `up` start production in HTTP (dev mode). Do not recreate one. `docker-compose` 1.29.2 on this server crashes when recreating `node_app` (`KeyError: 'ContainerConfig'`); workaround: `docker-compose rm -sf node_app` then `up -d`.
 
 There is no test runner configured. Manual testing is done via `test_backend.sh`.
 

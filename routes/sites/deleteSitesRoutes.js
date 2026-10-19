@@ -25,6 +25,7 @@ const pool = require("../../dbPool/poolConnect.js");
 
 // Generateur de requetes SQL
 const { generateDeleteQuery } = require("../../fonctions/querys.js");
+const { fichiersCacheDuDocument } = require("../../fonctions/fonctionsFichiers.js");
 
 // Supprimer un acte MFU et tous ses rattachements multi-sites en une transaction.
 router.delete('/mfu/actes/uuid_acte=:acteUuid', async (req, res) => {
@@ -631,15 +632,6 @@ router.delete("/delete/:table", (req, res) => {
                     }
                     console.log("Fichier à supprimer:", filePath);
                     
-                    // Construire le pattern de recherche pour tous les fichiers de cache liés.
-                    // Le cache est nommé avec les '/' remplacés par '_' (même logique que pictureRoute.js).
-                    // Exemple: "photos/doc_42_plan.jpg" → cherche "photos_doc_42_plan_*.jpg"
-                    const safeFileName = doc_path.replace(/\//g, '_');
-                    const ext = path.extname(safeFileName);
-                    const basename = path.basename(safeFileName, ext);
-                    const cachePattern = `${basename}_*${ext}`;
-                    console.log("Pattern de cache à rechercher:", cachePattern);
-                    
                     // Vérification : le fichier doit être dans le bon dossier
                     if (!filePath.startsWith(uploadsDir)) {
                         console.warn("Tentative de path traversal détectée:", doc_path);
@@ -649,16 +641,12 @@ router.delete("/delete/:table", (req, res) => {
                             code: 3,
                         });
                     }
-                    // Supprimer tous les fichiers de cache correspondant au pattern
-                    // console.log("[DELETE] doc_path reçu :", doc_path);
-                    // console.log("[DELETE] filePath résolu :", filePath);
-                    // console.log("[DELETE] cacheDir :", cacheDir);
-                    // console.log("[DELETE] cachePattern :", cachePattern);
-                    if (safeFileName.endsWith(".jpg") || safeFileName.endsWith(".jpeg") || safeFileName.endsWith(".png")) {
-                        const glob = require('glob');
-                        const cacheFiles = glob.sync(path.join(cacheDir, cachePattern));
+                    // Supprimer les vignettes en cache de cette image (toutes largeurs),
+                    // nommées par pictureRoute.js avec la même fonction (fonctionsFichiers.js)
+                    if (/\.(jpg|jpeg|png)$/i.test(doc_path)) {
+                        const cacheFiles = fichiersCacheDuDocument(doc_path, cacheDir);
                         console.log(`[DELETE] Fichiers de cache trouvés (${cacheFiles.length}):`, cacheFiles);
-                        
+
                         cacheFiles.forEach(cacheFile => {
                             fs.unlink(cacheFile, (err) => {
                                 if (err) {

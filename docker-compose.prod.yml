@@ -1,17 +1,10 @@
 # docker-compose.prod.yml
-# Ce fichier est utilisé pour la production avec la commande :
-# docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-# version: '3.8'
+# Conservé pour compatibilité (start.sh, habitudes) :
+#   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# La configuration de production est désormais entièrement dans docker-compose.yml :
+# ce fichier ne fait que la réaffirmer.
 
 services:
   node_app:
-    user: "0:0"  # Exécuter en tant que root pour accéder aux certificats SSL
     environment:
       - NODE_ENV=production
-    volumes:
-      # Montage des certificats SSL pour HTTPS en production (lecture seule)
-      - /etc/letsencrypt/live/si-10.cen-champagne-ardenne.org:/etc/letsencrypt/live/si-10.cen-champagne-ardenne.org:ro
-      
-      # Montage du répertoire de stockage des données de l'application (lecture/écriture)
-      - /mnt/storage_data/app/:/mnt/storage_data/app/

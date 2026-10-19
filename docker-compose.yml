@@ -1,8 +1,15 @@
 
+# Configuration de PRODUCTION complète : un simple « docker-compose up -d » lance la prod (HTTPS).
+# Le développement se fait hors Docker : ./start.sh dev (npm start, port 8887).
+# Ne pas créer de docker-compose.override.yml : docker-compose le chargerait d'office.
+
 services:
   node_app:
     build: .
     # image: node_pgsql-node_app:latest
+    user: "0:0"  # root pour lire les certificats SSL montés en lecture seule
+    environment:
+      - NODE_ENV=production  # absent du .env : sans lui le code démarre en HTTP (development)
     volumes:
       - /etc/letsencrypt/live/si-10.cen-champagne-ardenne.org:/etc/letsencrypt/live/si-10.cen-champagne-ardenne.org:ro
       - /mnt/storage_data/app/:/mnt/storage_data/app/

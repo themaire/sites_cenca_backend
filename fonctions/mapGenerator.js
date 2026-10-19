@@ -1,7 +1,7 @@
 const sharp = require("sharp");
+// Couleur fixe par type d'opération, commune avec la carte du front
+const { couleurOperation } = require("./couleursOperations.js");
 
-// Palette réutilisée/étendue par rapport à scripts/gen_fiche_travaux.js (bleuFonce, orange)
-const OPERATION_COLORS = ["1a397b", "ff6600", "2e8b57", "8b1a1a", "6a3d9a", "b6d0f7"];
 // Jaune vif : le gris utilisé initialement se fondait dans les tons gris/beige
 // des parcelles agricoles sur les vues satellite réelles, le rendant invisible.
 const SITE_CONTOUR_COLOR = "ffe600";
@@ -149,40 +149,6 @@ async function fetchBasemapImage(bbox, w, h) {
     throw new Error("Aucun fournisseur de fond de plan disponible (IGN, ESRI, OSM)");
 }
 
-// Habillage vecteur (limites + noms de communes), superposé en transparence par-dessus
-// le fond satellite pour donner un repère aux personnes qui ne connaissent pas le terrain.
-// Best-effort : une indisponibilité ne doit pas empêcher la génération de la carte.
-const COMMUNES_OVERLAY = {
-    url: "https://data.geopf.fr/wms-v/wms",
-    layer: "CADASTRALPARCELS.COMMUNES",
-    creditLabel: "Limites communales : IGN Géoportail – BD PARCELLAIRE (data.geopf.fr)",
-};
-
-async function fetchCommunesOverlay(bbox, w, h) {
-    const url = `${COMMUNES_OVERLAY.url}?` + new URLSearchParams({
-        SERVICE: "WMS", VERSION: "1.3.0", REQUEST: "GetMap",
-        LAYERS: COMMUNES_OVERLAY.layer, STYLES: "", CRS: "EPSG:3857",
-        BBOX: `${bbox.minX},${bbox.minY},${bbox.maxX},${bbox.maxY}`,
-        WIDTH: String(w), HEIGHT: String(h), FORMAT: "image/png", TRANSPARENT: "true",
-    });
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), WMS_FETCH_TIMEOUT_MS);
-    try {
-        const resp = await fetch(url, { signal: controller.signal });
-        const contentType = resp.headers.get("content-type") || "";
-        if (!resp.ok || !contentType.startsWith("image/")) {
-            throw new Error(`réponse invalide (status=${resp.status}, content-type=${contentType})`);
-        }
-        console.log("[mapGenerator] Habillage communes OK");
-        return Buffer.from(await resp.arrayBuffer());
-    } catch (err) {
-        console.warn(`[mapGenerator] Habillage communes indisponible (carte générée sans) : ${err.message}`);
-        return null;
-    } finally {
-        clearTimeout(timer);
-    }
-}
-
 function toPixel([x, y], bbox, w, h) {
     const px = (x - bbox.minX) / (bbox.maxX - bbox.minX) * w;
     const py = h - (y - bbox.minY) / (bbox.maxY - bbox.minY) * h; // inversion : l'axe Y du SVG grandit vers le bas
@@ -248,10 +214,11 @@ function geometryToSvg(geometry, color, bbox, w, h, { dashed = false, fillOpacit
 // properties.type vaut "libellé(action) / libellé(action_2)" ; comme dans le reste du
 // document (rubrique "Type d'opération"), seul le libellé d'action_2 est affiché.
 function legendLabelFor(properties) {
-    const primary = properties.code || properties.titre || properties.date_debut || "";
+    // Pas de date : le numéro suffit à relier l'opération au tableau de la fiche
+    const primary = properties.code || properties.titre || "";
     const label = properties.action_2_libelle || properties.type || "";
     if (primary && label) return `${primary} – ${label}`;
-    return primary || label;
+    return primary || label || "Opération";
 }
 
 function computeVisualCentroid(geometry) {
@@ -280,7 +247,8 @@ function estimateTextWidth(text, fontSizePx, { bold = false } = {}) {
 function buildLegendSvg(rawFeatures, colorsByUuid, numbersByUuid, hasSiteContour, w, h) {
     const items = rawFeatures.slice(0, MAX_LEGEND_ITEMS);
     const maxLabelChars = 30;
-    const labelStartX = 36;
+    const labelStartX = 42;
+    const contourSampleW = 24; // échantillon du contour du site, assez long pour montrer l'alternance des tirets
     const padLeft = 10;
     const lineH = 23;
     const titleText = "Légende :";
@@ -310,7 +278,9 @@ function buildLegendSvg(rawFeatures, colorsByUuid, numbersByUuid, hasSiteContour
     let rows = `<text x="${x0 + padLeft}" y="${y}" font-size="16" font-weight="bold" font-family="Calibri, sans-serif" fill="#1a1a1a">${titleText}</text>`;
     if (hasSiteContour) {
         y += lineH;
-        rows += `<line x1="${x0 + padLeft}" y1="${y - 5}" x2="${x0 + padLeft + 14}" y2="${y - 5}" stroke="#${SITE_CONTOUR_COLOR}" stroke-width="3" stroke-dasharray="5,3"/>` +
+        // Même rendu que le contour sur la carte (geometryToSvg) : halo noir continu sous le pointillé jaune
+        rows += `<line x1="${x0 + padLeft}" y1="${y - 5}" x2="${x0 + padLeft + contourSampleW}" y2="${y - 5}" stroke="#000000" stroke-opacity="0.55" stroke-width="5.5"/>` +
+            `<line x1="${x0 + padLeft}" y1="${y - 5}" x2="${x0 + padLeft + contourSampleW}" y2="${y - 5}" stroke="#${SITE_CONTOUR_COLOR}" stroke-width="3" stroke-dasharray="7,4"/>` +
             `<text x="${x0 + labelStartX}" y="${y}" font-size="13.5" font-family="Calibri, sans-serif" fill="#222222">${siteContourText}</text>`;
     }
     y += lineH;
@@ -378,9 +348,8 @@ function buildScaleBarSvg(bbox, w, h) {
 }
 
 // Crédits des sources, en bas à gauche sous la flèche du nord / barre d'échelle.
-function buildCreditSvg(basemapProviderName, hasCommunesOverlay, w, h) {
+function buildCreditSvg(basemapProviderName, w, h) {
     const lines = [`Fond de plan : ${basemapProviderName}`];
-    if (hasCommunesOverlay) lines.push(COMMUNES_OVERLAY.creditLabel);
 
     const fontSize = 10.5, lineH = 13, padX = 6;
     const widestLinePx = Math.max(...lines.map((l) => estimateTextWidth(l, fontSize)));
@@ -397,7 +366,7 @@ function buildCreditSvg(basemapProviderName, hasCommunesOverlay, w, h) {
 
 // numbersByUuid garantit que les badges sur la carte et les numéros de la légende
 // restent alignés même si certaines géométries sont filtrées lors de la projection.
-function buildOverlaySvg(rawFeatures, featuresMerc, siteContourMerc, colorsByUuid, numbersByUuid, bbox, w, h, basemapProviderName, hasCommunesOverlay) {
+function buildOverlaySvg(rawFeatures, featuresMerc, siteContourMerc, colorsByUuid, numbersByUuid, bbox, w, h, basemapProviderName) {
     const siteContour = siteContourMerc
         ? geometryToSvg(siteContourMerc, SITE_CONTOUR_COLOR, bbox, w, h, { dashed: true, fillOpacity: 0 })
         : "";
@@ -410,7 +379,7 @@ function buildOverlaySvg(rawFeatures, featuresMerc, siteContourMerc, colorsByUui
     const legend = buildLegendSvg(rawFeatures, colorsByUuid, numbersByUuid, !!siteContourMerc, w, h);
     const northArrow = buildNorthArrowSvg(w, h);
     const scaleBar = buildScaleBarSvg(bbox, w, h);
-    const credit = buildCreditSvg(basemapProviderName, hasCommunesOverlay, w, h);
+    const credit = buildCreditSvg(basemapProviderName, w, h);
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${siteContour}${shapes}${badges}${scaleBar}${northArrow}${credit}${legend}</svg>`;
 }
 
@@ -466,29 +435,22 @@ async function generateOperationsMapImage(operationsFeatureCollection, siteGeoJs
         const siteGeoJson = typeof siteGeoJsonRaw === "string" ? JSON.parse(siteGeoJsonRaw) : siteGeoJsonRaw;
         const siteContourMerc = siteGeoJson ? projectGeometry(siteGeoJson) : null;
 
-        const [{ buffer: basemapBuffer, providerName }, communesOverlayBuffer] = await Promise.all([
-            fetchBasemapImage(bbox, w, h),
-            fetchCommunesOverlay(bbox, w, h),
-        ]);
+        const { buffer: basemapBuffer, providerName } = await fetchBasemapImage(bbox, w, h);
 
         const colorsByUuid = {};
         const numbersByUuid = {};
         orderedFeatures.forEach((f, i) => {
             const uuid = f.properties.uuid_ope;
             const num = resolveNumber(f.properties) ?? (i + 1);
-            colorsByUuid[uuid] = OPERATION_COLORS[(num - 1) % OPERATION_COLORS.length];
+            colorsByUuid[uuid] = couleurOperation(f.properties.action_2);
             if (i < MAX_LEGEND_ITEMS) numbersByUuid[uuid] = num;
         });
 
-        const overlaySvg = buildOverlaySvg(orderedFeatures, featuresMerc, siteContourMerc, colorsByUuid, numbersByUuid, bbox, w, h, providerName, !!communesOverlayBuffer);
-
-        const composites = [];
-        if (communesOverlayBuffer) composites.push({ input: communesOverlayBuffer, top: 0, left: 0 });
-        composites.push({ input: Buffer.from(overlaySvg), top: 0, left: 0 });
+        const overlaySvg = buildOverlaySvg(orderedFeatures, featuresMerc, siteContourMerc, colorsByUuid, numbersByUuid, bbox, w, h, providerName);
 
         return await sharp(basemapBuffer)
             .resize(w, h, { fit: "fill" })
-            .composite(composites)
+            .composite([{ input: Buffer.from(overlaySvg), top: 0, left: 0 }])
             .png()
             .toBuffer();
     } catch (err) {

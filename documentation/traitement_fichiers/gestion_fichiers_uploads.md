@@ -311,7 +311,7 @@ const FILES_DIR_ENV = process.env.FILES_DIR_ENV || '/mnt/storage_data/app'
 | `GET`   | `/picts/img?file=...&width=...`          | pictureRoute.js              | Image redimensionnée (cache)   |
 | `PUT`   | `/sites/put/table=docs`                  | putSitesRoutes.js            | Upload documents/images        |
 | `DELETE`| `/sites/delete/:table?doc_path=...`      | deleteSitesRoutes.js         | Suppression fichier + cache    |
-| `PUT`   | `/sites/put/ope_shapefile`               | putSitesRoutes.js            | Upload shapefile (temporaire)  |
+| `POST`  | `/sites/put/ope_shapefile`               | putSitesRoutes.js            | Upload shapefile (temporaire)  |
 
 ---
 

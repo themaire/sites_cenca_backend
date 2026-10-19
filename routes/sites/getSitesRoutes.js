@@ -23,7 +23,7 @@ if (!fs.existsSync(CACHE_DIR)) {
 // Fonctions et connexion à PostgreSQL
 const { joinQuery, selectQuery, selectListTravauxQuery, ExecuteQuerySite, distinctSiteResearch, distinctResearchRaw,
     executeQueryAndRespond, reset, getBilan, } = require("../../fonctions/fonctionsSites.js");
-const { generateFicheTravauxWord } = require("../../scripts/gen_fiche_travaux.js");
+const { generateFicheTravauxWord, nomFichierFicheTravaux } = require("../../scripts/gen_fiche_travaux.js");
 const pool = require("../../dbPool/poolConnect.js");
 
 // Liste des sites diffusables (GeoJSON) pour le site vitrine (studio web externe)
@@ -1102,15 +1102,48 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
         "priorite",
         "status",
         "prochaine_etape",
+        "territoire",
     ];
+
+    // Sécurité (injection SQL) : `list` est concaténé dans le FROM, il doit donc être
+    // une des tables connues de cette route. Ajouter ici toute nouvelle table de liste de choix.
+    const allowedLists = [
+        ...simpleTables,
+        "docplan.typ_documents",
+        "sitcenca.typ_proprietaires",
+        "ope.actions",
+        "ope.financeurs",
+        "ope.typ_interventions",
+        "opegerer.typ_amenagements",
+        "typ_travauxsol",
+        "opegerer.typ_troupeaux",
+        "ope.listprogrammes",
+        "opegerer.libelles",
+        "sitcenca.libelles",
+        "files.libelles",
+        "admin.salaries",
+        "terr.bassins_agences",
+        "esp.typ_rgpt",
+        "sitcenca.typ_ouvertures",
+    ];
+    if (!allowedLists.includes(list)) {
+        return res.status(400).json({ success: false, message: "Liste de choix inconnue : " + list });
+    }
+    // files.libelles attend un identifiant numérique en option
+    if (list == "files.libelles" && option !== undefined && !/^\d+$/.test(option)) {
+        return res.status(400).json({ success: false, message: "Option invalide pour files.libelles : " + option });
+    }
+    const values = []; // Paramètres de la requête ($1, ...) : jamais de valeur utilisateur dans le texte SQL
 
     // Tables avec des noms de champs non normalisées
     if (list == "docplan.typ_documents") {
         SelectFields += "cd_type, libelle ";
         where = "order by libelle;";
+
     } else if (list == "sitcenca.typ_proprietaires") {
         SelectFields += "cd_type, libelle ";
         where = "order by cd_type;";
+        
     } else if (simpleTables.includes(list)) {
         SelectFields += "cd_type, libelle ";
 
@@ -1213,10 +1246,11 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
                 libnom_nom = option || base;
             }
 
-            // Construire la clause WHERE en utilisant `libnom_nom`
+            // Construire la clause WHERE en utilisant `libnom_nom` (passé en paramètre $1)
+            values.push(libnom_nom);
             where = "";
             where +=
-                "where libnom_id = (SELECT libnom_id FROM " + list + "_nom" + " where libnom_nom = '" + libnom_nom + "')";
+                "where libnom_id = (SELECT libnom_id FROM " + list + "_nom" + " where libnom_nom = $1)";
 
             const mapKey = modifier || base;
             if (optionLibIdMap[mapKey]) {
@@ -1225,8 +1259,9 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
 
             where += " order by lib_ordre;";
 
-        } else if (list == "files.libelles") {
-            where = "where libnom_id =" + option + " order by lib_ordre;";
+        } else if (list == "files.libelles" && option !== undefined) {
+            values.push(option);
+            where = "where libnom_id = $1 order by lib_ordre;";
 
         } else if (list == "admin.salaries" && option == undefined) {
             where = "where statut is true order by prenom;";
@@ -1264,7 +1299,12 @@ router.get("/selectvalues=:list/:option?", (req, res) => {
 
     const queryObject = {
         text: joinQuery(SelectFields, FromTable, where),
+        values,
     };
+
+    // Les listes de choix évoluent (ajout d'une valeur en base) : le navigateur ne doit pas
+    // garder la réponse en cache, sinon la nouvelle valeur n'apparaît qu'après un Ctrl + Maj + R.
+    res.setHeader("Cache-Control", "no-store");
 
     ExecuteQuerySite(
         pool,
@@ -1320,22 +1360,17 @@ router.get("/gen_fiche_travaux/uuid_proj=:uuid", async (req, res) => {
         }
         const buffer = await generateFicheTravauxWord(bilan);
 
-        const sanitize = (str) =>
-            String(str)
-                .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "") // enlève les accents
-                .replace(/[^\w\d_\-]/g, "_"); // remplace tout sauf lettres, chiffres, _ et - par _
-
-        const nom_site_sain = sanitize(bilan.site.nom);
-
         res.setHeader(
             "Content-Type",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         );
+        // ex. 2026_fiche_travaux_Milieu-Entretenir_10072.docx (voir nomFichierFicheTravaux)
         res.setHeader(
             "Content-Disposition",
-            `attachment; filename=fiche_travaux_${bilan.objectifs[0].obj_ope_str}-${nom_site_sain}.docx`
+            `attachment; filename="${nomFichierFicheTravaux(bilan)}"`
         );
+        // Rendre Content-Disposition lisible par le front (requête cross-origin)
+        res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
         res.send(buffer);
     } catch (error) {
         console.error("Erreur lors de la génération du Word :", error); // Log complet côté serveur

@@ -608,7 +608,20 @@ async function getBilan(uuid) {
     }
     const operations_geojson = await getData("operations_geojson", uuid);
 
-    return { projet, site, communes, objectifs, operations, operations_full, operations_geojson };
+    // Photos avant / après travaux du projet (files.docs) : la fiche ne garde que celles
+    // taguées FT_ / TR_ avant / apres. Sans photos, la fiche se génère quand même.
+    let photos_travaux = [];
+    try {
+        const [avant, apres] = await Promise.all([
+            getData("photos_travaux_avant", uuid),
+            getData("photos_travaux_apres", uuid),
+        ]);
+        photos_travaux = [...avant, ...apres];
+    } catch (err) {
+        console.error("getBilan() : photos travaux non récupérées :", err.message);
+    }
+
+    return { projet, site, communes, objectifs, operations, operations_full, operations_geojson, photos_travaux };
 }
 
 function getData(type, uuid, hostname, port = process.env.NODE_PORT) {
@@ -642,6 +655,10 @@ function getData(type, uuid, hostname, port = process.env.NODE_PORT) {
             path = "/sites/commune/uuid=" + uuid;
         } else if (type === "operations_geojson") {
             path = "/sites/projets/uuid=" + uuid + "/operations/geojson";
+        } else if (type === "photos_travaux_avant") {
+            path = "/sites/docs/3/cd_type=7/full/" + uuid; // libnom_id 3 = travaux, doc_type 7 = photos avant
+        } else if (type === "photos_travaux_apres") {
+            path = "/sites/docs/3/cd_type=8/full/" + uuid; // doc_type 8 = photos après
         }
 
         const options = {
