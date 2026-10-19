@@ -23,6 +23,8 @@ const router = express.Router();
 // Modèle propre à un serveur possible avec « | » : http://pi5:11434|gemma4:e2b (sinon OLLAMA_MODEL).
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4';
 const OLLAMA_NUM_CTX = Number(process.env.OLLAMA_NUM_CTX || 32768);
+// Raisonnement préalable des modèles « thinking » : ignoré par le flux envoyé au front, coûteux sur CPU
+const OLLAMA_THINK = process.env.OLLAMA_THINK === 'true';
 
 const TOURS_OUTILS_MAX = 8;       // appels au modèle avec outils avant de forcer une réponse
 const MESSAGES_MAX = 20;          // historique conservé (le front porte la conversation)
@@ -84,6 +86,9 @@ async function promptSysteme() {
         "Règles :",
         "- Réponds toujours en français, de façon concise, en Markdown (listes, tableaux courts).",
         "- Tes seules sources de données sont les outils fournis (requêtes métier en lecture seule). Appelle-les pour chaque question portant sur les données ; tu peux en enchaîner plusieurs.",
+        "- Appelle l'outil adapté directement, sans demander la permission ni annoncer ce que tu vas faire.",
+        "- Passe aux outils les noms (communes, sites) tels que l'utilisateur les a écrits. N'invente jamais de code INSEE ni de code de site : n'utilise un code que s'il vient de l'utilisateur ou d'un résultat d'outil.",
+        "- Si un outil ne renvoie aucune ligne, réessaie autrement (nom partiel, autre outil) avant de conclure qu'il n'y a rien.",
         "- N'invente jamais de chiffre, de site, de code ou de date : tout doit venir d'un résultat d'outil. Si un résultat est vide ou tronqué, dis-le.",
         "- Si aucun outil ne permet de répondre, explique-le simplement et propose une question voisine à laquelle tu peux répondre.",
         "- Les codes de site ressemblent à 51BOIS01 ; si l'utilisateur donne un nom, cherche d'abord le site avec rechercher_sites.",
@@ -133,6 +138,8 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
     const outilsAppeles = [];
     let interrompu = false;
     let fluxEnCours = null;
+    let relance = false;      // relance déjà faite après une réponse vide
+    let reponseVide = false;
 
     res.writeHead(200, {
         'Content-Type': 'text/event-stream; charset=utf-8',
@@ -175,10 +182,13 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
                 messages,
                 tools: avecOutils ? outils : undefined,
                 stream: true,
+                think: OLLAMA_THINK,
                 options: { num_ctx: OLLAMA_NUM_CTX },
             });
 
             let contenu = '';
+            let raisonnement = 0;
+            let raisonFin;
             const appels = [];
             for await (const morceau of fluxEnCours) {
                 const message = morceau.message || {};
@@ -186,11 +196,27 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
                     contenu += message.content;
                     envoyer('texte', { texte: message.content });
                 }
+                if (message.thinking) raisonnement += message.thinking.length;
                 if (message.tool_calls?.length) appels.push(...message.tool_calls);
+                if (morceau.done) raisonFin = morceau.done_reason;
             }
             fluxEnCours = null;
 
-            if (appels.length === 0 || !avecOutils) break;
+            if (appels.length === 0 || !avecOutils) {
+                // Les petits modèles terminent parfois sans rien écrire après un résultat d'outil :
+                // une relance explicite, une seule fois, avant de signaler l'échec au front.
+                if (!contenu.trim() && outilsAppeles.length > 0 && !interrompu) {
+                    const relancer = !relance && avecOutils;
+                    console.warn(`[chat] ${identifiant} : réponse vide au tour ${tour} (done_reason=${raisonFin}, raisonnement=${raisonnement} car.)${relancer ? ', relance' : ''}`);
+                    if (relancer) {
+                        relance = true;
+                        messages.push({ role: 'user', content: 'Rédige maintenant ta réponse à ma question à partir des résultats des outils ci-dessus.' });
+                        continue;
+                    }
+                    reponseVide = true;
+                }
+                break;
+            }
 
             messages.push({ role: 'assistant', content: contenu, tool_calls: appels });
             for (const appel of appels) {
@@ -213,7 +239,11 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
             }
         }
 
-        envoyer('fin', { outils: outilsAppeles, duree_ms: Date.now() - debut, modele: serveur.modele });
+        if (reponseVide) {
+            envoyer('erreur', { message: "Le modèle n'a pas formulé de réponse à partir des données. Reformulez la question ou réessayez." });
+        } else {
+            envoyer('fin', { outils: outilsAppeles, duree_ms: Date.now() - debut, modele: serveur.modele });
+        }
     } catch (err) {
         if (!interrompu) {
             console.error(`Erreur chatbot (${etape}) :`, err);

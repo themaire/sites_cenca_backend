@@ -210,9 +210,9 @@ function enregistrerRequetesMetier(server) {
 
   outil(server, 'sites_par_commune', {
     title: 'Sites par commune',
-    description: "Sites présents sur une commune (d'après esp.localisations), par nom de commune (sans accents) ou code INSEE.",
+    description: "Sites présents sur une commune (d'après esp.localisations), par nom de commune (accents et casse indifférents, nom partiel accepté) ou code INSEE. Préférer le nom : ne passer un code INSEE que s'il est connu avec certitude.",
     inputSchema: {
-      commune: z.string().min(2).describe('Nom (partiel) ou code INSEE'),
+      commune: z.string().min(2).describe('Nom de la commune tel qu\'écrit par l\'utilisateur (ex. Villechetif), ou code INSEE connu'),
     },
   }, async ({ commune }) => {
     const lignes = await lire(`
