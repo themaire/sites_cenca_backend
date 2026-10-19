@@ -55,8 +55,58 @@ async function avecClient(traitement) {
 function texteResultat(resultat) {
     return (resultat.content || [])
         .filter(bloc => bloc.type === 'text')
-        .map(bloc => bloc.text)
+        .map(bloc => compacter(bloc.text))
         .join('\n');
+}
+
+// Liste non vide d'objets « plats » (valeurs simples) : se présente en tableau
+function estTableau(valeur) {
+    return Array.isArray(valeur) && valeur.length > 0 && valeur.every(ligne =>
+        ligne && typeof ligne === 'object' && !Array.isArray(ligne)
+        && Object.values(ligne).every(v => v === null || typeof v !== 'object'));
+}
+
+// Colonnes techniques inutiles au modèle (le MCP reste complet pour les autres clients)
+const COLONNES_MASQUEES = new Set(['insee', 'bassin_agence', 'alerte_fin', 'validite']);
+const LIGNES_MAX_MODELE = 30;   // au-delà, le modèle reçoit le total exact et les premières lignes
+
+const vide = v => v === null || v === undefined || v === '';
+
+function tableau(lignes) {
+    let colonnes = [...new Set(lignes.flatMap(ligne => Object.keys(ligne)))];
+    colonnes = colonnes.filter(c =>
+        !COLONNES_MASQUEES.has(c)
+        // Code brut doublé d'un libellé (typ_site / typ_site_txt) : le libellé suffit
+        && !(colonnes.includes(`${c}_txt`) || colonnes.includes(`${c}_libelle`))
+        // uuid_site seulement pour les sites sans code (les outils de site acceptent le code)
+        && !(c === 'uuid_site' && colonnes.includes('code') && lignes.every(l => !vide(l.code)))
+        && lignes.some(l => !vide(l[c])));
+    const cellule = (ligne, c) => {
+        if (c === 'uuid_site' && !vide(ligne.code)) return '';
+        return vide(ligne[c]) ? '' : String(ligne[c]).replace(/[\t\r\n]+/g, ' ');
+    };
+    const affichees = lignes.slice(0, LIGNES_MAX_MODELE);
+    const texte = [colonnes.join('\t'), ...affichees.map(ligne => colonnes.map(c => cellule(ligne, c)).join('\t'))].join('\n');
+    return lignes.length > affichees.length
+        ? `${texte}\n[… ${affichees.length} lignes affichées sur ${lignes.length} : le total exact est ${lignes.length}]`
+        : texte;
+}
+
+/**
+ * Résultat JSON du MCP → texte compact pour le modèle : les listes de lignes deviennent des tableaux
+ * (colonnes séparées par des tabulations, noms de colonnes une seule fois). Sur CPU, chaque jeton
+ * lu coûte. Colonnes techniques retirées et lignes plafonnées (LIGNES_MAX_MODELE, total annoncé).
+ */
+function compacter(texte) {
+    let donnees;
+    try { donnees = JSON.parse(texte); } catch { return texte; }
+    if (!donnees || typeof donnees !== 'object' || Array.isArray(donnees)) {
+        return estTableau(donnees) ? tableau(donnees) : JSON.stringify(donnees);
+    }
+    return Object.entries(donnees).map(([cle, valeur]) => {
+        if (estTableau(valeur)) return `${cle} (tableau, colonnes séparées par des tabulations) :\n${tableau(valeur)}`;
+        return `${cle} : ${valeur !== null && typeof valeur === 'object' ? JSON.stringify(valeur) : valeur}`;
+    }).join('\n');
 }
 
 /**
@@ -86,7 +136,11 @@ async function appelerOutil(nom, args = {}) {
     if (!OUTILS_AUTORISES.includes(nom)) {
         throw new Error(`Outil non autorisé : ${nom}`);
     }
-    const resultat = await avecClient(client => client.callTool({ name: nom, arguments: args }));
+    // Les petits modèles envoient null ou "" pour un paramètre non utilisé : le MCP les refuserait
+    const argumentsUtiles = Object.fromEntries(
+        Object.entries(args || {}).filter(([, valeur]) => valeur !== null && valeur !== undefined && valeur !== '')
+    );
+    const resultat = await avecClient(client => client.callTool({ name: nom, arguments: argumentsUtiles }));
     let texte = texteResultat(resultat);
     if (resultat.isError) texte = `Erreur : ${texte}`;
     if (texte.length > TAILLE_MAX_RESULTAT) {

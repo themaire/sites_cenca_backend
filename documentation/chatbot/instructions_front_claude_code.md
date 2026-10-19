@@ -19,23 +19,25 @@ Le backend fait tourner un LLM local, **Gemma 4 via Ollama**. Ce LLM n'accède a
 - Corps : `{ "messages": [ { "role": "user" | "assistant", "content": "..." }, ... ] }`.
   - C'est **tout l'historique** de la conversation : le backend est sans état et c'est le front qui porte la conversation.
   - Le dernier message doit être `user`.
-  - Le backend ne garde que les 20 derniers messages, tronqués à 4 000 caractères chacun.
+  - Chaque message est tronqué à 4 000 caractères. Une conversation compte au plus **10 questions** (réglable côté backend) : au-delà, ou si l'historique dépasse 30 000 caractères, le backend répond `413` (voir ci-dessous).
 - Réponses d'erreur JSON (hors flux) :
 
   | Code | Cause |
   |---|---|
   | `400` | historique invalide |
+  | `413` | conversation pleine (`code: "conversation_pleine"`) : il faut ouvrir une nouvelle conversation |
   | `401` / `403` | token absent, expiré ou blacklisté |
   | `429` | plus de 20 questions en 5 minutes par utilisateur |
 
-  Le corps vaut `{ message }`.
+  Le corps vaut `{ message }` (plus `code` pour le `413`).
 - Réponse normale : **flux SSE** (`Content-Type: text/event-stream`). Chaque événement a la forme `event: <nom>\ndata: <json>\n\n` :
 
   | Événement | `data` | Usage |
   |---|---|---|
-  | `outil` | `{ "nom": "fiche_site", "arguments": { "site": "51BOIS01" } }` | Le modèle lance une requête métier. À afficher discrètement (« Recherche : fiche_site… ») et à conserver pour le dépliant « Requêtes utilisées ». |
+  | `outil` | `{ "nom": "fiche_site", "arguments": { "site": "10035" } }` | Le modèle lance une requête métier. À afficher discrètement (« Recherche : fiche_site… ») et à conserver pour le dépliant « Requêtes utilisées ». |
+  | `attente` | `{ "message": "Le chatbot traite déjà 1 autre question : la réponse prendra plus de temps que d'habitude.", "questions_en_cours": 1 }` | Envoyé au début, seulement si le serveur est déjà occupé. Afficher le message dans la bulle en attente (style discret, italique), et le retirer dès le premier `texte`. |
   | `texte` | `{ "texte": "morceau" }` | Morceau de la réponse en Markdown, à concaténer au fil de l'eau. |
-  | `fin` | `{ "outils": ["fiche_site"], "duree_ms": 5321, "modele": "gemma4" }` | Fin normale (`modele` = modèle qui a répondu, à afficher discrètement, ex. en infobulle). |
+  | `fin` | `{ "outils": ["fiche_site"], "duree_ms": 5321, "modele": "gemma4", "questions_restantes": 7 }` | Fin normale (`modele` = modèle qui a répondu, à afficher discrètement, ex. en infobulle ; `questions_restantes` = questions encore possibles dans cette conversation). |
   | `erreur` | `{ "message": "Aucun serveur Ollama n'est joignable." }` | Fin en erreur, message lisible à afficher. |
 
 - Si on interrompt la requête (`AbortController.abort()`), le backend arrête le modèle. Il faut le faire à la fermeture du panneau et sur « Nouvelle conversation » pendant une génération.
@@ -65,8 +67,9 @@ export interface MessageChat { role: 'user' | 'assistant'; content: string; outi
 export interface AppelOutil { nom: string; arguments: Record<string, unknown>; }
 export type EvenementChat =
   | { type: 'outil'; donnees: AppelOutil }
+  | { type: 'attente'; donnees: { message: string; questions_en_cours: number } }
   | { type: 'texte'; donnees: { texte: string } }
-  | { type: 'fin'; donnees: { outils: string[]; duree_ms: number } }
+  | { type: 'fin'; donnees: { outils: string[]; duree_ms: number; modele: string; questions_restantes: number } }
   | { type: 'erreur'; donnees: { message: string } };
 ```
 
@@ -106,11 +109,16 @@ Composant standalone, sélecteur `app-chatbot`.
 
 - Sous chaque réponse : un dépliant **« Requêtes utilisées (n) »** (`mat-expansion-panel` ou un simple `<details>`) qui liste chaque outil et ses arguments. C'est ce qui permet de faire confiance à la réponse.
 - Zone de saisie (`textarea`) : Entrée envoie, Maj+Entrée fait un retour à la ligne. Bouton envoyer désactivé pendant la génération, avec un bouton « Stop » à la place qui interrompt la requête.
-- Message d'accueil avec 3 exemples cliquables :
+- Message d'accueil avec 3 exemples cliquables, plus un lien « Que sais-tu faire ? » qui envoie cette question (le chatbot répond par la liste de ses capacités, sans interroger la base) :
   - « Quels actes fonciers arrivent à échéance dans les 6 mois ? »
-  - « Quels sites gérons-nous à Reims ? »
-  - « Bilan des travaux réalisés en 2025 par type d'action »
+  - « Quels sont les nouveaux sites de 2025 dans l'Aube ? »
+  - « Quels sont les plus grands sites d'Aurore ? »
 - Erreurs : afficher le message dans la bulle en style d'erreur, et ne pas l'inclure dans l'historique renvoyé ensuite.
+- Limite de conversation, d'après `questions_restantes` du dernier `fin` :
+  - 1 ou 2 : bandeau discret au-dessus de la saisie, « Plus que N question(s) dans cette conversation » ;
+  - 0 : saisie désactivée, avec le message « Conversation terminée : ouvrez une nouvelle conversation pour continuer » et un bouton « Nouvelle conversation » bien visible ;
+  - un `413` (cas d'un historique trop volumineux) se traite pareil : message du backend + bouton « Nouvelle conversation ».
+- Le chatbot refuse en une phrase les questions hors du périmètre des sites du CENCA : rien de spécial à faire côté front.
 - Historique : en mémoire dans le composant, sauvegardé dans `sessionStorage` (clé `chatbot_historique`, avec `try/catch`) pour survivre à la navigation. « Nouvelle conversation » le vide.
 - Mention discrète en pied de panneau : « Assistant IA local, lecture seule : vérifiez les informations importantes. »
 
@@ -130,7 +138,9 @@ Composant standalone, sélecteur `app-chatbot`.
    - les tableaux Markdown sont bien rendus ;
    - le dépliant « Requêtes utilisées » est rempli.
 4. Poser une question de suivi (« et pour le premier ? ») : l'historique doit être bien transmis.
-5. Cliquer sur « Stop » pendant une génération : la requête est annulée, sans erreur en console.
-6. Se déconnecter : le bouton disparaît. Expirer le token : le message « Session expirée » s'affiche.
-7. Vérifier l'affichage mobile et le non-chevauchement avec `back-to-top`.
-8. `ng build` sans erreur.
+5. Enchaîner les questions jusqu'à la limite : bandeau à 2 et 1 question restante, saisie bloquée à 0, « Nouvelle conversation » repart de zéro.
+6. Poser une question hors sujet (« Donne-moi une recette de tarte ») : refus en une phrase.
+7. Cliquer sur « Stop » pendant une génération : la requête est annulée, sans erreur en console.
+8. Se déconnecter : le bouton disparaît. Expirer le token : le message « Session expirée » s'affiche.
+9. Vérifier l'affichage mobile et le non-chevauchement avec `back-to-top`.
+10. `ng build` sans erreur.

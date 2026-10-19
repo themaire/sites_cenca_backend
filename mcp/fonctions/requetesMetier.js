@@ -13,6 +13,16 @@ const { LECTURE_SEULE, reponse, erreur, journaliser, lire, resultat } = require(
 
 const FICHIER_DOC = path.join(__dirname, '..', 'documentation', 'base_sites_cenca.md');
 
+// « Aube », « 10 », « 8 » → « 10 », « 08 » (départements de Champagne-Ardenne)
+const DEPARTEMENTS = { ardennes: '08', aube: '10', marne: '51', 'haute-marne': '52', 'haute marne': '52' };
+function numeroDepartement(valeur) {
+  if (!valeur) return null;
+  const texte = String(valeur).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (DEPARTEMENTS[texte]) return DEPARTEMENTS[texte];
+  const chiffres = texte.match(/^\d{1,2}$/);
+  return chiffres ? chiffres[0].padStart(2, '0') : texte;
+}
+
 const schemaSite = z.string().min(1).describe('Code du site (5 chiffres, ex. 10035, ou ex. 51BOIS01) ou uuid_site');
 
 /**
@@ -60,29 +70,49 @@ function enregistrerRequetesMetier(server) {
   // ---------------------------------------------------------------- Sites
   outil(server, 'rechercher_sites', {
     title: 'Rechercher des sites',
-    description: "Recherche des sites gérés (vue sitcenca.listesitescenca, celle de la barre de recherche de l'application) par texte (nom ou code, sans tenir compte des accents), type, commune, milieu naturel ou responsable.",
+    description: "Recherche des sites gérés (vue sitcenca.listesitescenca, celle de la barre de recherche de l'application) par texte (nom ou code, sans tenir compte des accents), type, commune, milieu naturel, responsable ou année de premier contrat (prem_ctr = année d'entrée du site, « nouveaux sites » d'une année). Renvoie la surface de chaque site (surface_ha, calculée sur la géométrie) ; tri = 'surface' pour les plus grands d'abord. Ne pas passer une année dans texte : utiliser annee_premier_contrat ou premier_contrat_depuis.",
     inputSchema: {
       texte: z.string().optional().describe('Partie du nom ou du code du site'),
       typ_site: z.string().optional().describe('Code du type de site (cf. sitcenca.typ_sites)'),
       commune: z.string().optional().describe('Nom (partiel) ou code INSEE de commune'),
       milieu: z.string().optional().describe('Partie du libellé de milieu naturel'),
-      responsable: z.string().optional().describe('Responsable du site (valeur de la colonne responsable)'),
+      responsable: z.string().optional().describe('Responsable du site : code salarié (ex. AL) ou prénom / nom (ex. Aurore)'),
+      departement: z.string().optional().describe('Département : 08 (Ardennes), 10 (Aube), 51 (Marne) ou 52 (Haute-Marne)'),
+      annee_premier_contrat: z.number().int().min(1900).max(2100).optional().describe("Année exacte du premier contrat (nouveaux sites de cette année), ex. 2025"),
+      premier_contrat_depuis: z.number().int().min(1900).max(2100).optional().describe("Premier contrat cette année-là ou après, ex. 2020"),
+      tri: z.enum(['code', 'surface']).default('code').describe("Ordre des résultats : 'surface' = plus grands sites d'abord (surface calculée sur la géométrie)"),
       inclure_invalides: z.boolean().default(false).describe('Inclure les sites marqués validite = false'),
       limite: z.number().int().min(1).max(2000).default(200),
     },
-  }, async ({ texte, typ_site, commune, milieu, responsable, inclure_invalides, limite }) => {
+  }, async ({ texte, typ_site, commune, milieu, responsable, departement, annee_premier_contrat, premier_contrat_depuis, tri, inclure_invalides, limite }) => {
     const lignes = await lire(`
       SELECT uuid_site, code, nom, typ_site, typ_site_txt, statut, communes, insee, milieux_naturels,
-             bassin_agence, responsable, prem_ctr, fin, alerte_fin, validite
+             bassin_agence, responsable,
+             (SELECT concat_ws(' ', sal.prenom, sal.nom) FROM admin.salaries sal WHERE sal.cd_salarie = responsable) AS responsable_nom,
+             prem_ctr, fin, alerte_fin, validite, surf.surface_ha
       FROM sitcenca.listesitescenca
+      LEFT JOIN LATERAL (
+        SELECT round((sum(ST_Area(g.geom)) / 10000)::numeric, 2) AS surface_ha
+        FROM esp.geometries g
+        WHERE g.espace = listesitescenca.espace AND g.validite IS NOT FALSE AND g.geom IS NOT NULL
+      ) surf ON true
       WHERE ($1::text IS NULL OR unaccent(nom) ILIKE unaccent('%' || $1 || '%') OR code ILIKE '%' || $1 || '%')
         AND ($2::text IS NULL OR typ_site = $2)
         AND ($3::text IS NULL OR unaccent(communes) ILIKE unaccent('%' || $3 || '%') OR insee ILIKE '%' || $3 || '%')
         AND ($4::text IS NULL OR unaccent(milieux_naturels) ILIKE unaccent('%' || $4 || '%'))
-        AND ($5::text IS NULL OR responsable ILIKE '%' || $5 || '%')
+        AND ($5::text IS NULL OR upper(responsable) = upper($5) OR responsable IN (
+              SELECT cd_salarie FROM admin.salaries
+              WHERE unaccent(prenom) ILIKE unaccent($5) OR unaccent(nom) ILIKE unaccent($5)
+                 OR unaccent(concat_ws(' ', prenom, nom)) ILIKE unaccent($5)))
         AND ($6::boolean OR validite IS NOT FALSE)
-      ORDER BY code
-      LIMIT $7`, [texte || null, typ_site || null, commune || null, milieu || null, responsable || null, inclure_invalides, limite]);
+        AND ($8::int IS NULL OR prem_ctr = $8)
+        AND ($9::int IS NULL OR prem_ctr >= $9)
+        -- Département : d'après l'INSEE des communes s'il est renseigné, sinon le préfixe du code site
+        AND ($10::text IS NULL OR CASE WHEN coalesce(insee, '') <> '' THEN insee ~ ('(^|\\|)' || $10)
+                                      ELSE left(code, 2) = $10 END)
+      ORDER BY CASE WHEN $11 = 'surface' THEN surf.surface_ha END DESC NULLS LAST, code
+      LIMIT $7`, [texte || null, typ_site || null, commune || null, milieu || null, responsable || null, inclure_invalides, limite,
+                  annee_premier_contrat ?? null, premier_contrat_depuis ?? null, numeroDepartement(departement), tri]);
     return resultat(lignes);
   });
 
