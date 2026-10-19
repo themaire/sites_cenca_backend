@@ -13,7 +13,7 @@ const { LECTURE_SEULE, reponse, erreur, journaliser, lire, resultat } = require(
 
 const FICHIER_DOC = path.join(__dirname, '..', 'documentation', 'base_sites_cenca.md');
 
-const schemaSite = z.string().min(1).describe('Code du site (ex. 51BOIS01) ou uuid_site');
+const schemaSite = z.string().min(1).describe('Code du site (5 chiffres, ex. 10035, ou ex. 51BOIS01) ou uuid_site');
 
 /**
  * Déclare un outil en lecture seule avec journalisation et gestion d'erreur communes.
@@ -260,7 +260,7 @@ function enregistrerRequetesMetier(server) {
   // ---------------------------------------------------------------- Maîtrise foncière
   outil(server, 'foncier_site', {
     title: "Maîtrise foncière d'un site",
-    description: "Actes de maîtrise foncière ou d'usage (MFU) d'un site, y compris les actes multi-sites, avec leurs parcelles résumées (nombre, surface par type de propriétaire). detail_parcelles = true pour la liste des parcelles.",
+    description: "Actes de maîtrise foncière ou d'usage (MFU) d'un site, avec dates de début et de fin, échéances (échu, échéance à moins de 2 ans), y compris les actes multi-sites, avec leurs parcelles résumées (nombre, surface par type de propriétaire). detail_parcelles = true pour la liste des parcelles.",
     inputSchema: {
       site: schemaSite,
       detail_parcelles: z.boolean().default(false),
@@ -304,7 +304,7 @@ function enregistrerRequetesMetier(server) {
 
   outil(server, 'echeances_actes', {
     title: 'Échéances des actes fonciers',
-    description: "Actes MFU (conventions, baux…) arrivant à échéance dans les N mois, ou déjà échus depuis moins de N mois, tous sites confondus.",
+    description: "Actes MFU (conventions, baux…) arrivant à échéance dans les N mois, ou déjà échus depuis moins de N mois, tous sites confondus. Pour les actes d'un seul site, utiliser foncier_site.",
     inputSchema: {
       mois: z.number().int().min(1).max(120).default(12),
       inclure_echus: z.boolean().default(true),

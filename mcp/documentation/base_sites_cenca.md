@@ -27,7 +27,7 @@ esp.localisations      (espace, commune = code INSEE) -> terr.listecommunes.inse
 ```
 
 ### `sitcenca.sites`
-`uuid_site`, `code` (ex. code site CEN), `espace`, `typ_site` → `sitcenca.typ_sites`, `responsable` → `admin.salaries.cd_salarie`, `prem_ctr` (année du premier contrat), `ref_fcen` (référence fédération des CEN), `pourc_gere`, `surf_actes`, `parties_gerees`, `typ_ouverture`, `description_site`, `sensibilite` / `remq_sensibilite` (site sensible : ne pas diffuser la localisation), `ref_public` (diffusable au public), `id_mnhn` / `url_mnhn` (fiche INPN), `url_cen`, `ref_pmfu_id` → `sitcenca.projets_mfu.pmfu_id`, `validite`, `actuel`.
+`uuid_site`, `code` (code site CEN : 5 chiffres comme `10035` pour la majorité, ou `51BOIS01` ; un code à 5 chiffres n'est pas un code INSEE), `espace`, `typ_site` → `sitcenca.typ_sites`, `responsable` → `admin.salaries.cd_salarie`, `prem_ctr` (année du premier contrat), `ref_fcen` (référence fédération des CEN), `pourc_gere`, `surf_actes`, `parties_gerees`, `typ_ouverture`, `description_site`, `sensibilite` / `remq_sensibilite` (site sensible : ne pas diffuser la localisation), `ref_public` (diffusable au public), `id_mnhn` / `url_mnhn` (fiche INPN), `url_cen`, `ref_pmfu_id` → `sitcenca.projets_mfu.pmfu_id`, `validite`, `actuel`.
 
 ### `esp.espaces`
 `uuid_espace`, `id_espace`, `nom` (**le nom du site est ici**), `surface` (déclarée), `typ_espace` → `esp.typ_espaces`, `zh` (zone humide), `bassin_agence`, `typ_geologie`, `carto_hab`, `rgpt`.
