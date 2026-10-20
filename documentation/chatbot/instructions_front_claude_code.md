@@ -129,7 +129,7 @@ Composant standalone, sélecteur `app-chatbot`.
 - Message d'accueil avec 3 exemples cliquables, plus un lien « Que sais-tu faire ? » qui envoie cette question (le chatbot répond par la liste de ses capacités, sans interroger la base) :
   - « Quels actes fonciers arrivent à échéance dans les 6 mois ? »
   - « Quels sont les nouveaux sites de 2025 dans l'Aube ? »
-  - « Quels sont les plus grands sites d'Aurore ? »
+  - « Quels sont les plus grands sites gérés par Aurore ? » (formulation sans ambiguïté : « d'Aurore » faisait hésiter le modèle entre une personne et une commune)
 - Erreurs : afficher le message dans la bulle en style d'erreur, et ne pas l'inclure dans l'historique renvoyé ensuite.
 - Limite de conversation, d'après `questions_restantes` du dernier `fin` :
   - 1 ou 2 : bandeau discret au-dessus de la saisie, « Plus que N question(s) dans cette conversation » ;
