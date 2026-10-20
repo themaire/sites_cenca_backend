@@ -69,6 +69,8 @@ const NOM_MASQUE = 'Espèce sensible (nom masqué)';
 
 /** Comparaison sans accents ni casse (pas d'extension unaccent sur natobs) */
 const sansAccent = expr => `translate(lower(${expr}), 'àâäáãåçéèêëíìîïñóòôöõúùûüýÿ', 'aaaaaaceeeeiiiinooooouuuuyy')`;
+/** Idem, et traits d'union, apostrophes et espaces multiples ramenés à un espace (noms de commune) */
+const nomSansSeparateurs = expr => `trim(regexp_replace(${sansAccent(expr)}, '[^a-z0-9]+', ' ', 'g'))`;
 
 const schemaAnnee = z.number().int().min(1900).max(2100);
 const filtresCommuns = {
@@ -104,7 +106,7 @@ function conditions(args, params) {
   }
   if (args.commune) {
     const p = ajouter(args.commune.trim());
-    c.push(`(w."code insee" = ${p} OR ${sansAccent('w.commune')} = ${sansAccent(p)})`);
+    c.push(`(w."code insee" = ${p} OR ${nomSansSeparateurs('w.commune')} = ${nomSansSeparateurs(p)})`);
   }
   return c;
 }

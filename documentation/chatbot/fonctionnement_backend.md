@@ -39,6 +39,10 @@ Le même mécanisme s'applique au délai global de `OLLAMA_TIMEOUT_MS` (15 min p
 |---|---|
 | Répond avec des données sans avoir appelé d'outil (inventées) | Texte retenu tant qu'aucun outil n'a servi ; s'il contient des données, relance unique exigeant l'appel d'outil, sinon message d'erreur |
 | Refus « réservé aux données des sites » alors qu'un outil a déjà été appelé | Les 120 premiers caractères sont retenus ; refus détecté → non affiché, relance unique |
+| Refus sans outil d'une question du périmètre (« Et c'est quand même le site 52134 ») | `questionDansLePerimetre` : la question cite un code de site, ou la réponse précédente contenait des données → refus non affiché, relance unique. Une vraie demande hors sujet reste refusée sans relance |
+| Préambule avant un appel d'outil (« Bonjour ! Je réponds sur… » quand une salutation accompagne la question) | Au premier tour, le texte retenu d'un tour qui appelle un outil est écarté : seule la réponse rédigée d'après le résultat est affichée |
+| Canal de raisonnement de Gemma 4 recopié dans le texte (`thought` / `<channel|>`, même avec think désactivé) | `filtreCanal` retire `<|channel>…<channel|>` et la ligne `thought` orpheline du flux, même coupés entre deux morceaux |
+| Nom de commune réécrit à l'officielle (« Colombey-les-Deux-Églises » alors que la base a « Colombey les Deux Églises ») | Côté MCP, noms de commune et de site comparés sans accents, casse, traits d'union ni apostrophes (`nomCompare`) |
 | Réponse vide | Relance unique, puis erreur |
 | S'emballe en écrivant des espaces sans fin (tableaux) | Au-delà de 200 espaces de suite, génération arrêtée et réponse terminée avec une note |
 | Liens de site inventés ou mal formés (`(10030)`, `https://domaine/site/10030`) | `reecritureLiens` : seuls les codes / uuid vus dans les résultats d'outils de la question (ou dans les réponses précédentes) restent des liens, ramenés à `/site/<code>` |
