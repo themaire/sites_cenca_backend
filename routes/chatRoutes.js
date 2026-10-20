@@ -165,7 +165,7 @@ function promptSysteme() {
         "- Ne demande pas de précision quand un outil permet déjà de répondre à l'interprétation la plus probable : réponds avec celle-ci ; seulement si la question était ambiguë, indique en une ligne comment tu l'as comprise. « Nouveaux sites », « sites contractualisés » ou « apparus » une année donnée = année de premier contrat (rechercher_sites, annee_premier_contrat).",
         "- Réponds toujours en français, de façon concise, en Markdown (listes, tableaux courts).",
         "- Tes seules sources de données sont les outils fournis (requêtes métier en lecture seule). Appelle-les pour chaque question portant sur les données ; tu peux en enchaîner plusieurs.",
-        "- Si l'utilisateur demande ce que tu sais faire, de l'aide ou des exemples (ou salue simplement), réponds en deux phrases, sans appeler d'outil : tu réponds sur les sites, le foncier, les projets et travaux, les indicateurs du tableau de bord et les observations naturalistes ; « Aide » donne la liste détaillée avec des exemples.",
+        "- Si le message se limite à demander ce que tu sais faire, de l'aide, des exemples ou à saluer, réponds en deux phrases, sans appeler d'outil : tu réponds sur les sites, le foncier, les projets et travaux, les indicateurs du tableau de bord et les observations naturalistes ; « Aide » donne la liste détaillée avec des exemples. Si une salutation accompagne une question (« salut, on a un site à … ? »), ne te présente pas : traite directement la question avec les outils.",
         "- Appelle l'outil adapté directement, sans demander la permission ni annoncer ce que tu vas faire.",
         "- Passe aux outils les noms (communes, sites) tels que l'utilisateur les a écrits. N'invente jamais de code INSEE ni de code de site : n'utilise un code que s'il vient de l'utilisateur ou d'un résultat d'outil.",
         "- Si un outil ne renvoie aucune ligne, réessaie autrement (nom partiel, autre outil) avant de conclure qu'il n'y a rien.",
@@ -299,6 +299,104 @@ const DEBUT_REFUS = 120;
 // Octets bruts que le modèle écrit parfois en jetons (« Site g<0xC2>éré »)
 const nettoyer = texte => texte.replace(/<0x[0-9A-Fa-f]{2}>/g, '');
 
+// Canal de raisonnement de Gemma 4 recopié dans le texte même sans think : « <|channel>thought\n…<channel|> »,
+// souvent vide et parfois sans l'ouverture (« thought\n<channel|> »). Retiré du flux morceau par morceau :
+// une marque coupée entre deux morceaux attend le suivant.
+const OUVRE_CANAL = '<|channel>';
+const FERME_CANAL = '<channel|>';
+function filtreCanal() {
+    let reste = '';
+    let dansCanal = false;
+    let debutLigne = true;   // le prochain caractère envoyé commence une ligne
+    let sortie = '';
+    const emettre = texte => {
+        if (!texte) return;
+        sortie += texte;
+        debutLigne = texte.endsWith('\n');
+    };
+    // Position à partir de laquelle la fin du texte peut être le début d'une marque
+    const debutDeMarque = texte => {
+        for (let k = Math.min(texte.length, FERME_CANAL.length - 1); k > 0; k--) {
+            const fin = texte.slice(-k);
+            if (OUVRE_CANAL.startsWith(fin) || FERME_CANAL.startsWith(fin)) return texte.length - k;
+        }
+        const ligne = texte.lastIndexOf('\n') + 1;
+        const derniere = texte.slice(ligne);
+        if ((ligne > 0 || debutLigne) && /^[ \t]*[a-z]*[ \t]*$/.test(derniere)) {
+            const mot = derniere.trim();
+            if (mot === '' ? derniere.length > 0 : 'thought'.startsWith(mot)) return ligne;
+        }
+        return texte.length;
+    };
+    return {
+        ajouter(morceau) {
+            let texte = reste + morceau;
+            reste = '';
+            sortie = '';
+            while (texte) {
+                if (dansCanal) {
+                    const fin = texte.indexOf(FERME_CANAL);
+                    if (fin === -1) {
+                        reste = texte.slice(-(FERME_CANAL.length - 1));
+                        break;
+                    }
+                    texte = texte.slice(fin + FERME_CANAL.length);
+                    dansCanal = false;
+                    continue;
+                }
+                // Ouverture : marque <|channel>, ou ligne « thought » seule (ouverture absorbée)
+                let ouverture = texte.indexOf(OUVRE_CANAL);
+                let longueur = OUVRE_CANAL.length;
+                const ligneThought = /(^|\n)[ \t]*thought[ \t]*\n/g;
+                let m;
+                while ((m = ligneThought.exec(texte)) && m.index === 0 && m[1] === '' && !debutLigne) { /* pas en début de ligne */ }
+                if (m && (ouverture === -1 || m.index + m[1].length < ouverture)) {
+                    ouverture = m.index + m[1].length;
+                    longueur = m[0].length - m[1].length;
+                }
+                const fermeture = texte.indexOf(FERME_CANAL);
+                if (fermeture !== -1 && (ouverture === -1 || fermeture < ouverture)) {
+                    // Fermeture orpheline : seule la marque est retirée
+                    emettre(texte.slice(0, fermeture));
+                    texte = texte.slice(fermeture + FERME_CANAL.length);
+                    continue;
+                }
+                if (ouverture !== -1) {
+                    emettre(texte.slice(0, ouverture));
+                    texte = texte.slice(ouverture + longueur);
+                    dansCanal = true;
+                    continue;
+                }
+                const coupe = debutDeMarque(texte);
+                emettre(texte.slice(0, coupe));
+                reste = texte.slice(coupe);
+                break;
+            }
+            return sortie;
+        },
+        // Fin du message : un canal resté ouvert est du raisonnement, écarté
+        vider() {
+            const texte = dansCanal ? '' : reste;
+            reste = '';
+            dansCanal = false;
+            return texte;
+        },
+    };
+}
+
+// Code de site (5 chiffres ou 51BOIS01) dans un message : la question porte forcément sur les données
+const CODE_SITE = /\b(?:\d{5}|\d{2}[A-Za-z]{2,5}\d{2}[a-z]?)\b/;
+
+/**
+ * Un refus « réservé aux données des sites » sans aucun outil appelé est une erreur du modèle quand la
+ * question cite un code de site, ou qu'elle fait suite à une réponse qui contenait des données.
+ */
+function questionDansLePerimetre(historique) {
+    if (CODE_SITE.test(historique[historique.length - 1].content)) return true;
+    const precedente = [...historique].reverse().find(m => m.role === 'assistant');
+    return !!precedente && (/\]\(\/site\//.test(precedente.content) || ressembleADesDonnees(precedente.content));
+}
+
 // État de Sonneur pour le front : occupé = toutes les places prises, la saisie doit être bloquée
 router.get('/etat', authenticateToken, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -429,11 +527,13 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
             let surveillerRefus = !retenir && !relanceRefus && avecOutils;
             let attente = '';
             let refus = false;
+            const canal = filtreCanal();
             for await (const morceau of flux) {
                 const message = morceau.message || {};
-                if (message.content) {
+                const brut = canal.ajouter(nettoyer(message.content || '')) + (morceau.done ? canal.vider() : '');
+                if (brut) {
                     let texte = '';
-                    for (const car of nettoyer(message.content)) {
+                    for (const car of brut) {
                         blancs = car === ' ' || car === '\t' ? blancs + 1 : 0;
                         if (blancs <= 2) texte += car;
                     }
@@ -486,6 +586,14 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
                 if (!retenir) envoyer('texte', { texte: liens.ajouter(note) });
             }
 
+            if (retenir && appels.length === 0 && avecOutils && !relanceRefus && !interrompu
+                && REFUS.test(contenu.slice(0, DEBUT_REFUS)) && questionDansLePerimetre(historique)) {
+                console.warn(`[chat] ${identifiant} : refus hors périmètre sans outil au tour ${tour} sur une question du périmètre, relance`);
+                relanceRefus = true;
+                messages.push({ role: 'user', content: "Ma question porte bien sur les données du CENCA (sites, projets, travaux, foncier, observations) : appelle l'outil adapté, avec les sites, codes et communes cités dans la conversation, et réponds d'après son résultat." });
+                continue;
+            }
+
             if (retenir && appels.length === 0 && contenu.trim() && ressembleADesDonnees(contenu) && !interrompu) {
                 console.warn(`[chat] ${identifiant} : données sans appel d'outil au tour ${tour}${relanceSansOutil ? ', abandon' : ', relance'}`);
                 if (!relanceSansOutil && avecOutils) {
@@ -497,8 +605,11 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
                 reponseInventee = true;
                 break;
             }
-            // Texte retenu sans données (présentation, refus, précision) ou préambule d'un appel d'outil
-            const finTexte = retenir ? liens.ajouter(contenu) + liens.vider() : liens.vider();
+            // Texte retenu sans données (présentation, refus, précision) : envoyé maintenant. Le préambule
+            // retenu d'un appel d'outil (« Bonjour ! Je réponds sur… », « Je vais chercher… ») est écarté :
+            // la réponse viendra après le résultat de l'outil.
+            const preambule = retenir && appels.length > 0 && avecOutils;
+            const finTexte = retenir ? (preambule ? '' : liens.ajouter(contenu) + liens.vider()) : liens.vider();
             if (finTexte) envoyer('texte', { texte: finTexte });
 
             if (appels.length === 0 || !avecOutils) {

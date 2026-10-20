@@ -14,6 +14,7 @@ services:
       # deux backends sur le même Ollama se ralentissent et se vident le cache du prompt l'un l'autre
       - OLLAMA_URL=http://192.168.1.26:11434
       - OLLAMA_MODEL=gemma4:26b
+      - OLLAMA_NUM_CTX=32768  # le .env du dev le réduit pour le portable
     volumes:
       - /etc/letsencrypt/live/si-10.cen-champagne-ardenne.org:/etc/letsencrypt/live/si-10.cen-champagne-ardenne.org:ro
       - /mnt/storage_data/app/:/mnt/storage_data/app/
