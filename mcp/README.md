@@ -28,6 +28,8 @@ Il vit dans le dépôt du backend mais tourne dans **son propre processus et son
 | `indicateurs_activite` | Animations et plans de gestion de l'année précédente, parcelles questionnées en animation foncière | Grafana (`opeautres.synth_*_n-1`, `irenee.histo_foncier`) |
 | `controle_donnees_sites` | Sites gérés sans géométrie, sans acte (ou acte sans parcelle), avec données manquantes | Grafana |
 
+Les outils qui portent sur un site (`fiche_site`, `geometrie_site`, `foncier_site`, `travaux_site`, `webobs_site`) acceptent son code, son uuid ou son nom (même partiel). Les recherches de texte (noms de sites et de communes, milieux, titres, espèces) ignorent la casse, les accents, la ponctuation (« Colombey-les-Deux-Églises » = « Colombey les Deux Eglises ») et les abréviations « St » / « Ste » (`texteNormalise` dans `fonctions/utilitaires.js`). C'est utile car la base des sites écrit les communes sans traits d'union, alors que WebObs les écrit avec.
+
 **Observations naturalistes WebObs** (base `natobs`, autre serveur PostgreSQL, déclarés seulement si `WEBOBS_DB_HOST` est renseigné ; requêtes prédéfinies, jamais de SQL libre sur cette base) :
 
 | Outil | Rôle |

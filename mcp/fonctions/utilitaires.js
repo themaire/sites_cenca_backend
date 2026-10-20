@@ -46,10 +46,25 @@ async function lireWebobs(sql, params = []) {
 }
 
 /**
+ * Expression SQL d'un texte normalisé pour la comparaison : minuscules, sans accents, ponctuation
+ * (traits d'union, apostrophes…) réduite à une espace, « St » / « Ste » écrits « saint » / « sainte ».
+ * « Colombey-les-Deux-Églises », « Colombey les Deux Eglises » → « colombey les deux eglises ».
+ * `sansAccent` : expression SQL minuscule sans accents (unaccent par défaut ; natobs n'a pas l'extension).
+ */
+function texteNormalise(expr, sansAccent = e => `lower(unaccent(${e}))`) {
+  return `btrim(regexp_replace(regexp_replace(regexp_replace(${sansAccent(expr)}, '[^a-z0-9]+', ' ', 'g'), '\\mste\\M', 'sainte', 'g'), '\\mst\\M', 'saint', 'g'))`;
+}
+
+/** Condition SQL : `colonne` contient `valeur` (expression ou paramètre $n), comparaison normalisée */
+function contientTexte(colonne, valeur) {
+  return `${texteNormalise(colonne)} LIKE '%' || ${texteNormalise(valeur)} || '%'`;
+}
+
+/**
  * Résultat tabulaire tronqué à MAX_ROWS lignes.
  */
 function resultat(lignes, extra = {}) {
   return reponse({ ...extra, nb_lignes: lignes.length, tronque: lignes.length > MAX_ROWS, lignes: lignes.slice(0, MAX_ROWS) });
 }
 
-module.exports = { MAX_ROWS, QUERY_TIMEOUT_MS, LECTURE_SEULE, reponse, erreur, journaliser, lire, lireWebobs, resultat };
+module.exports = { MAX_ROWS, QUERY_TIMEOUT_MS, LECTURE_SEULE, reponse, erreur, journaliser, lire, lireWebobs, resultat, texteNormalise, contientTexte };

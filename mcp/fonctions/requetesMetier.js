@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { z } = require('zod');
-const { LECTURE_SEULE, reponse, erreur, journaliser, lire, resultat } = require('./utilitaires');
+const { LECTURE_SEULE, reponse, erreur, journaliser, lire, resultat, contientTexte } = require('./utilitaires');
 
 const FICHIER_DOC = path.join(__dirname, '..', 'documentation', 'base_sites_cenca.md');
 
@@ -23,7 +23,7 @@ function numeroDepartement(valeur) {
   return chiffres ? chiffres[0].padStart(2, '0') : texte;
 }
 
-const schemaSite = z.string().min(1).describe('Code du site (5 chiffres, ex. 10035, ou ex. 51BOIS01) ou uuid_site');
+const schemaSite = z.string().min(1).describe('Code du site (ex. 10035, 51BOIS01), uuid_site ou nom du site (même partiel, sans accents)');
 
 /**
  * Déclare un outil en lecture seule avec journalisation et gestion d'erreur communes.
@@ -59,6 +59,13 @@ async function trouverSite(site) {
   return sites[0];
 }
 
+/** Équivalent JS de texteNormalise (SQL), pour comparer un nom saisi à un nom lu en base */
+function normaliser(texte) {
+  return String(texte).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/œ/g, 'oe').replace(/æ/g, 'ae').replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\bste\b/g, 'sainte').replace(/\bst\b/g, 'saint').trim();
+}
+
 /**
  * Comme trouverSite, mais accepte aussi un nom de site (même partiel, sans accents ni casse).
  */
@@ -76,14 +83,14 @@ async function trouverSiteParNom(site) {
     WHERE s.validite IS NOT FALSE AND ${condition}
     ORDER BY s.actuel IS NOT FALSE DESC, s.typ_site, e.nom
     LIMIT 10`, valeurs);
-  let sites = await chercher(`unaccent(e.nom) ILIKE unaccent('%' || $1 || '%')`, [texte]);
+  let sites = await chercher(contientTexte('e.nom', '$1'), [texte]);
   if (sites.length === 0) {
     // Sinon tous les mots significatifs (3 lettres ou plus), dans n'importe quel ordre
     const mots = texte.split(/[\s'’-]+/).filter(m => m.length >= 3);
-    if (mots.length) sites = await chercher(mots.map((_, i) => `unaccent(e.nom) ILIKE unaccent('%' || $${i + 1} || '%')`).join(' AND '), mots);
+    if (mots.length) sites = await chercher(mots.map((_, i) => contientTexte('e.nom', `$${i + 1}`)).join(' AND '), mots);
   }
   if (sites.length === 0) throw new Error(`Aucun site ne correspond à "${site}". Utiliser rechercher_sites.`);
-  const exact = sites.filter(x => x.nom.localeCompare(texte, 'fr', { sensitivity: 'base' }) === 0);
+  const exact = sites.filter(x => normaliser(x.nom) === normaliser(texte));
   if (sites.length > 1 && exact.length !== 1) {
     throw new Error(`Plusieurs sites correspondent à "${site}" : ${sites.map(x => `${x.code || x.uuid_site} ${x.nom}`).join(' ; ')}. Rappeler l'outil avec le code du site voulu.`);
   }
@@ -127,10 +134,10 @@ function enregistrerRequetesMetier(server) {
         FROM esp.geometries g
         WHERE g.espace = listesitescenca.espace AND g.validite IS NOT FALSE AND g.geom IS NOT NULL
       ) surf ON true
-      WHERE ($1::text IS NULL OR unaccent(nom) ILIKE unaccent('%' || $1 || '%') OR code ILIKE '%' || $1 || '%')
+      WHERE ($1::text IS NULL OR ${contientTexte('nom', '$1')} OR code ILIKE '%' || $1 || '%')
         AND ($2::text IS NULL OR typ_site = $2)
-        AND ($3::text IS NULL OR unaccent(communes) ILIKE unaccent('%' || $3 || '%') OR insee ILIKE '%' || $3 || '%')
-        AND ($4::text IS NULL OR unaccent(milieux_naturels) ILIKE unaccent('%' || $4 || '%'))
+        AND ($3::text IS NULL OR ${contientTexte('communes', '$3')} OR insee ILIKE '%' || $3 || '%')
+        AND ($4::text IS NULL OR ${contientTexte('milieux_naturels', '$4')})
         AND ($5::text IS NULL OR upper(responsable) = upper($5) OR responsable IN (
               SELECT cd_salarie FROM admin.salaries
               WHERE unaccent(prenom) ILIKE unaccent($5) OR unaccent(nom) ILIKE unaccent($5)
@@ -152,7 +159,7 @@ function enregistrerRequetesMetier(server) {
     description: "Tout sur un site : identité (site + espace), type, responsable, surfaces (déclarée et calculée sur la géométrie), centroïde WGS84, communes, conservateurs bénévoles, documents de gestion, actes de maîtrise foncière (résumé) et projets.",
     inputSchema: { site: schemaSite },
   }, async ({ site }) => {
-    const { uuid_site, espace } = await trouverSite(site);
+    const { uuid_site, espace } = await trouverSiteParNom(site);
 
     const [identite] = await lire(`
       SELECT s.uuid_site, s.code, e.nom, s.typ_site, ts.libelle AS typ_site_libelle,
@@ -230,7 +237,7 @@ function enregistrerRequetesMetier(server) {
       tolerance_m: z.number().min(0).max(100).default(2).describe('Tolérance de simplification en mètres (0 = géométrie exacte)'),
     },
   }, async ({ site, tolerance_m }) => {
-    const { uuid_site, code, nom, espace } = await trouverSite(site);
+    const { uuid_site, code, nom, espace } = await trouverSiteParNom(site);
     const [{ geojson }] = await lire(`
       SELECT json_build_object(
         'type', 'FeatureCollection',
@@ -282,7 +289,7 @@ function enregistrerRequetesMetier(server) {
       JOIN terr.listecommunes com ON com.insee_com = loca.commune
       JOIN esp.espaces e ON e.uuid_espace = loca.espace
       JOIN sitcenca.sites s ON s.espace = e.uuid_espace
-      WHERE com.insee_com = $1 OR unaccent(com.nom) ILIKE unaccent('%' || $1 || '%')
+      WHERE com.insee_com = $1 OR ${contientTexte('com.nom', '$1')}
       ORDER BY com.nom, s.code`, [commune.trim()]);
     return resultat(lignes);
   });
@@ -327,7 +334,7 @@ function enregistrerRequetesMetier(server) {
       detail_parcelles: z.boolean().default(false),
     },
   }, async ({ site, detail_parcelles }) => {
-    const { uuid_site, code, nom } = await trouverSite(site);
+    const { uuid_site, code, nom } = await trouverSiteParNom(site);
 
     const actes = await lire(`
       SELECT a.uuid_acte, a.typ_mfu, COALESCE(tm.libelle, a.typ_mfu) AS typ_mfu_libelle,
@@ -416,7 +423,7 @@ function enregistrerRequetesMetier(server) {
         AND ($10::int IS NULL OR p.annee <= $10)
         AND ($4::text IS NULL OR p.statut = $4)
         AND ($5::text IS NULL OR p.typ_projet = $5)
-        AND ($6::text IS NULL OR unaccent(p.titre) ILIKE unaccent('%' || $6 || '%'))
+        AND ($6::text IS NULL OR ${contientTexte('p.titre', '$6')})
         AND (NOT $7 OR pr.pro_webapp IS TRUE)
       ORDER BY p.annee DESC NULLS LAST, s.code
       LIMIT $8`, [annee ?? null, code_site || null, responsable || null, statut || null, typ_projet || null, texte || null, webapp_uniquement, limite,
@@ -708,4 +715,4 @@ function enregistrerRequetesMetier(server) {
   });
 }
 
-module.exports = { enregistrerRequetesMetier, trouverSite, numeroDepartement };
+module.exports = { enregistrerRequetesMetier, trouverSite, trouverSiteParNom, numeroDepartement };
