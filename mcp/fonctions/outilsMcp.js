@@ -4,6 +4,8 @@ const { z } = require('zod');
 const { pool } = require('../dbPool');
 const { validerRequeteLecture, executerLectureSeule, estTableSensible, estColonneSensible } = require('./securiteSql');
 const { enregistrerRequetesMetier } = require('./requetesMetier');
+const { enregistrerRequetesWebobs } = require('./requetesWebobs');
+const { poolWebobs } = require('../dbPoolWebobs');
 const { LECTURE_SEULE, MAX_ROWS, QUERY_TIMEOUT_MS, reponse, erreur, journaliser, lire } = require('./utilitaires');
 
 /** Schémas système, de sauvegarde ou d'archive : masqués par défaut dans lister_schemas */
@@ -20,6 +22,9 @@ function enregistrerOutils(server) {
 
   // Outils métier (sites, foncier, travaux, spatial) + documentation_base
   enregistrerRequetesMetier(server);
+
+  // Observations naturalistes WebObs (autre base), croisées avec les emprises des sites
+  if (poolWebobs) enregistrerRequetesWebobs(server);
 
   // ---------------------------------------------------------------- Schéma
   server.registerTool('lister_schemas', {

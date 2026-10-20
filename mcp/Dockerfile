@@ -9,7 +9,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Code de l'application. Le .env n'est PAS copié : il est fourni au lancement (docker-compose.yml)
-COPY serveur_mcp.js dbPool.js ./
+COPY serveur_mcp.js dbPool.js dbPoolWebobs.js ./
 COPY fonctions/ ./fonctions/
 COPY documentation/ ./documentation/
 

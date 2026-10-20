@@ -26,6 +26,10 @@ const OUTILS_AUTORISES = [
     'indicateurs_sites',
     'indicateurs_activite',
     'controle_donnees_sites',
+    'webobs_statistiques',
+    'webobs_especes',
+    'webobs_site',
+    'webobs_sites_cenca',
 ];
 
 const TAILLE_MAX_RESULTAT = 15000; // caractères renvoyés au modèle par appel d'outil

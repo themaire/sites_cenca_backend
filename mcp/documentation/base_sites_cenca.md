@@ -147,3 +147,12 @@ WHERE a.site = $1
 ## À vérifier / à compléter
 - Unité de `esp.espaces.surface` et de `sitcenca.parcelles_mfu.surface` (ha ou m²) : à confirmer, comparer avec `ST_Area`.
 - Valeurs possibles de `listesitescenca.statut`, `opegerer.projets.statut` et du champ `responsable` des vues (code salarié ou nom).
+
+## Observations naturalistes WebObs (autre base)
+
+Base `natobs` sur un autre serveur PostgreSQL : **pas accessible par `executer_requete`** ni par jointure SQL avec la base des sites. Passer par les outils `webobs_statistiques`, `webobs_especes`, `webobs_site` (observations dans l'emprise d'un site) et `webobs_sites_cenca` (tous les sites gérés croisés avec les observations, ou sites où une espèce est présente).
+- Source : export WebObs (`export_obs.webobs`, ~212 000 observations depuis 2000, points WGS84), arrêté à la date de l'export : les saisies plus récentes n'y sont pas. Couvre la Champagne-Ardenne et des départements voisins (Meuse, Vosges, Moselle…).
+- Groupes (`observatoire`) : faune = Oiseaux, Reptiles, Insectes, Mollusques, Poissons, Amphibiens, Mammifères, Autres invertébrés ; flore = Flore, Champignons et Lichens, Mousses, Algues.
+- Statuts : protection nationale, régionale ou départementale, directive Habitats (II/IV), directive Oiseaux (I), déterminante ZNIEFF, listes rouges France et région (CR/EN/VU = menacée), rareté régionale (CC à RRR). Patrimoniale = au moins un de ces statuts.
+- Les espèces sensibles sont masquées à l'échelle du site et de la commune ; une recherche d'espèce par site ignore ses observations sensibles.
+

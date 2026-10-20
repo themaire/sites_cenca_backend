@@ -8,6 +8,7 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 
 const { pool, testerConnexion } = require('./dbPool');
+const { poolWebobs, testerConnexionWebobs } = require('./dbPoolWebobs');
 const { enregistrerOutils } = require('./fonctions/outilsMcp');
 const { initialiser } = require('./fonctions/securiteSql');
 const { filtreIp, verifierJeton } = require('./fonctions/securiteReseau');
@@ -36,6 +37,7 @@ function creerServeurMcp() {
         "Appeler documentation_base au début de chaque conversation : elle explique les schémas, les jointures (souvent non déclarées) et les pièges.",
         "Préférer les outils prédéfinis (rechercher_sites, fiche_site, foncier_site, echeances_actes, rechercher_projets, operations_projet, bilan_operations, sites_autour_point…), qui reprennent les requêtes de l'application ; sinon executer_requete.",
         "Géométries en Lambert 93 (SRID 2154, mètres). Faire les agrégations en SQL. Ne jamais inventer de chiffres : toujours citer la requête ou l'outil source.",
+        "Observations naturalistes (faune, flore) : outils webobs_* sur la base WebObs, distincte (pas accessible par executer_requete) ; webobs_site et webobs_sites_cenca les croisent avec les emprises des sites.",
       ].join(' '),
     },
   );
@@ -102,6 +104,14 @@ testerConnexion()
     }
     console.error('Attention, base PostgreSQL injoignable au démarrage :', e.message);
   })
+  .then(() => testerConnexionWebobs())
+  .catch(e => {
+    if (e.critique) {
+      console.error(e.message);
+      process.exit(1);
+    }
+    console.error('Attention, base WebObs injoignable au démarrage :', e.message);
+  })
   .finally(() => {
     app.listen(MCP_PORT, MCP_HOST, () => {
       console.log(`Serveur MCP "cenca-sites" : http://${MCP_HOST}:${MCP_PORT}/mcp`);
@@ -111,5 +121,6 @@ testerConnexion()
 
 process.on('SIGTERM', async () => {
   await pool.end().catch(() => {});
+  await poolWebobs?.end().catch(() => {});
   process.exit(0);
 });

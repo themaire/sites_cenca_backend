@@ -118,6 +118,8 @@ const CAPACITES = `Je réponds aux questions sur les sites du CENCA, en lecture 
   Ex. : « Quels actes arrivent à échéance dans les 6 mois ? »
 - Projets de gestion : recherche par année, site, responsable, statut ou type (travaux), détail des opérations d'un projet, bilan des opérations par type d'action et par année.
   Ex. : « Bilan des travaux réalisés en 2025 par type d'action »
+- Observations naturalistes (WebObs, faune et flore depuis 2000) : statistiques par année, groupe, département ou commune ; espèces observées avec leurs statuts (protection, directives, listes rouges) ; inventaire d'un site du CENCA ; sites où une espèce est présente, sites les plus riches ou les moins prospectés.
+  Ex. : « Quelles espèces protégées ont été vues sur le site 10035 ? », « Sur quels sites trouve-t-on le Sonneur à ventre jaune ? », « Combien d'observations d'oiseaux en 2025 ? »
 Pour une longue liste, je donne le total et un résumé (par département, par type…) : précisez la question pour réduire la liste, ex. « Quels sont les nouveaux sites des Ardennes en 2025 ? ».
 Je ne fais ni requête libre ni calcul spatial en dehors de ces cas, et une conversation compte au plus ${QUESTIONS_MAX} questions.`;
 
@@ -132,7 +134,8 @@ const GUIDE_METIER = `- Site : site géré par le CENCA, identifié par son code
 - Maîtrise foncière et d'usage (MFU) : actes (conventions de gestion, baux, acquisitions…) avec début, fin, reconduction tacite (tacit_rec) ; un acte peut couvrir plusieurs sites. Parcelles cadastrales (section, numéro), pour_partie = seule une partie de la parcelle est concernée.
 - Documents de gestion (plans de gestion) : période annee_deb – annee_fin, actuel = document en vigueur.
 - Projets de gestion : typ_projet TRV = travaux ; les projets saisis dans la webapp (pro_webapp) ont des opérations détaillées, pas les anciens projets MS Access. Opérations : le type affiché est le libellé de action_2 ; quantite + unite, surf (surface), lin (linéaire), maître d'œuvre (entreprise de l'annuaire), financeurs, animaux (pâturage).
-- Conservateurs : bénévoles référents d'un site.`;
+- Conservateurs : bénévoles référents d'un site.
+- Observations naturalistes : base WebObs, export arrêté à une date (indiquée par « source ») ; groupes taxonomiques = observatoire (Oiseaux, Insectes, Flore…). Patrimoniale = protégée, directive européenne, menacée (liste rouge CR/EN/VU) ou déterminante ZNIEFF. « Espèce sensible (nom masqué) » : ne jamais chercher à deviner le nom.`;
 
 /**
  * Prompt système : rôle, règles, capacités, guide métier, puis la date du jour en dernier :
@@ -165,6 +168,7 @@ function promptSysteme() {
         "- Les communes sont toujours désignées par leur nom ; passe ce nom aux outils (paramètre commune). Pour un département (Ardennes 08, Aube 10, Marne 51, Haute-Marne 52), utilise le paramètre departement.",
         "- Si l'utilisateur donne un nom de site, cherche d'abord le site avec rechercher_sites.",
         "- Actes, dates et échéances d'un site précis : foncier_site. echeances_actes ne sert qu'aux échéances de tous les sites confondus.",
+        "- Faune, flore, espèces, observations, inventaires naturalistes : outils webobs_*. Espèces d'un site : webobs_site ; sites où vit une espèce ou classement des sites : webobs_sites_cenca ; ailleurs (commune, département) : webobs_especes ou webobs_statistiques.",
         "- Les surfaces sont en hectares sauf mention contraire ; précise l'unité quand tu donnes une surface.",
         "- Réponses courtes : au-delà de 10 résultats, ne liste pas : donne le total exact et un résumé léger d'après la « Répartition exacte » jointe au résultat (par département, type…, surface totale), au plus 5 exemples, puis propose de filtrer (département, type, commune…). Un résultat peut n'afficher que ses premières lignes : le total exact est alors indiqué, c'est lui qu'il faut donner.",
         "- Si l'utilisateur demande la liste complète d'un résultat de plus de 10 lignes, ne la recopie pas : réponds que la liste est trop longue pour le chat, redonne le résumé et propose de la découper par un filtre (ex. par département). Ne complète jamais une liste avec des sites absents des résultats.",

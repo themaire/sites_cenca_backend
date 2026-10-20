@@ -27,6 +27,17 @@ Il vit dans le dépôt du backend mais tourne dans **son propre processus et son
 | `indicateurs_activite` | Animations et plans de gestion de l'année précédente, parcelles questionnées en animation foncière | Grafana (`opeautres.synth_*_n-1`, `irenee.histo_foncier`) |
 | `controle_donnees_sites` | Sites gérés sans géométrie, sans acte (ou acte sans parcelle), avec données manquantes | Grafana |
 
+**Observations naturalistes WebObs** (base `natobs`, autre serveur PostgreSQL, déclarés seulement si `WEBOBS_DB_HOST` est renseigné ; requêtes prédéfinies, jamais de SQL libre sur cette base) :
+
+| Outil | Rôle |
+|---|---|
+| `webobs_statistiques` | Observations, espèces et observateurs par année, groupe, faune/flore, département ou commune |
+| `webobs_especes` | Espèces observées avec statuts (protections, directives, ZNIEFF), listes rouges, rareté ; plus/moins observées, récentes |
+| `webobs_site` | Observations dans l'emprise d'un site du CENCA (tampon possible) : synthèse par groupe et liste des espèces |
+| `webobs_sites_cenca` | Tous les sites gérés croisés avec les observations : richesse, espèces protégées/menacées/patrimoniales, sites où une espèce est présente, sites les moins prospectés |
+
+Les deux bases étant sur deux serveurs, le MCP lit les géométries des sites dans la base des sites et les envoie à `natobs` (EWKB, reprojetées en WGS84 pour l'index spatial des observations). Les observations localisées seulement à la commune ne sont jamais rattachées à un site. Les espèces sensibles (sensibilité, floutage ou non diffusables) sont regroupées sous un nom masqué à l'échelle du site et de la commune. **`export_obs.webobs` a des colonnes décalées d'un cran à partir de `i`** (une colonne manque dans l'en-tête de l'import) : voir l'en-tête de `fonctions/requetesWebobs.js`.
+
 **Outils génériques** : `lister_schemas`, `lister_tables`, `decrire_table` (avec la définition SQL des vues), `relations_schema`, `rechercher_colonnes`, `executer_requete` (SQL libre en lecture), plus la ressource `schema://base` et le prompt `bilan_site`.
 
 Les `numeric` et `bigint` sont renvoyés en chaînes (aucune erreur d'arrondi), les dates telles qu'en base. Les géométries brutes (WKB) ne sont jamais renvoyées : Claude doit passer par `ST_AsGeoJSON`, `ST_Area`…
@@ -63,7 +74,8 @@ cd mcp && npm test                  # tests hors ligne des garde-fous SQL
 | `ALLOWED_IPS` | IP/CIDR autorisées, ex. `127.0.0.1,192.168.1.0/24,10.8.0.0/24` |
 | `MCP_MAX_ROWS` | Lignes max renvoyées par requête (défaut 2000) |
 | `MCP_QUERY_TIMEOUT_MS` | Timeout par requête (défaut 30000) |
-| `MCP_DB_MAX_CONNEXIONS` | Taille du pool (défaut 4) |
+| `MCP_DB_MAX_CONNEXIONS` | Taille du pool (défaut 4, par base) |
+| `WEBOBS_DB_HOST`, `WEBOBS_DB_PORT`, `WEBOBS_DB_NAME`, `WEBOBS_DB_USER`, `WEBOBS_DB_PASSWORD` | Base WebObs (`natobs` sur 192.168.1.25) ; sans `WEBOBS_DB_HOST`, pas d'outils WebObs. Rôle lecture seule : [`documentation/role_lecture_seule_webobs.sql`](documentation/role_lecture_seule_webobs.sql) |
 
 ### Docker
 

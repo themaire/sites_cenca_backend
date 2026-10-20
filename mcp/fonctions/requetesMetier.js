@@ -620,4 +620,4 @@ function enregistrerRequetesMetier(server) {
   });
 }
 
-module.exports = { enregistrerRequetesMetier };
+module.exports = { enregistrerRequetesMetier, trouverSite, numeroDepartement };
