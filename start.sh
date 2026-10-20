@@ -19,8 +19,8 @@ show_help() {
     echo "  ./start.sh prod [options]    - Lance en mode production"
     echo ""
     echo -e "${GREEN}Options:${NC}"
-    echo "  -d, --detach                 - Lance en arrière-plan (mode détaché)"
-    echo "  -b, --build                  - Force la reconstruction des images"
+    echo "  -d, --detach                 - Lance en arrière-plan (mode détaché) ; en prod, vérifie ensuite chaque service"
+    echo "  -b, --build                  - Force la reconstruction des images (prod : tests du MCP puis build, avant tout arrêt)"
     echo "  -r, --restart                - Redémarre les services"
     echo "  -s, --stop                   - Arrête les services"
     echo "  -l, --logs                   - Affiche les logs"
@@ -31,6 +31,7 @@ show_help() {
     echo "  ./start.sh prod -d           - Lance en prod en arrière-plan"
     echo "  ./start.sh dev -b            - Lance en dev avec rebuild"
     echo "  ./start.sh prod -r           - Redémarre la prod"
+    echo "  ./start.sh prod -b -d -r     - Redéploie la prod : tests, build, redémarrage, vérification"
     echo "  ./start.sh dev -s            - Arrête le dev"
     echo "  ./start.sh prod -l           - Affiche les logs de prod"
 }
@@ -126,6 +127,77 @@ restart_services() {
     start_services $mode
 }
 
+# Prod avec -b : tests du MCP puis build des images AVANT d'arrêter quoi que ce soit.
+# Si un test ou le build échoue, la prod en place continue de tourner.
+build_prod() {
+    echo -e "${BLUE}🧪 Tests hors ligne du MCP (garde-fous SQL)...${NC}"
+    if ! (cd mcp && npm test --silent); then
+        echo -e "${RED}❌ Tests du MCP en échec : rien n'est reconstruit, la prod actuelle tourne toujours${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ Tests du MCP réussis${NC}"
+    echo -e "${BLUE}🔨 Build des images (node_app, surveillance, mcp_sites)...${NC}"
+    if ! docker-compose -f docker-compose.yml -f docker-compose.prod.yml build; then
+        echo -e "${RED}❌ Build en échec : la prod actuelle tourne toujours${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ Images construites${NC}"
+    BUILD="" # déjà fait : up ne reconstruit pas une seconde fois
+}
+
+# Prod en mode détaché : attend que chaque conteneur soit démarré (et « healthy » s'il a un healthcheck,
+# comme mcp_sites), puis que le backend réponde en HTTPS. Échec = code de sortie 1 et derniers logs.
+DELAI_VERIFICATION=90
+verifier_prod() {
+    echo -e "${BLUE}🩺 Vérification des services (${DELAI_VERIFICATION} s max)...${NC}"
+    local debut=$SECONDS ids id nom etat sante ok
+    ids=$(docker-compose -f docker-compose.yml -f docker-compose.prod.yml ps -q)
+    while (( SECONDS - debut < DELAI_VERIFICATION )); do
+        ok=true
+        for id in $ids; do
+            etat=$(docker inspect -f '{{.State.Status}}' "$id" 2>/dev/null)
+            sante=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id" 2>/dev/null)
+            if [ "$etat" != "running" ] || { [ -n "$sante" ] && [ "$sante" != "healthy" ]; }; then ok=false; fi
+        done
+        [ "$ok" = true ] && break
+        sleep 3
+    done
+
+    local echec=false
+    for id in $ids; do
+        nom=$(docker inspect -f '{{.Name}}' "$id" | sed 's#^/##')
+        etat=$(docker inspect -f '{{.State.Status}}' "$id")
+        sante=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id")
+        if [ "$etat" = "running" ] && { [ -z "$sante" ] || [ "$sante" = "healthy" ]; }; then
+            echo -e "${GREEN}✅ $nom : $etat${sante:+ ($sante)}${NC}"
+        else
+            echo -e "${RED}❌ $nom : $etat${sante:+ ($sante)}. Dernières lignes de log :${NC}"
+            docker logs --tail 20 "$id" 2>&1
+            echec=true
+        fi
+    done
+
+    # Le backend écoute-t-il en HTTPS ? N'importe quel code HTTP suffit (000 = pas de réponse)
+    local code
+    for _ in $(seq 10); do
+        code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://127.0.0.1:8889/ 2>/dev/null)
+        [ "$code" != "000" ] && break
+        sleep 3
+    done
+    if [ "$code" != "000" ]; then
+        echo -e "${GREEN}✅ Backend : répond en HTTPS sur le port 8889 (HTTP $code)${NC}"
+    else
+        echo -e "${RED}❌ Backend : aucune réponse HTTPS sur le port 8889${NC}"
+        echec=true
+    fi
+
+    if [ "$echec" = true ]; then
+        echo -e "${RED}❌ La prod ne s'est pas relancée correctement${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ Prod opérationnelle${NC}"
+}
+
 # Fonction pour démarrer les services
 start_services() {
     local mode=$1
@@ -186,6 +258,11 @@ start_services() {
 echo -e "${BLUE}🐳 Docker Compose Backend Manager${NC}"
 echo "=================================="
 
+# Prod avec -b : tests + build d'abord, pour ne couper la prod (-r) qu'une fois les images prêtes
+if [ "$MODE" = "prod" ] && [ -n "$BUILD" ] && [ "$STOP" = false ] && [ "$LOGS" = false ]; then
+    build_prod
+fi
+
 # Gestion des actions
 if [ "$STOP" = true ]; then
     stop_services $MODE
@@ -206,6 +283,7 @@ if [ -n "$DETACH" ] && [ "$STOP" = false ] && [ "$LOGS" = false ]; then
         echo -e "${BLUE}🛑 Pour arrêter: ./start.sh dev -s${NC}"
         echo -e "${BLUE}🔄 Pour redémarrer: ./start.sh dev -r${NC}"
     else
+        verifier_prod
         echo -e "${BLUE}📋 Pour voir les logs: ./start.sh $MODE -l${NC}"
         echo -e "${BLUE}🛑 Pour arrêter: ./start.sh $MODE -s${NC}"
         echo -e "${BLUE}🔄 Pour redémarrer: ./start.sh $MODE -r${NC}"
