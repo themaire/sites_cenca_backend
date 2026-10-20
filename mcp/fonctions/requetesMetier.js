@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { z } = require('zod');
-const { LECTURE_SEULE, reponse, erreur, journaliser, lire, resultat } = require('./utilitaires');
+const { LECTURE_SEULE, nomCompare, reponse, erreur, journaliser, lire, resultat } = require('./utilitaires');
 
 const FICHIER_DOC = path.join(__dirname, '..', 'documentation', 'base_sites_cenca.md');
 
@@ -76,11 +76,11 @@ async function trouverSiteParNom(site) {
     WHERE s.validite IS NOT FALSE AND ${condition}
     ORDER BY s.actuel IS NOT FALSE DESC, s.typ_site, e.nom
     LIMIT 10`, valeurs);
-  let sites = await chercher(`unaccent(e.nom) ILIKE unaccent('%' || $1 || '%')`, [texte]);
+  let sites = await chercher(`${nomCompare('e.nom')} LIKE '%' || ${nomCompare('$1')} || '%'`, [texte]);
   if (sites.length === 0) {
     // Sinon tous les mots significatifs (3 lettres ou plus), dans n'importe quel ordre
     const mots = texte.split(/[\s'’-]+/).filter(m => m.length >= 3);
-    if (mots.length) sites = await chercher(mots.map((_, i) => `unaccent(e.nom) ILIKE unaccent('%' || $${i + 1} || '%')`).join(' AND '), mots);
+    if (mots.length) sites = await chercher(mots.map((_, i) => `${nomCompare('e.nom')} LIKE '%' || ${nomCompare(`$${i + 1}`)} || '%'`).join(' AND '), mots);
   }
   if (sites.length === 0) throw new Error(`Aucun site ne correspond à "${site}". Utiliser rechercher_sites.`);
   const exact = sites.filter(x => x.nom.localeCompare(texte, 'fr', { sensitivity: 'base' }) === 0);
@@ -127,9 +127,9 @@ function enregistrerRequetesMetier(server) {
         FROM esp.geometries g
         WHERE g.espace = listesitescenca.espace AND g.validite IS NOT FALSE AND g.geom IS NOT NULL
       ) surf ON true
-      WHERE ($1::text IS NULL OR unaccent(nom) ILIKE unaccent('%' || $1 || '%') OR code ILIKE '%' || $1 || '%')
+      WHERE ($1::text IS NULL OR ${nomCompare('nom')} LIKE '%' || ${nomCompare('$1')} || '%' OR code ILIKE '%' || $1 || '%')
         AND ($2::text IS NULL OR typ_site = $2)
-        AND ($3::text IS NULL OR unaccent(communes) ILIKE unaccent('%' || $3 || '%') OR insee ILIKE '%' || $3 || '%')
+        AND ($3::text IS NULL OR ${nomCompare('communes')} LIKE '%' || ${nomCompare('$3')} || '%' OR insee ILIKE '%' || $3 || '%')
         AND ($4::text IS NULL OR unaccent(milieux_naturels) ILIKE unaccent('%' || $4 || '%'))
         AND ($5::text IS NULL OR upper(responsable) = upper($5) OR responsable IN (
               SELECT cd_salarie FROM admin.salaries
@@ -282,7 +282,7 @@ function enregistrerRequetesMetier(server) {
       JOIN terr.listecommunes com ON com.insee_com = loca.commune
       JOIN esp.espaces e ON e.uuid_espace = loca.espace
       JOIN sitcenca.sites s ON s.espace = e.uuid_espace
-      WHERE com.insee_com = $1 OR unaccent(com.nom) ILIKE unaccent('%' || $1 || '%')
+      WHERE com.insee_com = $1 OR ${nomCompare('com.nom')} LIKE '%' || ${nomCompare('$1')} || '%'
       ORDER BY com.nom, s.code`, [commune.trim()]);
     return resultat(lignes);
   });

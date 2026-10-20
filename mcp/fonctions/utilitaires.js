@@ -10,6 +10,14 @@ const QUERY_TIMEOUT_MS = Number(process.env.MCP_QUERY_TIMEOUT_MS || 30000);
 const LECTURE_SEULE = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
 /**
+ * Expression SQL d'un nom à comparer sans accents, casse ni séparateurs (base des sites, extension unaccent) :
+ * « Colombey-les-Deux-Églises », « colombey les deux eglises » et « Colombey les Deux Églises » donnent
+ * « colombey les deux eglises ». Traits d'union, apostrophes et espaces multiples deviennent un espace.
+ * À utiliser des deux côtés : nomCompare('nom') LIKE '%' || nomCompare('$1') || '%'.
+ */
+const nomCompare = expr => `trim(regexp_replace(lower(unaccent(${expr})), '[^a-z0-9]+', ' ', 'g'))`;
+
+/**
  * Formate un résultat d'outil MCP (JSON lisible par Claude).
  */
 function reponse(data) {
@@ -52,4 +60,4 @@ function resultat(lignes, extra = {}) {
   return reponse({ ...extra, nb_lignes: lignes.length, tronque: lignes.length > MAX_ROWS, lignes: lignes.slice(0, MAX_ROWS) });
 }
 
-module.exports = { MAX_ROWS, QUERY_TIMEOUT_MS, LECTURE_SEULE, reponse, erreur, journaliser, lire, lireWebobs, resultat };
+module.exports = { MAX_ROWS, QUERY_TIMEOUT_MS, LECTURE_SEULE, nomCompare, reponse, erreur, journaliser, lire, lireWebobs, resultat };
