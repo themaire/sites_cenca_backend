@@ -40,6 +40,10 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 | `FILES_DIR_ENV` | Path for static file serving (default: `./files`) |
 | `LIZMAP_USER`, `LIZMAP_PASSWORD` | External Lizmap WFS authentication |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Monitoring alerts |
+| `OLLAMA_URL`, `OLLAMA_MODEL`, `OLLAMA_NUM_CTX`, `OLLAMA_THINK`, `OLLAMA_TIMEOUT_MS` | Chatbot LLM: LAN Ollama servers in preference order (comma-separated, optional per-server model as `url|model`), default model tag, context size, thinking on/off (default off), max time per question, queue + prompt reading + generation (default 15 min, then aborted and the Ollama server freed; undici agent, Node fetch would abort at 300 s) |
+| `CHAT_QUESTIONS_MAX` | Chatbot: questions per conversation (default 10), then `413` → front opens a new conversation |
+| `CHAT_SIMULTANES_MAX` | Chatbot: questions at once per Ollama server (default 1); when every server is full, `POST /chat` answers `503 sonneur_occupe` and `GET /chat/etat` reports `occupe: true` (in-process counter: per backend process) |
+| `MCP_URL`, `MCP_API_TOKEN` | Chatbot access to the `mcp/` server (same token as `mcp/.env`) |
 
 ## Architecture
 
@@ -61,6 +65,7 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 | `/process` | `routes/processRoutes.js` | File upload → Python pipeline trigger |
 | `/picts` | `routes/pictureRoute.js` | Image upload/resize/serve |
 | `/docs` | `routes/docsRoutes.js` | Markdown docs served as HTML |
+| `/chat` | `routes/chatRoutes.js` | Chatbot (JWT): local LLM via Ollama + whitelisted MCP business tools, SSE stream |
 | `/files` | static | Static file serving from `FILES_DIR_ENV` |
 | `/metrics` | express-prom-bundle | Prometheus metrics |
 
@@ -99,7 +104,7 @@ A separate Docker service (`surveillance/`) runs a Node.js monitoring agent that
 
 ### MCP server (`mcp/`)
 
-Read-only MCP server giving Claude SQL access to the database. Self-contained sub-project: own `package.json`, `.env`, pool, `Dockerfile`. Runs as service `mcp_sites` in the root `docker-compose.yml` with `network_mode: host` (deliberately on no compose network, isolated from `node_app`/`surveillance`); listens on `MCP_HOST:MCP_PORT` (8891). Never import it from `node_base_sites.js` nor reuse the backend pool. Offline tests: `cd mcp && npm test`. Business knowledge for Claude lives in `mcp/documentation/base_sites_cenca.md`. See `mcp/README.md`.
+Read-only MCP server giving Claude SQL access to the database. Self-contained sub-project: own `package.json`, `.env`, pool, `Dockerfile`. Runs as service `mcp_sites` in the root `docker-compose.yml` with `network_mode: host` (deliberately on no compose network, isolated from `node_app`/`surveillance`); listens on `MCP_HOST:MCP_PORT` (8891). Never import it from `node_base_sites.js` nor reuse the backend pool. Offline tests: `cd mcp && npm test`. Business knowledge for Claude lives in `mcp/documentation/base_sites_cenca.md`. See `mcp/README.md`. A second, optional pool (`mcp/dbPoolWebobs.js`, `WEBOBS_DB_*`) reaches the WebObs naturalist observations database (`natobs`, another PostgreSQL server) through predefined `webobs_*` tools only (`fonctions/requetesWebobs.js`); site geometries are read from the sites DB and sent to natobs as EWKB. `export_obs.webobs` columns are shifted by one from column `i` onwards (see the header of `requetesWebobs.js`).
 
 ## Key Conventions
 
@@ -108,3 +113,7 @@ Read-only MCP server giving Claude SQL access to the database. Self-contained su
 - **Geometry**: All spatial data is stored in SRID=2154 (Lambert 93). Use `convertToWKT()` to convert GeoJSON coordinates to EWKT before inserting.
 - **CORS**: Origins are allowlisted in `node_base_sites.js`. Add new allowed origins there.
 - **Rate limiting**: Applied globally (200 req / 5 min) but skipped for localhost requests.
+
+### Chatbot (`/chat`)
+
+`routes/chatRoutes.js` runs a tool-calling loop on a local LLM (Ollama, Gemma 4) and streams the answer as SSE events (`attente`, `outil`, `texte`, `fin`, `erreur`). Data comes only from the `mcp/` server, reached as an MCP **client** over HTTP (`fonctions/clientMcp.js`); the MCP is never mounted in `node_base_sites.js`. `OUTILS_AUTORISES` in `clientMcp.js` whitelists the predefined business tools: `executer_requete` (free SQL) and schema-introspection tools are deliberately excluded. The system prompt carries `GUIDE_METIER` (short business vocabulary; the MCP's `documentation_base` is SQL-oriented and deliberately not injected, it costs ~3 000 tokens on CPU) and `CAPACITES` (the user-facing list of what the chatbot can do, answered to « que sais-tu faire ? »): keep it in sync with `OUTILS_AUTORISES` and the MCP tool parameters. Site names in answers are Markdown links `/site/<code>` (`/site/<uuid>` for a site without code): the model writes the code, `reecritureLiens` keeps only codes found in this question's tool results (or in earlier answers) and turns the others into plain names. Each question goes to the reachable Ollama server with the fewest chats in progress (in-process counter, ties broken by `OLLAMA_URL` order) and stays there for all its tool rounds. The conversation history is held by the front end (stateless backend). In Docker, `node_app` sits on the `monitoring` bridge, pinned to `172.22.0.0/16` in `docker-compose.yml`: that subnet must stay in `ALLOWED_IPS` of `mcp/.env`, and `MCP_URL` uses the host LAN address (`MCP_HOST`). Aborting a question (front `AbortController.abort()`, panel closed, or `OLLAMA_TIMEOUT_MS`) closes the request to Ollama even during prompt reading (the backend passes its own signal to `fetch`, since ollama-js cannot cancel before response headers) and frees the server; verified on the CPU server. Backend walkthrough (flow, abort chain, busy state, guards against model errors): `documentation/chatbot/fonctionnement_backend.md`. Front-end instructions: `documentation/chatbot/instructions_front_claude_code.md`.

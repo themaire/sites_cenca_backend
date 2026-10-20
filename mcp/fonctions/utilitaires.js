@@ -1,6 +1,7 @@
 "use strict";
 
 const { pool } = require('../dbPool');
+const { poolWebobs } = require('../dbPoolWebobs');
 const { executerLectureSeule } = require('./securiteSql');
 
 const MAX_ROWS = Number(process.env.MCP_MAX_ROWS || 2000);
@@ -36,10 +37,19 @@ async function lire(sql, params = []) {
 }
 
 /**
+ * Lecture sur la base WebObs (natobs), mêmes garde-fous de transaction ; requêtes prédéfinies uniquement.
+ */
+async function lireWebobs(sql, params = []) {
+  if (!poolWebobs) throw new Error('Base WebObs non configurée (WEBOBS_DB_HOST absent de mcp/.env).');
+  const rows = await executerLectureSeule(poolWebobs, sql, params, { timeoutMs: QUERY_TIMEOUT_MS, masquer: false });
+  return rows;
+}
+
+/**
  * Résultat tabulaire tronqué à MAX_ROWS lignes.
  */
 function resultat(lignes, extra = {}) {
   return reponse({ ...extra, nb_lignes: lignes.length, tronque: lignes.length > MAX_ROWS, lignes: lignes.slice(0, MAX_ROWS) });
 }
 
-module.exports = { MAX_ROWS, QUERY_TIMEOUT_MS, LECTURE_SEULE, reponse, erreur, journaliser, lire, resultat };
+module.exports = { MAX_ROWS, QUERY_TIMEOUT_MS, LECTURE_SEULE, reponse, erreur, journaliser, lire, lireWebobs, resultat };

@@ -41,6 +41,8 @@ const authenticateToken = (req, res, next) => {
 
           if (resultats[0]["exists"] === false) { // Vérifie le token si on le trouve pas dans la blacklist
             jwt.verify(req.token, secretKey, (err, decodedToken) => {
+              // Jeton expiré : 401 + code TOKEN_EXPIRE, pour que le front redemande la connexion
+              if (err?.name === 'TokenExpiredError') return res.status(401).json({ message: 'Session expirée, reconnectez-vous.', code: 'TOKEN_EXPIRE' });
               if (err) return res.status(403).json({ message: 'Token probablement expiré ou incorrect ( ' + err + ' )' });
               req.tokenInfos = decodedToken;  // Stocke les infos du token décodé dans req.user
               next();  // Passe à la prochaine étape (route ou autre middleware)

@@ -20,9 +20,24 @@ Il vit dans le dépôt du backend mais tourne dans **son propre processus et son
 | `synthese_sites` | Nombre et surfaces par type de site (et par département) | — |
 | `foncier_site` | Actes MFU (multi-sites compris) et parcelles par type de propriétaire | `/sites/mfu/...`, `/parcelles_mfu` |
 | `echeances_actes` | Actes arrivant à échéance ou échus récemment | — |
-| `rechercher_projets` | Projets de gestion par année, site, responsable, statut, type | `/sites/criteria_travaux/...` |
+| `rechercher_projets` | Projets de gestion par année ou période, site, responsable, statut, type | `/sites/criteria_travaux/...` |
+| `travaux_site` | Tous les projets d'un site (code, uuid ou nom) et leurs opérations sur une période, avec totaux par année et par action | — |
 | `operations_projet` | Opérations d'un projet : actions, quantités, maître d'œuvre, financeurs | `/sites/operations/uuid=/lite` |
 | `bilan_operations` | Agrégat des opérations par action et par année | — |
+| `indicateurs_sites` | Chiffres clés et synthèses des sites gérés (départements, Natura 2000/APB…, milieux, types d'actes, propriétaires, agences de l'eau, réserves, protection forte, nouveaux sites par an), état actuel ou fin d'année précédente | Tableau de bord Grafana « Sites CENCA » (vues `sitcenca.synth_*`) |
+| `indicateurs_activite` | Animations et plans de gestion de l'année précédente, parcelles questionnées en animation foncière | Grafana (`opeautres.synth_*_n-1`, `irenee.histo_foncier`) |
+| `controle_donnees_sites` | Sites gérés sans géométrie, sans acte (ou acte sans parcelle), avec données manquantes | Grafana |
+
+**Observations naturalistes WebObs** (base `natobs`, autre serveur PostgreSQL, déclarés seulement si `WEBOBS_DB_HOST` est renseigné ; requêtes prédéfinies, jamais de SQL libre sur cette base) :
+
+| Outil | Rôle |
+|---|---|
+| `webobs_statistiques` | Observations, espèces et observateurs par année, groupe, faune/flore, département ou commune |
+| `webobs_especes` | Espèces observées avec statuts (protections, directives, ZNIEFF), listes rouges, rareté ; plus/moins observées, récentes |
+| `webobs_site` | Observations dans l'emprise d'un site du CENCA (tampon possible) : synthèse par groupe et liste des espèces |
+| `webobs_sites_cenca` | Tous les sites gérés croisés avec les observations : richesse, espèces protégées/menacées/patrimoniales, sites où une espèce est présente, sites les moins prospectés |
+
+Les deux bases étant sur deux serveurs, le MCP lit les géométries des sites dans la base des sites et les envoie à `natobs` (EWKB, reprojetées en WGS84 pour l'index spatial des observations). Les observations localisées seulement à la commune ne sont jamais rattachées à un site. Les espèces sensibles (sensibilité, floutage ou non diffusables) sont regroupées sous un nom masqué à l'échelle du site et de la commune. **`export_obs.webobs` a des colonnes décalées d'un cran à partir de `i`** (une colonne manque dans l'en-tête de l'import) : voir l'en-tête de `fonctions/requetesWebobs.js`.
 
 **Outils génériques** : `lister_schemas`, `lister_tables`, `decrire_table` (avec la définition SQL des vues), `relations_schema`, `rechercher_colonnes`, `executer_requete` (SQL libre en lecture), plus la ressource `schema://base` et le prompt `bilan_site`.
 
@@ -60,7 +75,8 @@ cd mcp && npm test                  # tests hors ligne des garde-fous SQL
 | `ALLOWED_IPS` | IP/CIDR autorisées, ex. `127.0.0.1,192.168.1.0/24,10.8.0.0/24` |
 | `MCP_MAX_ROWS` | Lignes max renvoyées par requête (défaut 2000) |
 | `MCP_QUERY_TIMEOUT_MS` | Timeout par requête (défaut 30000) |
-| `MCP_DB_MAX_CONNEXIONS` | Taille du pool (défaut 4) |
+| `MCP_DB_MAX_CONNEXIONS` | Taille du pool (défaut 4, par base) |
+| `WEBOBS_DB_HOST`, `WEBOBS_DB_PORT`, `WEBOBS_DB_NAME`, `WEBOBS_DB_USER`, `WEBOBS_DB_PASSWORD` | Base WebObs (`natobs` sur 192.168.1.25) ; sans `WEBOBS_DB_HOST`, pas d'outils WebObs. Rôle lecture seule : [`documentation/role_lecture_seule_webobs.sql`](documentation/role_lecture_seule_webobs.sql) |
 
 ### Docker
 
@@ -73,6 +89,8 @@ docker logs -f cenca_mcp_sites                    # journal des requêtes de Cla
 docker compose up -d --force-recreate mcp_sites   # après modification de mcp/.env
 docker compose up -d --build mcp_sites            # après modification du code ou de documentation/
 ```
+
+Script de maintenance (depuis n'importe quel dossier) : `./mcp/maintenance_mcp.sh statut | logs | tests | reconstruire | redemarrer | arreter | demarrer | outils | nettoyer`. `reconstruire` enchaîne tests, build, suppression puis recréation du container (contourne le `KeyError: 'ContainerConfig'` de `docker-compose` 1.29.2) et attend qu'il soit healthy. `redemarrer` ne relit pas `mcp/.env` : après une modification du `.env`, utiliser `reconstruire`. Le script est exclu par le `*.sh` du `.gitignore` : le versionner avec `git add -f`.
 
 Un `docker compose up -d` global le démarre aussi. Le container n'est recréé que si sa configuration ou son image ont changé.
 

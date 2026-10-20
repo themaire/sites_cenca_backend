@@ -82,3 +82,9 @@ services:
 networks:
   monitoring:
     driver: bridge
+    # Sous-réseau figé : node_app joint le MCP (mcp_sites, réseau hôte) depuis cette plage,
+    # qui doit figurer dans ALLOWED_IPS de mcp/.env. Valeur identique à celle attribuée
+    # jusqu'ici par Docker, donc rien à recréer.
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16

@@ -27,7 +27,7 @@ esp.localisations      (espace, commune = code INSEE) -> terr.listecommunes.inse
 ```
 
 ### `sitcenca.sites`
-`uuid_site`, `code` (ex. code site CEN), `espace`, `typ_site` → `sitcenca.typ_sites`, `responsable` → `admin.salaries.cd_salarie`, `prem_ctr` (année du premier contrat), `ref_fcen` (référence fédération des CEN), `pourc_gere`, `surf_actes`, `parties_gerees`, `typ_ouverture`, `description_site`, `sensibilite` / `remq_sensibilite` (site sensible : ne pas diffuser la localisation), `ref_public` (diffusable au public), `id_mnhn` / `url_mnhn` (fiche INPN), `url_cen`, `ref_pmfu_id` → `sitcenca.projets_mfu.pmfu_id`, `validite`, `actuel`.
+`uuid_site`, `code` (code site CEN : 5 chiffres comme `10035` pour la majorité, ou `51BOIS01` ; un code à 5 chiffres n'est pas un code INSEE), `espace`, `typ_site` → `sitcenca.typ_sites`, `responsable` → `admin.salaries.cd_salarie`, `prem_ctr` (année du premier contrat), `ref_fcen` (référence fédération des CEN), `pourc_gere`, `surf_actes`, `parties_gerees`, `typ_ouverture`, `description_site`, `sensibilite` / `remq_sensibilite` (site sensible : ne pas diffuser la localisation), `ref_public` (diffusable au public), `id_mnhn` / `url_mnhn` (fiche INPN), `url_cen`, `ref_pmfu_id` → `sitcenca.projets_mfu.pmfu_id`, `validite`, `actuel`.
 
 ### `esp.espaces`
 `uuid_espace`, `id_espace`, `nom` (**le nom du site est ici**), `surface` (déclarée), `typ_espace` → `esp.typ_espaces`, `zh` (zone humide), `bassin_agence`, `typ_geologie`, `carto_hab`, `rgpt`.
@@ -86,6 +86,15 @@ opegerer.projets.responsable        -> admin.salaries.cd_salarie
 - Quantités : `quantite` + `unite` (`opegerer.get_libelle(unite)`), `surf` (surface), `lin` (linéaire). Pâturage : `effectif_paturage`, `nb_jours_paturage`, `chargement_paturage`, `ugb_moy`. Fauche : `exportation_fauche`, `total_exporte_fauche`, `productivite_fauche`.
 - `opeautres.projets` : autres projets (hors gestion de sites), même logique.
 
+## Indicateurs (tableau de bord Grafana « Sites CENCA »)
+
+Outils `indicateurs_sites`, `indicateurs_activite`, `controle_donnees_sites` : mêmes requêtes que les panneaux Grafana, donc mêmes chiffres.
+- **Sites gérés** = `typ_site = '1'` avec `validite` et `actuel` non faux (383 au 2026-10-20). `synthese_sites` compte aussi les sites non actuels : ne pas l'utiliser pour les chiffres officiels.
+- Vues de synthèse `sitcenca.synth_*` (départements, espacesnat, habitats, actes, asstech, proprio, financeurs, reserves, newsites) ; les variantes `"synth_*_n-1"` donnent l'état à la fin de l'année précédente (rapport d'activité). `sitcenca.m_synth_protec_sites` : RNR, RNN, cœur de parc, APB par site.
+- Activité de l'année précédente : `opeautres."synth_anim_brute_n-1"` (animations, `nb_personnes`, `action_n3`), `opeautres."synth_pdg_brute_n-1"` (plans de gestion). Animation foncière : `irenee.histo_foncier` (`hfo_date_extraction`, `hfo_dep`, `hfo_demandeur`).
+- Vues Grafana erronées, contournées par les outils : `sitcenca.synth_reserves` (OR sans parenthèses + filtre `typ_site = '1'`, alors que les zonages de réserves RNR/RNN sont des « Autres sites » `typ_site = '4'` : ne compte que les 3 RNN) ; `irenee.cenca_sites` (nouveaux sites par an, plus à jour : utiliser `sitcenca.sites.prem_ctr`). Dans `synth_actes` et `synth_proprio`, la ligne `null` = sites gérés sans acte actuel. `v_sites.surface` = surface déclarée de l'espace, souvent 0 quand elle n'est pas saisie ; `v_sites.commune` vient des parcelles des actes (absente pour un site sans parcelle).
+- Absentes de la base (panneaux Grafana à revoir) : `sitcenca.v_sites_geres`, `m_sites`, `m_export_fcen_sites` / `m_export_fcen_parcelles` (remplacées par les vues `v_export_fcen_*`, trop lentes pour les fusions de parcelles), `v_synth_maitrise_fonciere`, `v_synth_zpf`, `opeautres."synth_pdg_format_n-1"`, `export_obs` (WebObs, autre source de données).
+
 ## Annuaire et salariés
 
 - **`ann.annuaire`** : contacts (personnes, entreprises, associations, communes…) : `uuid_ann`, `nom`, `adresse`, `telephone`, `mail`, `typ_personne` → `ann.typ_personnes`, `validite`, `actuel`. Étiquettes : `ann.etiquettes` / `ann.typ_etiquettes`, compétences : `ann.competences` / `ann.typ_competences`.
@@ -138,3 +147,12 @@ WHERE a.site = $1
 ## À vérifier / à compléter
 - Unité de `esp.espaces.surface` et de `sitcenca.parcelles_mfu.surface` (ha ou m²) : à confirmer, comparer avec `ST_Area`.
 - Valeurs possibles de `listesitescenca.statut`, `opegerer.projets.statut` et du champ `responsable` des vues (code salarié ou nom).
+
+## Observations naturalistes WebObs (autre base)
+
+Base `natobs` sur un autre serveur PostgreSQL : **pas accessible par `executer_requete`** ni par jointure SQL avec la base des sites. Passer par les outils `webobs_statistiques`, `webobs_especes`, `webobs_site` (observations dans l'emprise d'un site) et `webobs_sites_cenca` (tous les sites gérés croisés avec les observations, ou sites où une espèce est présente).
+- Source : export WebObs (`export_obs.webobs`, ~212 000 observations depuis 2000, points WGS84), arrêté à la date de l'export : les saisies plus récentes n'y sont pas. Couvre la Champagne-Ardenne et des départements voisins (Meuse, Vosges, Moselle…).
+- Groupes (`observatoire`) : faune = Oiseaux, Reptiles, Insectes, Mollusques, Poissons, Amphibiens, Mammifères, Autres invertébrés ; flore = Flore, Champignons et Lichens, Mousses, Algues.
+- Statuts : protection nationale, régionale ou départementale, directive Habitats (II/IV), directive Oiseaux (I), déterminante ZNIEFF, listes rouges France et région (CR/EN/VU = menacée), rareté régionale (CC à RRR). Patrimoniale = au moins un de ces statuts.
+- Les espèces sensibles sont masquées à l'échelle du site et de la commune ; une recherche d'espèce par site ignore ses observations sensibles.
+

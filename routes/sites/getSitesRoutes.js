@@ -175,6 +175,26 @@ router.get("/uuid=:uuid", (req, res) => {
     ); // Full car on veut un seul résultat
 });
 
+// Site(s) d'un code site, sans tenir compte des majuscules ni des espaces (liens /site/<code> du chatbot).
+// Tableau vide si code inconnu, plusieurs lignes si le code est en double (ex. 08SECH01)
+router.get("/code=:code", async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT s.uuid_site, s.code, e.nom
+               FROM sitcenca.sites s
+               LEFT JOIN esp.espaces e ON e.uuid_espace = s.espace
+              WHERE upper(trim(s.code)) = upper(trim($1))
+              ORDER BY s.validite IS FALSE, e.nom`,
+            [req.params.code]
+        );
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        return res.status(200).json(result.rows);
+    } catch (error) {
+        console.error("Erreur lors de la recherche du site de code " + req.params.code + " :", error);
+        return res.status(500).json({ success: false, message: "Erreur lors de la recherche du site par son code.", code: 1 });
+    }
+});
+
 // Conservateurs bénévoles du site (contacts de l'annuaire, via sitcenca.conservateurs)
 router.get("/conservateur/uuid_site=:uuid_site", async (req, res) => {
     try {

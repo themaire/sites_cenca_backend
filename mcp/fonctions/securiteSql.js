@@ -205,9 +205,11 @@ function masquerResultats(rows, fields) {
  * @param {Array} params paramètres liés ($1, $2…)
  * @param {{ timeoutMs?: number, maxLignes?: number }} options maxLignes : enveloppe la requête d'un LIMIT
  */
-async function executerLectureSeule(pool, sql, params = [], { timeoutMs = 30000, maxLignes } = {}) {
-  // Jamais de requête tant que les colonnes sensibles ne sont pas connues
-  await initialiser(pool);
+async function executerLectureSeule(pool, sql, params = [], { timeoutMs = 30000, maxLignes, masquer = true } = {}) {
+  // Jamais de requête tant que les colonnes sensibles ne sont pas connues.
+  // masquer = false : autre base (WebObs), requêtes prédéfinies seulement ; les colonnes sensibles
+  // et les types géométriques chargés au démarrage sont ceux de la base des sites
+  if (masquer) await initialiser(pool);
   const texte = maxLignes
     ? `SELECT * FROM (\n${sql}\n) AS resultat LIMIT ${Number(maxLignes) + 1}`
     : sql;
@@ -219,7 +221,7 @@ async function executerLectureSeule(pool, sql, params = [], { timeoutMs = 30000,
     await client.query("SET LOCAL lock_timeout = '5s'");
     // queryMode "extended" : un seul ordre SQL accepté, même sans paramètre
     const resultat = await client.query({ text: texte, values: params, queryMode: 'extended' });
-    return masquerResultats(resultat.rows || [], resultat.fields);
+    return masquer ? masquerResultats(resultat.rows || [], resultat.fields) : resultat.rows || [];
   } finally {
     await client.query('ROLLBACK').catch((e) => { erreurConnexion = e; });
     // Connexion dans un état incertain : on la détruit plutôt que de la remettre dans le pool

@@ -186,6 +186,8 @@ const annuaireRoutesGet = require('./routes/annuaire/getAnnuaireRoutes.js');
 const annuaireRoutesPut = require('./routes/annuaire/putAnnuaireRoutes.js');
 const annuaireRoutesDelete = require('./routes/annuaire/deleteAnnuaireRoutes.js');
 
+const chatRoutes = require('./routes/chatRoutes.js');
+
 // Configuration HTTPS (seulement en production)
 let httpsOptions = null;
 if (NODE_ENV === 'production') {
@@ -235,6 +237,8 @@ async function run() {
     app.use('/annuaire', annuaireRoutesGet);
     app.use('/annuaire', annuaireRoutesPut);
     app.use('/annuaire', annuaireRoutesDelete);
+
+    app.use('/chat', chatRoutes); // Chatbot métier : Ollama + requêtes du serveur MCP (lecture seule)
 
     app.use('/process', processRoutes);
     app.use('/picts', pictureRoute); // Monté le routeur pictureRoute.js sur /picts
