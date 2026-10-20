@@ -121,7 +121,7 @@ const chatRateLimit = rateLimit({
 // À tenir à jour avec OUTILS_AUTORISES (fonctions/clientMcp.js) et les paramètres des outils du MCP.
 const CAPACITES = `Je réponds aux questions sur les sites du CENCA, en lecture seule (je ne modifie rien). Je peux :
 - Rechercher des sites par nom ou code, commune, département, type de site, milieu naturel, responsable (prénom ou code) ou année de premier contrat, et les classer par surface.
-  Ex. : « Quels sont les nouveaux sites de 2025 dans l'Aube ? », « Quels sont les plus grands sites d'Aurore ? »
+  Ex. : « Quels sont les nouveaux sites de 2025 dans l'Aube ? », « Quels sont les plus grands sites gérés par Aurore ? »
 - Lister les sites d'une commune, ou ceux autour d'un point GPS.
   Ex. : « Quels sites gère-t-on à Villechétif ? »
 - Donner la fiche complète d'un site : type, responsable, surfaces, communes, conservateurs bénévoles, documents de gestion, actes fonciers, projets.
@@ -172,7 +172,7 @@ function promptSysteme() {
         "- N'invente jamais de chiffre, de site, de code, de nom ou de date : tout doit venir d'un résultat d'outil obtenu POUR CETTE QUESTION. Si un résultat est vide ou tronqué, dis-le.",
         "- Questions de suivi (« et en 2024 ? », « dans l'Aube », « lesquels ont… ») : tu ne vois plus les résultats des outils des tours précédents, seulement tes réponses. Toute nouvelle donnée demandée exige un nouvel appel d'outil, avec les critères de la question précédente plus le nouveau. Ne réponds jamais de mémoire et n'imite pas la forme de ta réponse précédente.",
         "- Si l'information demandée n'est fournie par aucun outil (ex. présence d'une géométrie sans appeler geometrie_site, projets sans appeler rechercher_projets), appelle l'outil correspondant ou dis que tu ne sais pas : ne conclus jamais à l'absence sans avoir interrogé.",
-        "- Les responsables sont désignés par un code salarié (ex. AL) ; l'outil accepte aussi le prénom. Donne le nom (responsable_nom) quand il est fourni.",
+        "- Les responsables sont désignés par un code salarié (ex. AL) ; l'outil accepte aussi le prénom. Donne le nom (responsable_nom) quand il est fourni. Un prénom seul (« les sites d'Aurore », « ceux de Thomas ») désigne toujours le responsable des sites, jamais une commune : paramètre responsable de rechercher_sites, sans demander de précision.",
         "- Chiffres clés, nombre total de sites gérés, surfaces totales, synthèses ou indicateurs (rapport d'activité, « fin d'année dernière » = annee_precedente) : indicateurs_sites ou indicateurs_activite, qui donnent les chiffres officiels du tableau de bord. N'additionne pas toi-même les lignes d'une liste pour obtenir un total.",
         "- Surfaces, « plus grands » / « plus petits » sites : rechercher_sites renvoie surface_ha et trie avec tri = 'surface'. N'appelle pas fiche_site site par site pour comparer des surfaces.",
         "- Recopie les noms (sites, communes) exactement comme dans les résultats.",
