@@ -51,7 +51,7 @@ Indique si Sonneur peut prendre une question : `{ "occupe": true, "questions_en_
 - Une question dure au plus 15 min (`OLLAMA_TIMEOUT_MS`) : au-delà, le backend arrête le modèle et envoie `erreur`.
 - L'événement `erreur` peut porter `code: "sonneur_occupe"` (deux questions arrivées au même instant) : à traiter comme le `503`.
 - Les questions d'aide (« Aide », « Que sais-tu faire ? », « Des exemples ? ») reçoivent une réponse immédiate du backend, même quand Sonneur est occupé.
-- Si on interrompt la requête (`AbortController.abort()`), le backend arrête le modèle. Il faut le faire à la fermeture du panneau et sur « Nouvelle conversation » pendant une génération.
+- Si on interrompt la requête (`AbortController.abort()`), le backend arrête le modèle : la coupure va jusqu'à Ollama, même pendant la lecture du prompt, et Sonneur redevient libre aussitôt (vérifié, voir [`fonctionnement_backend.md`](fonctionnement_backend.md)). Il faut le faire sur le bouton « Arrêter », à la fermeture du panneau et sur « Nouvelle conversation » pendant une génération.
 
 **Attention :** `HttpClient` d'Angular ne sait pas lire un flux SSE en POST. On utilise donc `fetch` et un `ReadableStream`. L'en-tête Bearer doit alors être ajouté à la main, car l'intercepteur ne s'applique pas à `fetch`.
 
