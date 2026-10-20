@@ -26,7 +26,8 @@ Le backend fait tourner un LLM local, **Gemma 4 via Ollama**. Ce LLM n'accède a
   |---|---|
   | `400` | historique invalide |
   | `413` | conversation pleine (`code: "conversation_pleine"`) : il faut ouvrir une nouvelle conversation |
-  | `401` / `403` | token absent, expiré ou blacklisté |
+  | `401` | token absent, ou expiré (`{ "code": "TOKEN_EXPIRE" }`, jeton valable 1 h) |
+  | `403` | token invalide ou blacklisté |
   | `429` | plus de 20 questions en 5 minutes par utilisateur |
 
   Le corps vaut `{ message }` (plus `code` pour le `413`).
@@ -59,7 +60,7 @@ Conventions du projet à respecter :
 
 Service `providedIn: 'root'` avec une méthode `envoyer(messages, signal): Observable<EvenementChat>`, qui :
 - appelle `fetch(environment.apiBaseUrl + 'chat', { method: 'POST', headers, body, signal })` ;
-- si `!reponse.ok`, émet une erreur avec `(await reponse.json()).message`, ou un message par défaut selon le statut (401/403 : « Session expirée, reconnectez-vous » ; 429 : trop de questions) ;
+- si `!reponse.ok`, émet une erreur avec `(await reponse.json()).message`, ou un message par défaut selon le statut (401/403 : « Session expirée, reconnectez-vous » ; sur `code: "TOKEN_EXPIRE"`, garder la conversation affichée pour pouvoir reposer la question après reconnexion. Le jeton n'est vérifié qu'au début de la question : il peut expirer pendant une réponse longue sans la couper. Avant l'envoi, on peut aussi lire `exp` dans la charge utile du JWT pour prévenir l'utilisateur au lieu d'attendre l'erreur ; 429 : trop de questions) ;
 - lit `reponse.body.getReader()` avec un `TextDecoder` et découpe les événements SSE sur `\n\n`, sans oublier de garder le reste incomplet dans un tampon ;
 - pour chaque événement, lit les lignes `event:` et `data:`, applique `JSON.parse(data)` et émet `{ type, donnees }`.
 
