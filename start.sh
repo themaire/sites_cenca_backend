@@ -2,6 +2,8 @@
 
 # Script de lancement pour l'application backend Node.js
 # Usage: ./start.sh [dev|prod] [options]
+# Redéployer la prod : ./start.sh prod -b -d -r (tests du MCP, build, redémarrage, vérification)
+# Documentation complète : documentation/deploiement_start_sh.md
 
 # Couleurs pour les messages
 RED='\033[0;31m'
