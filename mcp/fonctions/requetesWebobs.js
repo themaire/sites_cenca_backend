@@ -16,8 +16,8 @@
  */
 
 const { z } = require('zod');
-const { LECTURE_SEULE, reponse, erreur, journaliser, lire, lireWebobs, resultat } = require('./utilitaires');
-const { trouverSite, numeroDepartement } = require('./requetesMetier');
+const { LECTURE_SEULE, reponse, erreur, journaliser, lire, lireWebobs, resultat, texteNormalise } = require('./utilitaires');
+const { trouverSiteParNom, numeroDepartement } = require('./requetesMetier');
 
 const DATE = `to_date(w.date, 'DD/MM/YYYY')`;
 const ESPECE = `coalesce(nullif(trim(w."nom français"), ''), w.nom)`;
@@ -67,10 +67,13 @@ const SENSIBLE_SITE = `(w."type validation" <> '' OR w.floutage <> 'Aucun' OR w.
 const SENSIBLE_COMMUNE = `(w."type validation" IN ('Maille 10', 'Département') OR w.floutage = 'Département' OR w."détermination" = 'Non')`;
 const NOM_MASQUE = 'Espèce sensible (nom masqué)';
 
-/** Comparaison sans accents ni casse (pas d'extension unaccent sur natobs) */
-const sansAccent = expr => `translate(lower(${expr}), 'àâäáãåçéèêëíìîïñóòôöõúùûüýÿ', 'aaaaaaceeeeiiiinooooouuuuyy')`;
-/** Idem, et traits d'union, apostrophes et espaces multiples ramenés à un espace (noms de commune) */
-const nomSansSeparateurs = expr => `trim(regexp_replace(${sansAccent(expr)}, '[^a-z0-9]+', ' ', 'g'))`;
+/**
+ * Comparaison sans accents, casse ni ponctuation (pas d'extension unaccent sur natobs) : natobs écrit
+ * « Colombey-les-Deux-Églises », la base des sites « Colombey les Deux Églises ».
+ */
+const sansAccent = expr => texteNormalise(expr, e =>
+  // Majuscules accentuées traduites aussi : lower() de natobs (locale C) ne les convertit pas
+  `replace(replace(translate(lower(${e}), 'àâäáãåçéèêëíìîïñóòôöõúùûüýÿÀÂÄÁÃÅÇÉÈÊËÍÌÎÏÑÓÒÔÖÕÚÙÛÜÝŒÆ', 'aaaaaaceeeeiiiinooooouuuuyyaaaaaaceeeeiiiinooooouuuuyœæ'), 'œ', 'oe'), 'æ', 'ae')`);
 
 const schemaAnnee = z.number().int().min(1900).max(2100);
 const filtresCommuns = {
@@ -106,7 +109,7 @@ function conditions(args, params) {
   }
   if (args.commune) {
     const p = ajouter(args.commune.trim());
-    c.push(`(w."code insee" = ${p} OR ${nomSansSeparateurs('w.commune')} = ${nomSansSeparateurs(p)})`);
+    c.push(`(w."code insee" = ${p} OR ${sansAccent('w.commune')} = ${sansAccent(p)})`);
   }
   return c;
 }
@@ -137,7 +140,7 @@ function masquerEspeces(lignes) {
 
 /** Emprise d'un site (union de ses géométries valides, élargie de `tampon` mètres) en EWKB hexadécimal */
 async function empriseSite(site, tampon = 0) {
-  const s = await trouverSite(site);
+  const s = await trouverSiteParNom(site);
   const [g] = await lire(`
     SELECT ST_AsHEXEWKB(ST_Buffer(ST_Union(g.geom), $2)) AS ewkb, round((ST_Area(ST_Union(g.geom)) / 10000)::numeric, 2) AS surface_ha
     FROM esp.geometries g
@@ -241,7 +244,7 @@ function enregistrerRequetesWebobs(server) {
       + "Filtres : groupe, statut, espèce, années. Ex. : « Quelles espèces protégées ont été vues sur le site 10035 ? », « Inventaire des oiseaux du Marais de Reuves ». "
       + "Les observations localisées seulement à la commune sont exclues ; les espèces sensibles sont regroupées sous un nom masqué.",
     inputSchema: {
-      site: z.string().min(1).describe('Code du site (ex. 10035, 51BOIS01) ou uuid_site'),
+      site: z.string().min(1).describe('Code du site (ex. 10035, 51BOIS01), uuid_site ou nom du site (même partiel, sans accents)'),
       tampon_m: z.number().min(0).max(2000).default(0).describe('Élargir l\'emprise du site de N mètres (0 = emprise exacte)'),
       ...filtresCommuns,
       limite: z.number().int().min(1).max(500).default(100).describe("Nombre maximum d'espèces listées"),
