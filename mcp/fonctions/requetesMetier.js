@@ -63,17 +63,25 @@ async function trouverSite(site) {
  * Comme trouverSite, mais accepte aussi un nom de site (même partiel, sans accents ni casse).
  */
 async function trouverSiteParNom(site) {
-  const texte = site.trim();
-  if (/^[0-9A-Za-z]{5,8}$/.test(texte) || /^[0-9A-Fa-f-]{36}$/.test(texte)) {
-    try { return await trouverSite(texte); } catch { /* pas un code : recherche par nom */ }
+  const brut = site.trim();
+  if (/^[0-9A-Za-z]{5,8}$/.test(brut) || /^[0-9A-Fa-f-]{36}$/.test(brut)) {
+    try { return await trouverSite(brut); } catch { /* pas un code : recherche par nom */ }
   }
-  const sites = await lire(`
+  // « la pelouse de champ cognier », « site du marais de Reuves » : article ou « site » en tête retirés
+  const texte = brut.replace(/^(?:(?:le|la|les|l'|l’|du|des|de la|de l'|au|aux|site|sites)\s*)+/i, '').trim() || brut;
+  const chercher = (condition, valeurs) => lire(`
     SELECT s.uuid_site, s.code, e.nom, s.espace
     FROM sitcenca.sites s
     JOIN esp.espaces e ON e.uuid_espace = s.espace
-    WHERE s.validite IS NOT FALSE AND unaccent(e.nom) ILIKE unaccent('%' || $1 || '%')
+    WHERE s.validite IS NOT FALSE AND ${condition}
     ORDER BY s.actuel IS NOT FALSE DESC, s.typ_site, e.nom
-    LIMIT 10`, [texte]);
+    LIMIT 10`, valeurs);
+  let sites = await chercher(`unaccent(e.nom) ILIKE unaccent('%' || $1 || '%')`, [texte]);
+  if (sites.length === 0) {
+    // Sinon tous les mots significatifs (3 lettres ou plus), dans n'importe quel ordre
+    const mots = texte.split(/[\s'’-]+/).filter(m => m.length >= 3);
+    if (mots.length) sites = await chercher(mots.map((_, i) => `unaccent(e.nom) ILIKE unaccent('%' || $${i + 1} || '%')`).join(' AND '), mots);
+  }
   if (sites.length === 0) throw new Error(`Aucun site ne correspond à "${site}". Utiliser rechercher_sites.`);
   const exact = sites.filter(x => x.nom.localeCompare(texte, 'fr', { sensitivity: 'base' }) === 0);
   if (sites.length > 1 && exact.length !== 1) {
@@ -484,8 +492,10 @@ function enregistrerRequetesMetier(server) {
       if (l.quantite !== null) t.quantite_totale = (t.quantite_totale ?? 0) + Number(l.quantite);
       totaux.set(cle, t);
     }
-    // quantite_totale null = quantité non saisie (et non 0)
-    const bilan = [...totaux.values()].map(t => ({ ...t, quantite_totale: t.quantite_totale === null ? null : Math.round(t.quantite_totale * 100) / 100 }));
+    // Quantité non saisie dite explicitement : avec null, le modèle inventait une valeur
+    const bilan = [...totaux.values()].map(t => (t.quantite_totale === null
+      ? { annee: t.annee, action: t.action, nb_operations: t.nb_operations, quantite_totale: 'non saisie' }
+      : { ...t, quantite_totale: Math.round(t.quantite_totale * 100) / 100 }));
     return reponse({ site: { uuid_site: s.uuid_site, code: s.code, nom: s.nom }, periode: { annee_debut, annee_fin },
       bilan_par_annee_et_action: bilan, nb_projets: projets.size, projets: [...projets.values()] });
   });
