@@ -22,6 +22,7 @@ const OUTILS_AUTORISES = [
     'echeances_actes',
     'rechercher_projets',
     'operations_projet',
+    'travaux_site',
     'bilan_operations',
     'indicateurs_sites',
     'indicateurs_activite',

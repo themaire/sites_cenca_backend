@@ -102,7 +102,8 @@ const chatRateLimit = rateLimit({
     message: { message: 'Trop de questions au chatbot, réessayez dans quelques minutes.' },
 });
 
-// Ce que le chatbot sait faire, présenté à l'utilisateur qui le demande (« aide », « que peux-tu faire ? »).
+// Ce que le chatbot sait faire, renvoyé directement par le backend aux questions d'aide (estQuestionAide) ;
+// hors du prompt système pour l'alléger (~700 jetons à relire sur CPU).
 // À tenir à jour avec OUTILS_AUTORISES (fonctions/clientMcp.js) et les paramètres des outils du MCP.
 const CAPACITES = `Je réponds aux questions sur les sites du CENCA, en lecture seule (je ne modifie rien). Je peux :
 - Rechercher des sites par nom ou code, commune, département, type de site, milieu naturel, responsable (prénom ou code) ou année de premier contrat, et les classer par surface.
@@ -116,7 +117,7 @@ const CAPACITES = `Je réponds aux questions sur les sites du CENCA, en lecture 
 - Repérer les sites gérés aux données incomplètes : sans géométrie, sans acte foncier, données manquantes.
 - Maîtrise foncière : actes d'un site (dates, échéances, parcelles) et actes de tous les sites qui arrivent à échéance.
   Ex. : « Quels actes arrivent à échéance dans les 6 mois ? »
-- Projets de gestion : recherche par année, site, responsable, statut ou type (travaux), détail des opérations d'un projet, bilan des opérations par type d'action et par année.
+- Projets de gestion : travaux réalisés ou prévus sur un site, recherche de projets par année, site, responsable, statut ou type, détail des opérations d'un projet, bilan des opérations par type d'action et par année.
   Ex. : « Bilan des travaux réalisés en 2025 par type d'action »
 - Observations naturalistes (WebObs, faune et flore depuis 2000) : statistiques par année, groupe, département ou commune ; espèces observées avec leurs statuts (protection, directives, listes rouges) ; inventaire d'un site du CENCA ; sites où une espèce est présente, sites les plus riches ou les moins prospectés.
   Ex. : « Quelles espèces protégées ont été vues sur le site 10035 ? », « Sur quels sites trouve-t-on le Sonneur à ventre jaune ? », « Combien d'observations d'oiseaux en 2025 ? »
@@ -150,7 +151,7 @@ function promptSysteme() {
         "- Ne demande pas de précision quand un outil permet déjà de répondre à l'interprétation la plus probable : réponds avec celle-ci ; seulement si la question était ambiguë, indique en une ligne comment tu l'as comprise. « Nouveaux sites », « sites contractualisés » ou « apparus » une année donnée = année de premier contrat (rechercher_sites, annee_premier_contrat).",
         "- Réponds toujours en français, de façon concise, en Markdown (listes, tableaux courts).",
         "- Tes seules sources de données sont les outils fournis (requêtes métier en lecture seule). Appelle-les pour chaque question portant sur les données ; tu peux en enchaîner plusieurs.",
-        "- Si l'utilisateur demande ce que tu sais faire, de l'aide ou des exemples (ou salue simplement), présente tes capacités ci-dessous, sans appeler d'outil.",
+        "- Si l'utilisateur demande ce que tu sais faire, de l'aide ou des exemples (ou salue simplement), réponds en deux phrases, sans appeler d'outil : tu réponds sur les sites, le foncier, les projets et travaux, les indicateurs du tableau de bord et les observations naturalistes ; « Aide » donne la liste détaillée avec des exemples.",
         "- Appelle l'outil adapté directement, sans demander la permission ni annoncer ce que tu vas faire.",
         "- Passe aux outils les noms (communes, sites) tels que l'utilisateur les a écrits. N'invente jamais de code INSEE ni de code de site : n'utilise un code que s'il vient de l'utilisateur ou d'un résultat d'outil.",
         "- Si un outil ne renvoie aucune ligne, réessaie autrement (nom partiel, autre outil) avant de conclure qu'il n'y a rien.",
@@ -166,15 +167,13 @@ function promptSysteme() {
         "- L'utilisateur ne donne jamais de code INSEE : tout code qu'il cite (5 chiffres ou de la forme 51BOIS01) est un code de site. Ne lui demande jamais de le confirmer, passe-le tel quel aux outils qui prennent un site.",
         "- Les codes de site ont deux formes : 5 chiffres (ex. 10035, la plus courante) ou département + lettres + numéro (ex. 51BOIS01).",
         "- Les communes sont toujours désignées par leur nom ; passe ce nom aux outils (paramètre commune). Pour un département (Ardennes 08, Aube 10, Marne 51, Haute-Marne 52), utilise le paramètre departement.",
-        "- Si l'utilisateur donne un nom de site, cherche d'abord le site avec rechercher_sites.",
+        "- Si l'utilisateur donne un nom de site, cherche d'abord le site avec rechercher_sites, sauf pour ses travaux : travaux_site accepte directement le nom.",
         "- Actes, dates et échéances d'un site précis : foncier_site. echeances_actes ne sert qu'aux échéances de tous les sites confondus.",
+        "- « Depuis 2025 » = de 2025 jusqu'à aujourd'hui, année en cours comprise : utilise annee_debut (travaux_site, rechercher_projets, bilan_operations), jamais une seule année. Travaux d'un site : un seul appel à travaux_site, avec le nom ou le code du site tel que l'utilisateur l'a écrit (inutile de chercher le site avant) et annee_debut ; résume par année et par action en recopiant les totaux de bilan_par_annee_et_action (ne les recalcule pas), avec les dates et maîtres d'œuvre des opérations.",
         "- Faune, flore, espèces, observations, inventaires naturalistes : outils webobs_*. Espèces d'un site : webobs_site ; sites où vit une espèce ou classement des sites : webobs_sites_cenca ; ailleurs (commune, département) : webobs_especes ou webobs_statistiques.",
         "- Les surfaces sont en hectares sauf mention contraire ; précise l'unité quand tu donnes une surface.",
         "- Réponses courtes : au-delà de 10 résultats, ne liste pas : donne le total exact et un résumé léger d'après la « Répartition exacte » jointe au résultat (par département, type…, surface totale), au plus 5 exemples, puis propose de filtrer (département, type, commune…). Un résultat peut n'afficher que ses premières lignes : le total exact est alors indiqué, c'est lui qu'il faut donner.",
         "- Si l'utilisateur demande la liste complète d'un résultat de plus de 10 lignes, ne la recopie pas : réponds que la liste est trop longue pour le chat, redonne le résumé et propose de la découper par un filtre (ex. par département). Ne complète jamais une liste avec des sites absents des résultats.",
-        "",
-        "Tes capacités (à présenter telles quelles à qui te demande ce que tu sais faire) :",
-        CAPACITES,
         "",
         "Vocabulaire de la base (pour comprendre les résultats des outils) :",
         GUIDE_METIER,
@@ -242,8 +241,11 @@ function ressembleADesDonnees(texte) {
  */
 function reecritureLiens(sites) {
     let reste = '';
-    // Espaces ou tabulations parasites dans la cible (« /site/08\t089 ») : retirés avant vérification
-    const convertir = texte => texte.replace(/\[([^\]\n]+)\]\(\s*\/?site\/([^)\n]+)\)/g, (lien, nom, cible) => {
+    // Espaces ou tabulations parasites dans la cible (« /site/08\t089 ») : retirés avant vérification.
+    // Le modèle oublie parfois « /site/ » (« [Nom](10030) ») ou invente un domaine (« https://ce.nca.fr/site/10030 ») :
+    // un code ou un uuid seul est accepté, et le domaine retiré.
+    const convertir = texte => texte.replace(/\[([^\]\n]+)\]\(\s*(?:(?:https?:\/\/[^/)\s]+)?\/?site\/([^)\n]+)|(\d{5}|\d{2}[A-Za-z]+\d+|[\dA-Fa-f-]{36})\s*)\)/g, (lien, nom, chemin, seul) => {
+        const cible = chemin ?? seul;
         const verifiee = sites.get(cible.replace(/\s+/g, '').toUpperCase());
         return verifiee ? `[${nom}](/site/${verifiee})` : nom;
     });
@@ -274,6 +276,10 @@ const QUESTIONS_AIDE = new Set([
 const estQuestionAide = texte => QUESTIONS_AIDE.has(
     texte.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 );
+
+// Refus hors périmètre (règle « Périmètre » du prompt), repéré dans les DEBUT_REFUS premiers caractères
+const REFUS = /réservée? aux données|hors (de mon )?périmètre/i;
+const DEBUT_REFUS = 120;
 
 // Octets bruts que le modèle écrit parfois en jetons (« Site g<0xC2>éré »)
 const nettoyer = texte => texte.replace(/<0x[0-9A-Fa-f]{2}>/g, '');
@@ -307,6 +313,7 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
     let relance = false;      // relance déjà faite après une réponse vide
     let reponseVide = false;
     let relanceSansOutil = false;   // relance déjà faite après une réponse inventée (données sans outil)
+    let relanceRefus = false;       // relance déjà faite après un refus hors périmètre malgré des outils appelés
     let reponseInventee = false;
 
     res.writeHead(200, {
@@ -389,6 +396,11 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
             // génération est arrêtée : la réponse se termine avec ce qui a été écrit.
             let blancs = 0;
             let emballe = false;
+            // Après un appel d'outil, la question est forcément dans le périmètre : un refus (« réservé aux
+            // données des sites ») est une erreur du modèle. Le début du texte est retenu le temps de le vérifier.
+            let surveillerRefus = !retenir && !relanceRefus && avecOutils;
+            let attente = '';
+            let refus = false;
             for await (const morceau of flux) {
                 const message = morceau.message || {};
                 if (message.content) {
@@ -403,12 +415,41 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
                         break;
                     }
                     contenu += texte;
+                    if (surveillerRefus) {
+                        attente += texte;
+                        texte = '';
+                        if (contenu.length >= DEBUT_REFUS) {
+                            surveillerRefus = false;
+                            if (REFUS.test(contenu)) {
+                                refus = true;
+                                flux.abort();
+                                break;
+                            }
+                            texte = attente;
+                            attente = '';
+                        }
+                    }
                     const aEnvoyer = retenir ? '' : liens.ajouter(texte);
                     if (aEnvoyer) envoyer('texte', { texte: aEnvoyer });
                 }
                 if (message.thinking) raisonnement += message.thinking.length;
                 if (message.tool_calls?.length) appels.push(...message.tool_calls);
                 if (morceau.done) raisonFin = morceau.done_reason;
+            }
+            // Réponse plus courte que DEBUT_REFUS : vérifiée maintenant
+            if (surveillerRefus && attente) {
+                if (REFUS.test(contenu)) refus = true;
+                else {
+                    const aEnvoyer = liens.ajouter(attente);
+                    if (aEnvoyer) envoyer('texte', { texte: aEnvoyer });
+                }
+            }
+            if (refus && !interrompu) {
+                console.warn(`[chat] ${identifiant} : refus hors périmètre après ${outilsAppeles.length} outil(s) au tour ${tour}, relance`);
+                relanceRefus = true;
+                liens.vider();
+                messages.push({ role: 'user', content: "Ma question porte bien sur les données du CENCA (sites, projets, travaux, foncier, observations) : poursuis avec les outils et réponds-y d'après leurs résultats." });
+                continue;
             }
             if (emballe) {
                 console.warn(`[chat] ${identifiant} : génération emballée (espaces en boucle) au tour ${tour}, arrêtée`);

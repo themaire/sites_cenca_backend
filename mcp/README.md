@@ -20,7 +20,8 @@ Il vit dans le dépôt du backend mais tourne dans **son propre processus et son
 | `synthese_sites` | Nombre et surfaces par type de site (et par département) | — |
 | `foncier_site` | Actes MFU (multi-sites compris) et parcelles par type de propriétaire | `/sites/mfu/...`, `/parcelles_mfu` |
 | `echeances_actes` | Actes arrivant à échéance ou échus récemment | — |
-| `rechercher_projets` | Projets de gestion par année, site, responsable, statut, type | `/sites/criteria_travaux/...` |
+| `rechercher_projets` | Projets de gestion par année ou période, site, responsable, statut, type | `/sites/criteria_travaux/...` |
+| `travaux_site` | Tous les projets d'un site (code, uuid ou nom) et leurs opérations sur une période, avec totaux par année et par action | — |
 | `operations_projet` | Opérations d'un projet : actions, quantités, maître d'œuvre, financeurs | `/sites/operations/uuid=/lite` |
 | `bilan_operations` | Agrégat des opérations par action et par année | — |
 | `indicateurs_sites` | Chiffres clés et synthèses des sites gérés (départements, Natura 2000/APB…, milieux, types d'actes, propriétaires, agences de l'eau, réserves, protection forte, nouveaux sites par an), état actuel ou fin d'année précédente | Tableau de bord Grafana « Sites CENCA » (vues `sitcenca.synth_*`) |

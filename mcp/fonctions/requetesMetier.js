@@ -59,6 +59,29 @@ async function trouverSite(site) {
   return sites[0];
 }
 
+/**
+ * Comme trouverSite, mais accepte aussi un nom de site (même partiel, sans accents ni casse).
+ */
+async function trouverSiteParNom(site) {
+  const texte = site.trim();
+  if (/^[0-9A-Za-z]{5,8}$/.test(texte) || /^[0-9A-Fa-f-]{36}$/.test(texte)) {
+    try { return await trouverSite(texte); } catch { /* pas un code : recherche par nom */ }
+  }
+  const sites = await lire(`
+    SELECT s.uuid_site, s.code, e.nom, s.espace
+    FROM sitcenca.sites s
+    JOIN esp.espaces e ON e.uuid_espace = s.espace
+    WHERE s.validite IS NOT FALSE AND unaccent(e.nom) ILIKE unaccent('%' || $1 || '%')
+    ORDER BY s.actuel IS NOT FALSE DESC, s.typ_site, e.nom
+    LIMIT 10`, [texte]);
+  if (sites.length === 0) throw new Error(`Aucun site ne correspond à "${site}". Utiliser rechercher_sites.`);
+  const exact = sites.filter(x => x.nom.localeCompare(texte, 'fr', { sensitivity: 'base' }) === 0);
+  if (sites.length > 1 && exact.length !== 1) {
+    throw new Error(`Plusieurs sites correspondent à "${site}" : ${sites.map(x => `${x.code || x.uuid_site} ${x.nom}`).join(' ; ')}. Rappeler l'outil avec le code du site voulu.`);
+  }
+  return exact[0] || sites[0];
+}
+
 function enregistrerRequetesMetier(server) {
 
   // ---------------------------------------------------------------- Documentation
@@ -358,9 +381,11 @@ function enregistrerRequetesMetier(server) {
   // ---------------------------------------------------------------- Travaux / gestion
   outil(server, 'rechercher_projets', {
     title: 'Rechercher des projets',
-    description: "Projets de gestion (vue ope.listeprojets, comme la recherche de projets de l'application) par année, site, responsable, statut, type (TRV = travaux) ou texte du titre. Par défaut, seulement les projets saisis dans la webapp (pro_webapp) : les anciens projets MS Access n'ont pas d'opérations détaillées.",
+    description: "Projets de gestion (vue ope.listeprojets, comme la recherche de projets de l'application) par année (ou période annee_debut / annee_fin, ex. « depuis 2025 » = annee_debut 2025), site, responsable, statut, type (TRV = travaux) ou texte du titre. Par défaut, seulement les projets saisis dans la webapp (pro_webapp) : les anciens projets MS Access n'ont pas d'opérations détaillées.",
     inputSchema: {
-      annee: z.number().int().optional(),
+      annee: z.number().int().optional().describe('Une seule année'),
+      annee_debut: z.number().int().optional().describe('Première année incluse (période)'),
+      annee_fin: z.number().int().optional().describe('Dernière année incluse (période)'),
       code_site: z.string().optional(),
       responsable: z.string().optional().describe('Valeur de la colonne responsable de ope.listeprojets'),
       statut: z.string().optional(),
@@ -369,7 +394,7 @@ function enregistrerRequetesMetier(server) {
       webapp_uniquement: z.boolean().default(true),
       limite: z.number().int().min(1).max(2000).default(200),
     },
-  }, async ({ annee, code_site, responsable, statut, typ_projet, texte, webapp_uniquement, limite }) => {
+  }, async ({ annee, annee_debut, annee_fin, code_site, responsable, statut, typ_projet, texte, webapp_uniquement, limite }) => {
     const lignes = await lire(`
       SELECT p.uuid_proj, p.annee, p.responsable, p.loc, p.titre, p.nb_ope, p.statut, p.typ_projet,
              s.uuid_site, s.code AS code_site, pr.pro_webapp
@@ -379,12 +404,15 @@ function enregistrerRequetesMetier(server) {
       WHERE ($1::int IS NULL OR p.annee = $1)
         AND ($2::text IS NULL OR upper(s.code) = upper($2))
         AND ($3::text IS NULL OR p.responsable ILIKE '%' || $3 || '%')
+        AND ($9::int IS NULL OR p.annee >= $9)
+        AND ($10::int IS NULL OR p.annee <= $10)
         AND ($4::text IS NULL OR p.statut = $4)
         AND ($5::text IS NULL OR p.typ_projet = $5)
         AND ($6::text IS NULL OR unaccent(p.titre) ILIKE unaccent('%' || $6 || '%'))
         AND (NOT $7 OR pr.pro_webapp IS TRUE)
       ORDER BY p.annee DESC NULLS LAST, s.code
-      LIMIT $8`, [annee ?? null, code_site || null, responsable || null, statut || null, typ_projet || null, texte || null, webapp_uniquement, limite]);
+      LIMIT $8`, [annee ?? null, code_site || null, responsable || null, statut || null, typ_projet || null, texte || null, webapp_uniquement, limite,
+        annee_debut ?? null, annee_fin ?? null]);
     return resultat(lignes);
   });
 
@@ -410,6 +438,56 @@ function enregistrerRequetesMetier(server) {
       WHERE op.ref_uuid_proj = $1
       ORDER BY op.date_debut NULLS LAST`, [uuid_proj]);
     return resultat(lignes);
+  });
+
+  outil(server, 'travaux_site', {
+    title: "Travaux d'un site",
+    description: "Tous les projets de gestion d'un site et leurs opérations (travaux réalisés ou prévus), en un seul appel : année, titre, statut, puis pour chaque opération l'action, les dates, la quantité, la surface, le maître d'œuvre et un résumé de la description ; bilan_par_annee_et_action donne les totaux exacts. "
+      + "site = code, uuid_site ou nom du site (même partiel, sans accents). Période : annee_debut / annee_fin (« depuis 2025 » = annee_debut 2025). "
+      + "Ex. : « Quels travaux depuis 2025 à la Pelouse de Champ Cognier ? ». Pour plusieurs sites ou un bilan chiffré, utiliser bilan_operations.",
+    inputSchema: {
+      site: z.string().min(2).describe('Code (ex. 10030), uuid_site ou nom du site'),
+      annee_debut: z.number().int().optional().describe('Première année incluse'),
+      annee_fin: z.number().int().optional().describe('Dernière année incluse'),
+    },
+  }, async ({ site, annee_debut, annee_fin }) => {
+    const s = await trouverSiteParNom(site);
+    const lignes = await lire(`
+      SELECT p.uuid_proj, l.annee, l.titre, l.statut, l.typ_projet, l.responsable,
+             op.date_debut, op.date_fin, ope.get_action_libelle(op.action_2) AS action,
+             op.quantite, opegerer.get_libelle(op.unite) AS unite, op.surf AS surface, op.lin AS lineaire,
+             COALESCE(mo.nom, op.nom_mo) AS maitre_oeuvre,
+             CASE WHEN length(op.description) > 300 THEN left(op.description, 300) || '…' ELSE op.description END AS description
+      FROM opegerer.projets p
+      JOIN ope.listeprojets l ON l.uuid_proj = p.uuid_proj
+      LEFT JOIN opegerer.operations op ON op.ref_uuid_proj = p.uuid_proj AND op.validite IS NOT FALSE
+      LEFT JOIN ann.annuaire mo ON mo.uuid_ann = op.ref_uuid_ann
+      WHERE p.site = $1
+        AND ($2::int IS NULL OR l.annee >= $2)
+        AND ($3::int IS NULL OR l.annee <= $3)
+      ORDER BY l.annee DESC, l.titre, op.date_debut NULLS LAST`, [s.uuid_site, annee_debut ?? null, annee_fin ?? null]);
+    // Une entrée par projet, ses opérations imbriquées
+    const projets = new Map();
+    for (const { uuid_proj, annee, titre, statut, typ_projet, responsable, ...operation } of lignes) {
+      if (!projets.has(uuid_proj)) projets.set(uuid_proj, { annee, titre, statut, typ_projet, responsable, operations: [] });
+      // Champs vides retirés : moins de texte à lire pour un petit modèle sur CPU
+      const utile = Object.fromEntries(Object.entries(operation).filter(([, v]) => v !== null && v !== ''));
+      if (utile.action || utile.date_debut) projets.get(uuid_proj).operations.push(utile);
+    }
+    // Totaux par année et par action, calculés ici : un petit modèle se trompe en additionnant
+    const totaux = new Map();
+    for (const l of lignes) {
+      if (!l.action) continue;
+      const cle = `${l.annee}|${l.action}|${l.unite ?? ''}`;
+      const t = totaux.get(cle) || { annee: l.annee, action: l.action, nb_operations: 0, quantite_totale: null, unite: l.unite };
+      t.nb_operations += 1;
+      if (l.quantite !== null) t.quantite_totale = (t.quantite_totale ?? 0) + Number(l.quantite);
+      totaux.set(cle, t);
+    }
+    // quantite_totale null = quantité non saisie (et non 0)
+    const bilan = [...totaux.values()].map(t => ({ ...t, quantite_totale: t.quantite_totale === null ? null : Math.round(t.quantite_totale * 100) / 100 }));
+    return reponse({ site: { uuid_site: s.uuid_site, code: s.code, nom: s.nom }, periode: { annee_debut, annee_fin },
+      bilan_par_annee_et_action: bilan, nb_projets: projets.size, projets: [...projets.values()] });
   });
 
   outil(server, 'bilan_operations', {
