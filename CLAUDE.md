@@ -19,6 +19,9 @@ npm start
 # Development (outside Docker): npm install + npm start, port 8887
 ./start.sh dev
 
+# Production redeploy (MCP tests, image build BEFORE stopping prod, down/up, health checks): see documentation/deploiement_start_sh.md
+./start.sh prod -b -d -r
+
 # Docker (production — HTTPS + SSL certs): docker-compose.yml is the complete prod config
 docker-compose up -d
 # equivalent, kept for start.sh prod: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
