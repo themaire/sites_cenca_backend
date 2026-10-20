@@ -40,6 +40,9 @@ Le backend fait tourner un LLM local, **Gemma 4 via Ollama**. Ce LLM n'accède a
   | `fin` | `{ "outils": ["fiche_site"], "duree_ms": 5321, "modele": "gemma4", "questions_restantes": 7 }` | Fin normale (`modele` = modèle qui a répondu, à afficher discrètement, ex. en infobulle ; `questions_restantes` = questions encore possibles dans cette conversation). |
   | `erreur` | `{ "message": "Aucun serveur Ollama n'est joignable." }` | Fin en erreur, message lisible à afficher. |
 
+- Toutes les 20 s, le backend envoie un commentaire SSE `: ping` (battement de cœur, pour qu'un proxy ne coupe pas la connexion pendant que le modèle réfléchit) : le parseur doit ignorer les lignes qui commencent par `:`.
+- Les noms de site du texte sont des liens Markdown relatifs vers la fiche : `[Nom du site](/site/<code>)`, ex. `/site/51065`, ou `/site/<uuid_site>` pour un site sans code (route `/site/:code` du front, résolue par `GET /sites/code=:code` ; le backend ne garde que les sites présents dans les résultats d'outils, les autres deviennent un nom sans lien), ouverte sans recharger la page ni fermer le chatbot).
+- Une question dure au plus 15 min (`OLLAMA_TIMEOUT_MS`) : au-delà, le backend arrête le modèle et envoie `erreur`.
 - Si on interrompt la requête (`AbortController.abort()`), le backend arrête le modèle. Il faut le faire à la fermeture du panneau et sur « Nouvelle conversation » pendant une génération.
 
 **Attention :** `HttpClient` d'Angular ne sait pas lire un flux SSE en POST. On utilise donc `fetch` et un `ReadableStream`. L'en-tête Bearer doit alors être ajouté à la main, car l'intercepteur ne s'applique pas à `fetch`.

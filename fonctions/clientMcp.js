@@ -23,13 +23,15 @@ const OUTILS_AUTORISES = [
     'rechercher_projets',
     'operations_projet',
     'bilan_operations',
+    'indicateurs_sites',
+    'indicateurs_activite',
+    'controle_donnees_sites',
 ];
 
 const TAILLE_MAX_RESULTAT = 15000; // caractères renvoyés au modèle par appel d'outil
 const DUREE_CACHE_MS = 10 * 60 * 1000;
 
 let cacheOutils = { outils: null, date: 0 };
-let cacheDocumentation = null;
 
 /**
  * Ouvre une connexion MCP, exécute `traitement(client)` puis ferme la connexion.
@@ -50,13 +52,36 @@ async function avecClient(traitement) {
 }
 
 /**
- * Concatène le texte d'un résultat d'outil MCP.
+ * Concatène le texte d'un résultat d'outil MCP. Si `sites` (Map) est fourni, y range la cible de lien de
+ * chaque site du résultat (code, ou uuid_site s'il n'a pas de code ; clés : code et uuid_site en majuscules) :
+ * seuls ces sites deviennent des liens.
  */
-function texteResultat(resultat) {
+function texteResultat(resultat, sites) {
     return (resultat.content || [])
         .filter(bloc => bloc.type === 'text')
-        .map(bloc => compacter(bloc.text))
+        .map(bloc => {
+            if (sites) relever(bloc.text, sites);
+            return compacter(bloc.text);
+        })
         .join('\n');
+}
+
+// Parcourt le JSON d'un résultat et relève chaque objet portant uuid_site et code (ou code_site)
+function relever(texte, sites) {
+    let donnees;
+    try { donnees = JSON.parse(texte); } catch { return; }
+    const parcourir = valeur => {
+        if (Array.isArray(valeur)) return valeur.forEach(parcourir);
+        if (!valeur || typeof valeur !== 'object') return;
+        const code = valeur.code ?? valeur.code_site;
+        if (valeur.uuid_site) {
+            const cible = code || valeur.uuid_site;
+            sites.set(String(valeur.uuid_site).toUpperCase(), cible);
+            if (code) sites.set(String(code).toUpperCase(), cible);
+        }
+        Object.values(valeur).forEach(parcourir);
+    };
+    parcourir(donnees);
 }
 
 // Liste non vide d'objets « plats » (valeurs simples) : se présente en tableau
@@ -69,8 +94,42 @@ function estTableau(valeur) {
 // Colonnes techniques inutiles au modèle (le MCP reste complet pour les autres clients)
 const COLONNES_MASQUEES = new Set(['insee', 'bassin_agence', 'alerte_fin', 'validite']);
 const LIGNES_MAX_MODELE = 30;   // au-delà, le modèle reçoit le total exact et les premières lignes
+const LIGNES_REPARTITION = 10;  // au-delà, une répartition calculée sur toutes les lignes est jointe
+
+const DEPARTEMENTS = { '08': 'Ardennes', '10': 'Aube', '51': 'Marne', '52': 'Haute-Marne' };
 
 const vide = v => v === null || v === undefined || v === '';
+
+/**
+ * Répartition exacte d'une longue liste (département, type, statut, surface totale), calculée ici sur toutes
+ * les lignes : le modèle n'en voit qu'une partie et compte mal. Il s'en sert pour résumer au lieu de tout lister.
+ */
+function repartition(lignes) {
+    const compter = valeurDe => {
+        const comptes = new Map();
+        for (const ligne of lignes) {
+            const valeur = valeurDe(ligne);
+            if (!vide(valeur)) comptes.set(valeur, (comptes.get(valeur) || 0) + 1);
+        }
+        return [...comptes].sort((a, b) => b[1] - a[1]).map(([valeur, nb]) => `${valeur} ${nb}`).join(', ');
+    };
+    const departement = ligne => {
+        const code = String(ligne.code ?? ligne.code_site ?? '');
+        const numero = /^\d{2}/.test(code) ? code.slice(0, 2) : String(ligne.insee ?? '').slice(0, 2);
+        return DEPARTEMENTS[numero] ? `${numero} ${DEPARTEMENTS[numero]}` : null;
+    };
+    const champType = ['typ_site_txt', 'typ_site_libelle', 'typ_mfu', 'typ_projet', 'action_2_libelle'].find(c => lignes.some(l => !vide(l[c])));
+    const parties = [
+        ['département', compter(departement)],
+        ['type', champType ? compter(l => l[champType]) : ''],
+        ['statut', lignes.some(l => !vide(l.statut)) ? compter(l => l.statut) : ''],
+    ].filter(([, texte]) => texte).map(([nom, texte]) => `par ${nom} : ${texte}`);
+    if (lignes.some(l => !vide(l.surface_ha))) {
+        const total = lignes.reduce((somme, l) => somme + (Number(l.surface_ha) || 0), 0);
+        parties.push(`surface totale : ${total.toFixed(2)} ha`);
+    }
+    return parties.length ? `[Répartition exacte des ${lignes.length} lignes, ${parties.join(' ; ')}]` : '';
+}
 
 function tableau(lignes) {
     let colonnes = [...new Set(lignes.flatMap(ligne => Object.keys(ligne)))];
@@ -79,17 +138,19 @@ function tableau(lignes) {
         // Code brut doublé d'un libellé (typ_site / typ_site_txt) : le libellé suffit
         && !(colonnes.includes(`${c}_txt`) || colonnes.includes(`${c}_libelle`))
         // uuid_site seulement pour les sites sans code (les outils de site acceptent le code)
-        && !(c === 'uuid_site' && colonnes.includes('code') && lignes.every(l => !vide(l.code)))
+        && !(c === 'uuid_site' && lignes.every(l => !vide(l.code ?? l.code_site)))
         && lignes.some(l => !vide(l[c])));
     const cellule = (ligne, c) => {
-        if (c === 'uuid_site' && !vide(ligne.code)) return '';
+        if (c === 'uuid_site' && !vide(ligne.code ?? ligne.code_site)) return '';
         return vide(ligne[c]) ? '' : String(ligne[c]).replace(/[\t\r\n]+/g, ' ');
     };
     const affichees = lignes.slice(0, LIGNES_MAX_MODELE);
     const texte = [colonnes.join('\t'), ...affichees.map(ligne => colonnes.map(c => cellule(ligne, c)).join('\t'))].join('\n');
-    return lignes.length > affichees.length
-        ? `${texte}\n[… ${affichees.length} lignes affichées sur ${lignes.length} : le total exact est ${lignes.length}]`
-        : texte;
+    const fin = [
+        lignes.length > affichees.length ? `[… ${affichees.length} lignes affichées sur ${lignes.length} : le total exact est ${lignes.length}]` : '',
+        lignes.length > LIGNES_REPARTITION ? repartition(lignes) : '',
+    ].filter(Boolean);
+    return [texte, ...fin].join('\n');
 }
 
 /**
@@ -131,8 +192,9 @@ async function listerOutils() {
 
 /**
  * Appelle un outil autorisé et renvoie son résultat texte (tronqué si trop long).
+ * `sites` (Map, optionnelle) reçoit les correspondances code / uuid → cible de lien des sites du résultat.
  */
-async function appelerOutil(nom, args = {}) {
+async function appelerOutil(nom, args = {}, sites) {
     if (!OUTILS_AUTORISES.includes(nom)) {
         throw new Error(`Outil non autorisé : ${nom}`);
     }
@@ -141,7 +203,7 @@ async function appelerOutil(nom, args = {}) {
         Object.entries(args || {}).filter(([, valeur]) => valeur !== null && valeur !== undefined && valeur !== '')
     );
     const resultat = await avecClient(client => client.callTool({ name: nom, arguments: argumentsUtiles }));
-    let texte = texteResultat(resultat);
+    let texte = texteResultat(resultat, sites);
     if (resultat.isError) texte = `Erreur : ${texte}`;
     if (texte.length > TAILLE_MAX_RESULTAT) {
         texte = texte.slice(0, TAILLE_MAX_RESULTAT)
@@ -150,14 +212,4 @@ async function appelerOutil(nom, args = {}) {
     return texte;
 }
 
-/**
- * Guide métier de la base (outil documentation_base), mis en cache pour le prompt système.
- */
-async function documentationBase() {
-    if (cacheDocumentation) return cacheDocumentation;
-    const resultat = await avecClient(client => client.callTool({ name: 'documentation_base', arguments: {} }));
-    cacheDocumentation = texteResultat(resultat);
-    return cacheDocumentation;
-}
-
-module.exports = { OUTILS_AUTORISES, listerOutils, appelerOutil, documentationBase };
+module.exports = { OUTILS_AUTORISES, listerOutils, appelerOutil };

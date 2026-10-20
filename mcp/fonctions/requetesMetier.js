@@ -258,7 +258,7 @@ function enregistrerRequetesMetier(server) {
 
   outil(server, 'synthese_sites', {
     title: 'Synthèse des sites',
-    description: "Nombre de sites et surfaces (déclarée dans esp.espaces et calculée sur les géométries) par type de site, éventuellement par département (2 premiers chiffres de l'INSEE).",
+    description: "Nombre de sites et surfaces (déclarée dans esp.espaces et calculée sur les géométries) par type de site, éventuellement par département (2 premiers chiffres de l'INSEE). Compte aussi les sites non actuels : pour les chiffres officiels des sites gérés (rapport d'activité, tableau de bord), utiliser indicateurs_sites.",
     inputSchema: {
       par_departement: z.boolean().default(false),
       inclure_invalides: z.boolean().default(false),
@@ -342,7 +342,7 @@ function enregistrerRequetesMetier(server) {
   }, async ({ mois, inclure_echus }) => {
     const lignes = await lire(`
       SELECT a.fin, a.fin - current_date AS jours_restants, a.uuid_acte, COALESCE(tm.libelle, a.typ_mfu) AS typ_mfu,
-             a.tacit_rec, a.detail_rec, s.code, e.nom AS site, a.validite, a.actuel
+             a.tacit_rec, a.detail_rec, s.uuid_site, s.code, e.nom AS site, a.validite, a.actuel
       FROM sitcenca.actes_mfu a
       LEFT JOIN sitcenca.typ_mfu tm ON tm.cd_type = a.typ_mfu
       LEFT JOIN sitcenca.sites s ON s.uuid_site = a.site
@@ -372,7 +372,7 @@ function enregistrerRequetesMetier(server) {
   }, async ({ annee, code_site, responsable, statut, typ_projet, texte, webapp_uniquement, limite }) => {
     const lignes = await lire(`
       SELECT p.uuid_proj, p.annee, p.responsable, p.loc, p.titre, p.nb_ope, p.statut, p.typ_projet,
-             s.code AS code_site, pr.pro_webapp
+             s.uuid_site, s.code AS code_site, pr.pro_webapp
       FROM ope.listeprojets p
       LEFT JOIN opegerer.projets pr ON pr.uuid_proj = p.uuid_proj
       LEFT JOIN sitcenca.sites s ON s.uuid_site = pr.site
@@ -425,7 +425,7 @@ function enregistrerRequetesMetier(server) {
   }, async ({ annee_debut, annee_fin, code_site, action, par_site }) => {
     const lignes = await lire(`
       SELECT extract(year FROM op.date_debut)::int AS annee,
-             CASE WHEN $5 THEN s.code END AS code_site,
+             CASE WHEN $5 THEN s.uuid_site END AS uuid_site, CASE WHEN $5 THEN s.code END AS code_site,
              op.action_2, ope.get_action_libelle(op.action_2) AS action_2_libelle,
              opegerer.get_libelle(op.unite) AS unite,
              count(*) AS nb_operations, sum(op.surf) AS surface, sum(op.lin) AS lineaire, sum(op.quantite) AS quantite
@@ -437,9 +437,142 @@ function enregistrerRequetesMetier(server) {
         AND ($2::int IS NULL OR op.date_debut < make_date($2 + 1, 1, 1))
         AND ($3::text IS NULL OR upper(s.code) = upper($3))
         AND ($4::text IS NULL OR op.action = $4 OR op.action_2 = $4)
-      GROUP BY 1, 2, 3, 4, 5
-      ORDER BY 1 DESC NULLS LAST, 2, 4`, [annee_debut ?? null, annee_fin ?? null, code_site || null, action || null, par_site]);
+      GROUP BY 1, 2, 3, 4, 5, 6
+      ORDER BY 1 DESC NULLS LAST, 3, 5`, [annee_debut ?? null, annee_fin ?? null, code_site || null, action || null, par_site]);
     return resultat(lignes);
+  });
+
+  // ---------------------------------------------------------------- Indicateurs (tableaux de bord Grafana « Sites CENCA »)
+  // Requêtes des panneaux Grafana, sur les mêmes vues de synthèse : mêmes chiffres que le tableau de bord.
+  // « Sites gérés » = typ_site '1', validite et actuel non faux. Vues « _n-1 » = état à la fin de l'année précédente.
+  const SYNTHESES = {
+    departements: { actuel: 'sitcenca.synth_departements', n1: 'sitcenca."synth_departement_n-1"' },
+    espaces_naturels: { actuel: 'sitcenca.synth_espacesnat', n1: 'sitcenca."synth_espacesnat_n-1"' },
+    milieux_naturels: { actuel: 'sitcenca.synth_habitats', n1: 'sitcenca."synth_habitats_n-1"' },
+    types_actes: { actuel: 'sitcenca.synth_actes', n1: 'sitcenca."synth_actes_n-1"' },
+    assistance_technique: { actuel: 'sitcenca.synth_asstech', n1: 'sitcenca."synth_asstech_n-1"' },
+    proprietaires: { actuel: 'sitcenca.synth_proprio' },
+    bassins_financeurs: { actuel: 'sitcenca.synth_financeurs' },
+    reserves: { actuel: 'sitcenca.synth_reserves' },
+  };
+
+  outil(server, 'indicateurs_sites', {
+    title: 'Indicateurs des sites gérés',
+    description: "Chiffres clés et synthèses des sites gérés, comme le tableau de bord Grafana du CENCA (rapport d'activité). theme : "
+      + "chiffres_cles (nombre de sites gérés, surface totale, parcelles MFU, nouveaux sites gérés et nouvelles assistances techniques d'une année) ; "
+      + "departements (sites, surface, communes par département) ; espaces_naturels (sites et surface en Natura 2000, APB, RAMSAR, parc national…) ; "
+      + "milieux_naturels (par milieu naturel principal) ; types_actes (sites et surface par type de maîtrise foncière) ; assistance_technique ; "
+      + "proprietaires (par type de propriétaire) ; bassins_financeurs (par agence de l'eau) ; reserves (réserves naturelles) ; "
+      + "protection_forte (sites en RNR, RNN, cœur de parc, APB) ; nouveaux_sites_par_an (nombre de nouveaux sites gérés par année). "
+      + "annee_precedente = true : état à la fin de l'année précédente (chiffres du rapport d'activité) au lieu de l'état actuel.",
+    inputSchema: {
+      theme: z.enum(['chiffres_cles', ...Object.keys(SYNTHESES), 'protection_forte', 'nouveaux_sites_par_an']),
+      annee_precedente: z.boolean().default(false).describe("État à la fin de l'année précédente (rapport d'activité)"),
+      annee: z.number().int().min(1970).max(2100).optional().describe("chiffres_cles : année des nouveaux sites (par défaut l'année précédente)"),
+    },
+  }, async ({ theme, annee_precedente, annee }) => {
+    const anneeNouveaux = annee ?? new Date().getFullYear() - 1;
+    if (theme === 'chiffres_cles') {
+      const [ligne] = await lire(`
+        SELECT
+          (SELECT count(*) FROM sitcenca.sites s WHERE s.validite <> false AND s.actuel <> false AND s.typ_site = '1') AS nb_sites_geres,
+          (SELECT round(sum(s.surface)::numeric, 2) FROM sitcenca.v_sites s WHERE s.typ_site = '1') AS surface_sites_geres_ha,
+          (SELECT count(*) FROM sitcenca.v_export_fcen_sites WHERE terrain_militaire = 0) AS nb_sites_export_fcen_hors_militaires,
+          (SELECT count(*) FROM sitcenca.listparcelles) AS nb_parcelles_mfu,
+          $1::int AS annee_nouveaux_sites,
+          (SELECT count(*) FROM sitcenca.v_sites WHERE prem_ctr = $1 AND validite IS TRUE AND actuel IS TRUE AND typ_site = '1') AS nb_nouveaux_sites_geres,
+          (SELECT round(sum(surface)::numeric, 2) FROM sitcenca.v_sites WHERE prem_ctr = $1 AND validite IS TRUE AND actuel IS TRUE AND typ_site = '1') AS surface_nouveaux_sites_geres_ha,
+          (SELECT count(*) FROM sitcenca.sites s WHERE s.validite IS TRUE AND s.actuel IS TRUE AND s.typ_site = '2' AND s.prem_ctr = $1) AS nb_nouvelles_assistances_techniques`,
+        [anneeNouveaux]);
+      return reponse({ theme, ...ligne });
+    }
+    if (theme === 'protection_forte') {
+      const lignes = await lire(`
+        SELECT count(*) FILTER (WHERE site_rnr::int = 1) AS sites_rnr, count(*) FILTER (WHERE site_rnn::int = 1) AS sites_rnn,
+               count(*) FILTER (WHERE coeur_parc_de_forets::int = 1) AS sites_coeur_parc_forets, count(*) FILTER (WHERE apb::int = 1) AS sites_apb,
+               count(*) FILTER (WHERE greatest(site_rnr::int, site_rnn::int, coeur_parc_de_forets::int, apb::int) = 1) AS sites_protection_forte,
+               round(sum(surface) FILTER (WHERE greatest(site_rnr::int, site_rnn::int, coeur_parc_de_forets::int, apb::int) = 1)::numeric, 2) AS surface_protection_forte_ha
+        FROM sitcenca.m_synth_protec_sites`);
+      return resultat(lignes, { theme });
+    }
+    if (theme === 'nouveaux_sites_par_an') {
+      const lignes = await lire(`SELECT premiercontrat AS annee, count(*) AS nouveaux_sites FROM irenee.cenca_sites GROUP BY premiercontrat ORDER BY premiercontrat`);
+      return resultat(lignes, { theme });
+    }
+    const vues = SYNTHESES[theme];
+    const vue = annee_precedente && vues.n1 ? vues.n1 : vues.actuel;
+    const lignes = await lire(`SELECT * FROM ${vue}`);
+    return resultat(lignes, { theme, periode: vue === vues.n1 ? "fin de l'année précédente" : 'actuel' });
+  });
+
+  outil(server, 'indicateurs_activite', {
+    title: "Indicateurs d'activité",
+    description: "Indicateurs d'activité du tableau de bord Grafana. theme : animations (sorties nature de l'année précédente : nombre et personnes sensibilisées par type, grand public, scolaires, élus) ; "
+      + "plans_de_gestion (plans de gestion de l'année précédente) ; animation_fonciere (parcelles questionnées lors de l'animation foncière, par année et par département ou par demandeur).",
+    inputSchema: {
+      theme: z.enum(['animations', 'plans_de_gestion', 'animation_fonciere']),
+      regroupement: z.enum(['departement', 'demandeur']).default('departement').describe('animation_fonciere : regroupement en plus de l\'année'),
+    },
+  }, async ({ theme, regroupement }) => {
+    if (theme === 'animations') {
+      const lignes = await lire(`
+        SELECT coalesce(action_n3, 'Total') AS type_animation, count(*) AS nb_animations, sum(nb_personnes) AS nb_personnes
+        FROM opeautres."synth_anim_brute_n-1"
+        GROUP BY ROLLUP (action_n3)
+        ORDER BY action_n3 IS NULL, count(*) DESC`);
+      return resultat(lignes, { theme, periode: "année précédente" });
+    }
+    if (theme === 'plans_de_gestion') {
+      const lignes = await lire(`
+        SELECT nom, statut, responsable, localisation, typ_projet, typ_intervention, action_n2, action_n3, cibles, detail
+        FROM opeautres."synth_pdg_brute_n-1"`);
+      return resultat(lignes, { theme, periode: "année précédente" });
+    }
+    const colonne = regroupement === 'demandeur' ? 'hfo_demandeur' : 'hfo_dep';
+    const lignes = await lire(`
+      SELECT extract(year FROM hfo_date_extraction)::int AS annee, ${colonne} AS ${regroupement}, count(*) AS nb_parcelles
+      FROM irenee.histo_foncier
+      GROUP BY 1, 2
+      ORDER BY 1 DESC, 2`);
+    return resultat(lignes, { theme });
+  });
+
+  outil(server, 'controle_donnees_sites', {
+    title: 'Contrôle des données des sites',
+    description: "Sites gérés dont les données sont incomplètes (contrôles du tableau de bord Grafana). anomalie : sans_geometrie (aucun contour valide) ; "
+      + "sans_acte (aucun acte foncier actuel et valide, ou acte sans parcelle) ; donnees_manquantes (surface, milieu naturel principal, commune, année de premier contrat ou type d'espace absent).",
+    inputSchema: {
+      anomalie: z.enum(['sans_geometrie', 'sans_acte', 'donnees_manquantes']),
+    },
+  }, async ({ anomalie }) => {
+    const requetes = {
+      sans_geometrie: `
+        SELECT s.uuid_site, s.code, e.nom, s.responsable, s.prem_ctr
+        FROM sitcenca.sites s
+        LEFT JOIN esp.espaces e ON e.uuid_espace = s.espace
+        WHERE s.actuel <> false AND s.validite <> false AND s.typ_site = '1'
+          AND NOT EXISTS (SELECT 1 FROM esp.geometries g WHERE g.espace = s.espace AND g.validite IS NOT FALSE)
+        ORDER BY s.code`,
+      sans_acte: `
+        SELECT s.uuid_site, s.code, e.nom, s.responsable, s.prem_ctr,
+               CASE WHEN a.nb_actes = 0 THEN 'aucun acte actuel' ELSE 'acte sans parcelle' END AS probleme
+        FROM sitcenca.sites s
+        LEFT JOIN esp.espaces e ON e.uuid_espace = s.espace
+        CROSS JOIN LATERAL (
+          SELECT count(*) AS nb_actes,
+                 count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM sitcenca.parcelles_mfu p WHERE p.acte_mfu = m.uuid_acte)) AS sans_parcelle
+          FROM sitcenca.actes_mfu m
+          WHERE m.site = s.uuid_site AND m.actuel IS TRUE AND m.validite IS NOT FALSE
+        ) a
+        WHERE s.actuel <> false AND s.validite <> false AND s.typ_site = '1' AND (a.nb_actes = 0 OR a.sans_parcelle > 0)
+        ORDER BY s.prem_ctr, s.code`,
+      donnees_manquantes: `
+        SELECT uuid_site, code_site AS code, nom_site AS nom, "Type espace" AS type_espace, surface, prem_ctr, milieu_naturel_principal, commune
+        FROM sitcenca.v_sites
+        WHERE typ_site = '1' AND (surface IS NULL OR milieu_naturel_principal IS NULL OR commune IS NULL OR prem_ctr IS NULL OR "Type espace" IS NULL)
+        ORDER BY code_site`,
+    };
+    return resultat(await lire(requetes[anomalie]), { anomalie });
   });
 }
 

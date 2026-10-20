@@ -23,6 +23,9 @@ Il vit dans le dépôt du backend mais tourne dans **son propre processus et son
 | `rechercher_projets` | Projets de gestion par année, site, responsable, statut, type | `/sites/criteria_travaux/...` |
 | `operations_projet` | Opérations d'un projet : actions, quantités, maître d'œuvre, financeurs | `/sites/operations/uuid=/lite` |
 | `bilan_operations` | Agrégat des opérations par action et par année | — |
+| `indicateurs_sites` | Chiffres clés et synthèses des sites gérés (départements, Natura 2000/APB…, milieux, types d'actes, propriétaires, agences de l'eau, réserves, protection forte, nouveaux sites par an), état actuel ou fin d'année précédente | Tableau de bord Grafana « Sites CENCA » (vues `sitcenca.synth_*`) |
+| `indicateurs_activite` | Animations et plans de gestion de l'année précédente, parcelles questionnées en animation foncière | Grafana (`opeautres.synth_*_n-1`, `irenee.histo_foncier`) |
+| `controle_donnees_sites` | Sites gérés sans géométrie, sans acte (ou acte sans parcelle), avec données manquantes | Grafana |
 
 **Outils génériques** : `lister_schemas`, `lister_tables`, `decrire_table` (avec la définition SQL des vues), `relations_schema`, `rechercher_colonnes`, `executer_requete` (SQL libre en lecture), plus la ressource `schema://base` et le prompt `bilan_site`.
 
@@ -73,6 +76,8 @@ docker logs -f cenca_mcp_sites                    # journal des requêtes de Cla
 docker compose up -d --force-recreate mcp_sites   # après modification de mcp/.env
 docker compose up -d --build mcp_sites            # après modification du code ou de documentation/
 ```
+
+Script de maintenance (depuis n'importe quel dossier) : `./mcp/maintenance_mcp.sh statut | logs | tests | reconstruire | redemarrer | arreter | demarrer | outils | nettoyer`. `reconstruire` enchaîne tests, build, suppression puis recréation du container (contourne le `KeyError: 'ContainerConfig'` de `docker-compose` 1.29.2) et attend qu'il soit healthy. `redemarrer` ne relit pas `mcp/.env` : après une modification du `.env`, utiliser `reconstruire`. Le script est exclu par le `*.sh` du `.gitignore` : le versionner avec `git add -f`.
 
 Un `docker compose up -d` global le démarre aussi. Le container n'est recréé que si sa configuration ou son image ont changé.
 

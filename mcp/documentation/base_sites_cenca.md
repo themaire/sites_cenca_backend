@@ -86,6 +86,14 @@ opegerer.projets.responsable        -> admin.salaries.cd_salarie
 - Quantités : `quantite` + `unite` (`opegerer.get_libelle(unite)`), `surf` (surface), `lin` (linéaire). Pâturage : `effectif_paturage`, `nb_jours_paturage`, `chargement_paturage`, `ugb_moy`. Fauche : `exportation_fauche`, `total_exporte_fauche`, `productivite_fauche`.
 - `opeautres.projets` : autres projets (hors gestion de sites), même logique.
 
+## Indicateurs (tableau de bord Grafana « Sites CENCA »)
+
+Outils `indicateurs_sites`, `indicateurs_activite`, `controle_donnees_sites` : mêmes requêtes que les panneaux Grafana, donc mêmes chiffres.
+- **Sites gérés** = `typ_site = '1'` avec `validite` et `actuel` non faux (383 au 2026-10-20). `synthese_sites` compte aussi les sites non actuels : ne pas l'utiliser pour les chiffres officiels.
+- Vues de synthèse `sitcenca.synth_*` (départements, espacesnat, habitats, actes, asstech, proprio, financeurs, reserves, newsites) ; les variantes `"synth_*_n-1"` donnent l'état à la fin de l'année précédente (rapport d'activité). `sitcenca.m_synth_protec_sites` : RNR, RNN, cœur de parc, APB par site.
+- Activité de l'année précédente : `opeautres."synth_anim_brute_n-1"` (animations, `nb_personnes`, `action_n3`), `opeautres."synth_pdg_brute_n-1"` (plans de gestion). Animation foncière : `irenee.histo_foncier` (`hfo_date_extraction`, `hfo_dep`, `hfo_demandeur`).
+- Absentes de la base (panneaux Grafana à revoir) : `sitcenca.v_sites_geres`, `m_sites`, `m_export_fcen_sites` / `m_export_fcen_parcelles` (remplacées par les vues `v_export_fcen_*`, trop lentes pour les fusions de parcelles), `v_synth_maitrise_fonciere`, `v_synth_zpf`, `opeautres."synth_pdg_format_n-1"`, `export_obs` (WebObs, autre source de données).
+
 ## Annuaire et salariés
 
 - **`ann.annuaire`** : contacts (personnes, entreprises, associations, communes…) : `uuid_ann`, `nom`, `adresse`, `telephone`, `mail`, `typ_personne` → `ann.typ_personnes`, `validite`, `actuel`. Étiquettes : `ann.etiquettes` / `ann.typ_etiquettes`, compétences : `ann.competences` / `ann.typ_competences`.
