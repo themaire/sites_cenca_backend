@@ -260,6 +260,17 @@ function reecritureLiens(sites) {
     };
 }
 
+// Questions d'aide (dont les suggestions de l'accueil du front) : le backend répond lui-même par CAPACITES,
+// sans le modèle. Instantané au lieu de minutes sur CPU, et Gemma prenait parfois « Des exemples ? »
+// pour une demande hors périmètre. Comparaison sans accents, casse ni ponctuation.
+const QUESTIONS_AIDE = new Set([
+    'aide', 'help', 'que sais tu faire', 'que peux tu faire', 'tu sais faire quoi', 'quelles sont tes capacites',
+    'des exemples', 'exemples', 'exemple', 'donne moi des exemples', 'des exemples de questions', 'bonjour', 'salut',
+]);
+const estQuestionAide = texte => QUESTIONS_AIDE.has(
+    texte.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+);
+
 // Octets bruts que le modèle écrit parfois en jetons (« Site g<0xC2>éré »)
 const nettoyer = texte => texte.replace(/<0x[0-9A-Fa-f]{2}>/g, '');
 
@@ -272,6 +283,13 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
     const caracteres = historique.reduce((total, m) => total + m.content.length, 0);
     if (questions > QUESTIONS_MAX || caracteres > HISTORIQUE_CARACTERES_MAX) {
         return res.status(413).json({ message: MESSAGE_LIMITE, code: 'conversation_pleine' });
+    }
+
+    if (estQuestionAide(historique[historique.length - 1].content)) {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform' });
+        res.write(`event: texte\ndata: ${JSON.stringify({ texte: "Je suis Sonneur, l'assistant des données des sites du CENCA. " + CAPACITES })}\n\n`);
+        res.write(`event: fin\ndata: ${JSON.stringify({ outils: [], duree_ms: 0, modele: 'réponse directe', questions_restantes: QUESTIONS_MAX - questions })}\n\n`);
+        return res.end();
     }
 
     const debut = Date.now();
