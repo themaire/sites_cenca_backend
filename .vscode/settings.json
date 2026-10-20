@@ -1,0 +1,9 @@
+{
+    // Remote-SSH : ne jamais transférer automatiquement les ports Ollama (11434) et du MCP (8891)
+    // vers le poste local. VS Code les détecte dans les journaux du chatbot ; transféré, 11434 masque
+    // l'Ollama du portable (ollama list bloqué), car localhost:11434 mène alors au serveur.
+    "remote.portsAttributes": {
+        "11434": { "onAutoForward": "ignore" },
+        "8891": { "onAutoForward": "ignore" }
+    }
+}
