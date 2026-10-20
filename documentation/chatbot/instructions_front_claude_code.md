@@ -13,6 +13,10 @@ Le backend fait tourner un LLM local, **Gemma 4 via Ollama**. Ce LLM n'accède a
 
 ## Contrat de l'API backend
 
+### `GET {environment.apiBaseUrl}chat/etat` (Bearer)
+
+Indique si Sonneur peut prendre une question : `{ "occupe": true, "questions_en_cours": 1, "capacite": 1, "message": "Sonneur est occupé à répondre à une autre question. Réessayez dans quelques minutes." }` (`message` vaut `null` quand il est libre). Sur CPU, une question prend plusieurs minutes et une seule est traitée à la fois par serveur Ollama (`CHAT_SIMULTANES_MAX` côté backend).
+
 ### `POST {environment.apiBaseUrl}chat`
 
 - En-têtes : `Content-Type: application/json` et `Authorization: Bearer <token>`. Le token se trouve dans `localStorage.getItem('token')`, comme pour l'intercepteur `auth-token.interceptor.ts`.
@@ -29,8 +33,9 @@ Le backend fait tourner un LLM local, **Gemma 4 via Ollama**. Ce LLM n'accède a
   | `401` | token absent, ou expiré (`{ "code": "TOKEN_EXPIRE" }`, jeton valable 1 h) |
   | `403` | token invalide ou blacklisté |
   | `429` | plus de 20 questions en 5 minutes par utilisateur |
+  | `503` | Sonneur est occupé (`code: "sonneur_occupe"`) : une autre question est déjà en préparation sur le serveur Ollama |
 
-  Le corps vaut `{ message }` (plus `code` pour le `413`).
+  Le corps vaut `{ message }` (plus `code` pour le `413` et le `503`).
 - Réponse normale : **flux SSE** (`Content-Type: text/event-stream`). Chaque événement a la forme `event: <nom>\ndata: <json>\n\n` :
 
   | Événement | `data` | Usage |
@@ -44,6 +49,8 @@ Le backend fait tourner un LLM local, **Gemma 4 via Ollama**. Ce LLM n'accède a
 - Toutes les 20 s, le backend envoie un commentaire SSE `: ping` (battement de cœur, pour qu'un proxy ne coupe pas la connexion pendant que le modèle réfléchit) : le parseur doit ignorer les lignes qui commencent par `:`.
 - Les noms de site du texte sont des liens Markdown relatifs vers la fiche : `[Nom du site](/site/<code>)`, ex. `/site/51065`, ou `/site/<uuid_site>` pour un site sans code (route `/site/:code` du front, résolue par `GET /sites/code=:code` ; le backend ne garde que les sites présents dans les résultats d'outils, les autres deviennent un nom sans lien), ouverte sans recharger la page ni fermer le chatbot).
 - Une question dure au plus 15 min (`OLLAMA_TIMEOUT_MS`) : au-delà, le backend arrête le modèle et envoie `erreur`.
+- L'événement `erreur` peut porter `code: "sonneur_occupe"` (deux questions arrivées au même instant) : à traiter comme le `503`.
+- Les questions d'aide (« Aide », « Que sais-tu faire ? », « Des exemples ? ») reçoivent une réponse immédiate du backend, même quand Sonneur est occupé.
 - Si on interrompt la requête (`AbortController.abort()`), le backend arrête le modèle. Il faut le faire à la fermeture du panneau et sur « Nouvelle conversation » pendant une génération.
 
 **Attention :** `HttpClient` d'Angular ne sait pas lire un flux SSE en POST. On utilise donc `fetch` et un `ReadableStream`. L'en-tête Bearer doit alors être ajouté à la main, car l'intercepteur ne s'applique pas à `fetch`.
@@ -78,6 +85,12 @@ export type EvenementChat =
 ```
 
 Ne pas envoyer au backend les champs `outils` ou `erreur`, ni les messages en erreur : seulement `{ role, content }`.
+
+### Sonneur occupé (saisie bloquée)
+
+- Pendant que **sa propre** question est en cours (flux SSE ouvert), le composant bloque la saisie et le bouton d'envoi (indicateur « Sonneur rédige sa réponse… »), et propose seulement « Arrêter » (`AbortController.abort()`).
+- Quand le panneau est ouvert et qu'aucune question de l'utilisateur n'est en cours, le service interroge `GET chat/etat` à l'ouverture puis toutes les 15 s (arrêt à la fermeture du panneau). Si `occupe` : bandeau « Sonneur est occupé » avec `message`, champ de saisie et bouton désactivés, suggestions toujours cliquables (réponse immédiate). Dès que `occupe` repasse à `false`, réactiver la saisie.
+- Sur un `503` ou une `erreur` avec `code: "sonneur_occupe"` : même bandeau, la question reste dans le champ de saisie (pas ajoutée à l'historique) pour pouvoir la renvoyer, et l'interrogation de `chat/etat` reprend.
 
 ### 2. `src/app/chatbot/chatbot.component.{ts,html,scss}`
 

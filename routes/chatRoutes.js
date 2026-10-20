@@ -65,6 +65,18 @@ const serveursOllama = (process.env.OLLAMA_URL || 'http://127.0.0.1:11434')
         return { rang, host, modele: modele || OLLAMA_MODEL, enCours: 0 };
     });
 
+// Questions traitées en même temps par serveur Ollama : au-delà, Sonneur est « occupé » et refuse les
+// nouvelles questions (sur CPU, deux questions simultanées se partagent le processeur et durent deux fois plus)
+const CHAT_SIMULTANES_MAX = Math.max(1, Number(process.env.CHAT_SIMULTANES_MAX || 1));
+const MESSAGE_OCCUPE = 'Sonneur est occupé à répondre à une autre question. Réessayez dans quelques minutes.';
+
+/** Questions en cours sur ce backend, et s'il reste une place sur au moins un serveur */
+function etatSonneur() {
+    const enCours = serveursOllama.reduce((total, s) => total + s.enCours, 0);
+    const occupe = serveursOllama.every(s => s.enCours >= CHAT_SIMULTANES_MAX);
+    return { occupe, questions_en_cours: enCours, capacite: serveursOllama.length * CHAT_SIMULTANES_MAX };
+}
+
 /**
  * Choisit le serveur Ollama le moins occupé parmi ceux qui répondent (GET /api/version, 2 s max).
  * « Occupé » = nombre de conversations que ce backend y fait tourner en ce moment ;
@@ -73,7 +85,9 @@ const serveursOllama = (process.env.OLLAMA_URL || 'http://127.0.0.1:11434')
  * Renvoie null si aucun serveur ne répond.
  */
 async function choisirServeurOllama() {
-    const candidats = [...serveursOllama].sort((a, b) => a.enCours - b.enCours || a.rang - b.rang);
+    const candidats = serveursOllama
+        .filter(s => s.enCours < CHAT_SIMULTANES_MAX)
+        .sort((a, b) => a.enCours - b.enCours || a.rang - b.rang);
     for (const serveur of candidats) {
         // Réservé avant le test : deux questions simultanées ne visent pas le même serveur
         serveur.enCours++;
@@ -199,6 +213,7 @@ function historiqueValide(messages) {
  */
 function messageErreur(err, etape, serveur) {
     const code = err?.cause?.code || err?.code;
+    if (code === 'sonneur_occupe') return MESSAGE_OCCUPE;
     if (etape === 'mcp') return "Le serveur de requêtes métier (MCP) est injoignable.";
     if (/did not receive done/i.test(err?.message)) {
         return "Le modèle s'est arrêté au milieu de sa réponse. Réessayez, si possible avec une question plus ciblée.";
@@ -284,6 +299,12 @@ const DEBUT_REFUS = 120;
 // Octets bruts que le modèle écrit parfois en jetons (« Site g<0xC2>éré »)
 const nettoyer = texte => texte.replace(/<0x[0-9A-Fa-f]{2}>/g, '');
 
+// État de Sonneur pour le front : occupé = toutes les places prises, la saisie doit être bloquée
+router.get('/etat', authenticateToken, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ ...etatSonneur(), message: etatSonneur().occupe ? MESSAGE_OCCUPE : null });
+});
+
 router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
     const historique = historiqueValide(req.body?.messages);
     if (!historique) {
@@ -296,10 +317,15 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
     }
 
     if (estQuestionAide(historique[historique.length - 1].content)) {
+        // Réponse directe, sans le modèle : possible même quand Sonneur est occupé
         res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform' });
         res.write(`event: texte\ndata: ${JSON.stringify({ texte: "Je suis Sonneur, l'assistant des données des sites du CENCA. " + CAPACITES })}\n\n`);
         res.write(`event: fin\ndata: ${JSON.stringify({ outils: [], duree_ms: 0, modele: 'réponse directe', questions_restantes: QUESTIONS_MAX - questions })}\n\n`);
         return res.end();
+    }
+
+    if (etatSonneur().occupe) {
+        return res.status(503).json({ message: MESSAGE_OCCUPE, code: 'sonneur_occupe', ...etatSonneur() });
     }
 
     const debut = Date.now();
@@ -350,6 +376,8 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
 
         // Toute la conversation (tous les tours d'outils) reste sur le même serveur
         serveur = await choisirServeurOllama();
+        // Place prise entre la vérification d'entrée et ici par une question simultanée
+        if (!serveur && etatSonneur().occupe) throw Object.assign(new Error(MESSAGE_OCCUPE), { code: 'sonneur_occupe' });
         if (!serveur) throw Object.assign(new Error('aucun serveur Ollama joignable'), { code: 'ECONNREFUSED' });
         // Même les serveurs les moins chargés traitent déjà d'autres questions : le modèle partage
         // le processeur, prévenir que la réponse sera plus lente (compteur propre à ce backend)
@@ -522,7 +550,7 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
     } catch (err) {
         if (!interrompu) {
             console.error(`Erreur chatbot (${etape}) :`, err);
-            envoyer('erreur', { message: messageErreur(err, etape, serveur) });
+            envoyer('erreur', { message: messageErreur(err, etape, serveur), ...(err?.code === 'sonneur_occupe' && { code: 'sonneur_occupe' }) });
         }
     } finally {
         clearInterval(battement);

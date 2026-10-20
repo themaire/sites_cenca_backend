@@ -42,6 +42,7 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Monitoring alerts |
 | `OLLAMA_URL`, `OLLAMA_MODEL`, `OLLAMA_NUM_CTX`, `OLLAMA_THINK`, `OLLAMA_TIMEOUT_MS` | Chatbot LLM: LAN Ollama servers in preference order (comma-separated, optional per-server model as `url|model`), default model tag, context size, thinking on/off (default off), max time per question, queue + prompt reading + generation (default 15 min, then aborted and the Ollama server freed; undici agent, Node fetch would abort at 300 s) |
 | `CHAT_QUESTIONS_MAX` | Chatbot: questions per conversation (default 10), then `413` → front opens a new conversation |
+| `CHAT_SIMULTANES_MAX` | Chatbot: questions at once per Ollama server (default 1); when every server is full, `POST /chat` answers `503 sonneur_occupe` and `GET /chat/etat` reports `occupe: true` (in-process counter: per backend process) |
 | `MCP_URL`, `MCP_API_TOKEN` | Chatbot access to the `mcp/` server (same token as `mcp/.env`) |
 
 ## Architecture
