@@ -117,7 +117,7 @@ Read-only MCP server giving Claude SQL access to the database. Self-contained su
 - **Geometry**: All spatial data is stored in SRID=2154 (Lambert 93). Use `convertToWKT()` to convert GeoJSON coordinates to EWKT before inserting.
 - **CORS**: Origins are allowlisted in `node_base_sites.js`. Add new allowed origins there.
 - **Rate limiting**: Applied globally per 5 min: 2000 req per user when the request carries a valid JWT (signature checked, no DB lookup), otherwise 200 req per IP. `/auth/login` allows 10 failures / 15 min per IP; register, forgot/reset-password 5 / 15 min. Exempt: loopback, LAN and Docker ranges (`estIpInterne`, from `req.ip`, never `Host` or `X-Forwarded-For`), `RATE_LIMIT_IP_BLANCHES`, and `/menu`.
-- **Metrics**: `/metrics` answers only LAN/Docker IPs (Prometheus scrapes `node_app:8887`). Every label value is a series kept in memory: 404 paths are collapsed to `#inconnu`, `/files/*` to `/files/#fichier`, Internet client IPs to `externe`.
+- **Metrics**: `/metrics` answers only LAN/Docker IPs (Prometheus scrapes `node_app:8887`). Every label value is a series kept in memory: 404 paths are collapsed to `#inconnu`, `/files/*` to `/files/#fichier`, Internet client IPs to `externe`. Chatbot usage: counter `sonneur_questions_total{issue}` (`reponse`, `aide`, `occupe`, `erreur`, `interrompue`), declared in `routes/chatRoutes.js` on the same prom-client registry; never add a per-user label.
 
 ### Chatbot (`/chat`)
 

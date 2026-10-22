@@ -9,7 +9,7 @@ Route `POST /chat` (`routes/chatRoutes.js`), client MCP `fonctions/clientMcp.js`
 3. **Sonneur occupé** : si tous les serveurs Ollama ont déjà `CHAT_SIMULTANES_MAX` questions en cours, réponse `503` `sonneur_occupe` (voir plus bas).
 4. **Flux SSE** ouvert : événements `attente`, `outil`, `texte`, `fin`, `erreur`, et un commentaire `: ping` toutes les 20 s pour qu'aucun proxy ne coupe la connexion pendant la lecture du prompt.
 5. **Boucle d'outils** : le modèle (Gemma 4 via Ollama) reçoit le prompt système, l'historique et la liste blanche des outils MCP (`OUTILS_AUTORISES`) ; chaque appel d'outil passe par le serveur MCP (`mcp/`), son résultat est rendu au modèle, jusqu'à la réponse finale.
-6. **Fin** : événement `fin` (outils appelés, durée, modèle, questions restantes) et une ligne `[chat]` dans le journal du backend.
+6. **Fin** : événement `fin` (outils appelés, durée, modèle, questions restantes) et une ligne `[chat]` dans le journal du backend. Chaque question incrémente aussi le compteur Prometheus `sonneur_questions_total{issue}` de `/metrics` (`reponse`, `aide`, `occupe`, `erreur`, `interrompue`), une seule fois.
 
 ## Arrêt de la génération
 
