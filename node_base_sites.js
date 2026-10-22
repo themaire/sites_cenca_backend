@@ -31,6 +31,24 @@ var app = express();
 
 const promBundle = require("express-prom-bundle");
 
+/**
+ * Adresse du client telle que Node la voit (aucun proxy devant le backend : c'est la vraie).
+ * Jamais X-Forwarded-For : n'importe quel client peut l'inventer.
+ */
+const ipClient = (req) => (req.ip || '').replace(/^::ffff:/, '');
+
+/** Machine locale, réseau Docker ou LAN (127.x, 10.x, 192.168.x, 172.16-31.x). */
+const estIpInterne = (ip) =>
+  ip === '::1' || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(ip);
+
+// /metrics réservé au LAN et au réseau Docker (Prometheus le lit sur node_app:8887)
+app.use('/metrics', (req, res, next) => {
+  if (!estIpInterne(ipClient(req))) {
+    return res.status(404).json({ success: false, message: "Route non trouvée." });
+  }
+  next();
+});
+
 const metricsMiddleware = promBundle({
   includeMethod: true,
   includePath: true,
@@ -43,13 +61,17 @@ const metricsMiddleware = promBundle({
     project_type: 'expressjs',
     client_ip: null, // Ajout du label personnalisé pour l'IP
   },
-  normalizePath: [
-    ['^/user/.*', '/user/#val'],
-    ['^/order/.*', '/order/#val'],
-  ],
+  // Chaque valeur distincte d'un label crée une série gardée en mémoire jusqu'au redémarrage :
+  // les chemins inconnus (scanners) et les fichiers statiques sont regroupés pour ne pas la faire gonfler.
+  normalizePath: (req, opts) => {
+    if (req.res && req.res.statusCode === 404) return '#inconnu';
+    if ((req.originalUrl || '').startsWith('/files/')) return '/files/#fichier';
+    return promBundle.normalizePath(req, opts);
+  },
   transformLabels: (labels, req) => {
-    // Ajoute l'adresse IP du client dans les labels
-    labels.client_ip = req.headers['x-forwarded-for'] || req.ip;
+    // IP du client pour le LAN seulement ; les adresses Internet sont regroupées (même raison)
+    const ip = ipClient(req);
+    labels.client_ip = estIpInterne(ip) ? ip : 'externe';
     return labels;
   },
 });
@@ -58,10 +80,36 @@ app.use(metricsMiddleware);
 
 const rateLimit = require("express-rate-limit");
 
-// Configuration du middleware de rate limiting
+const jwt = require('jsonwebtoken');
+
+/**
+ * Identifiant de l'utilisateur si la requête porte un JWT valide (signature et expiration), sinon null.
+ * Sert seulement au rate limit : pas de requête en base (blacklist), authenticateToken reste le contrôle d'accès.
+ */
+const identifiantDuToken = (req) => {
+  if (req.identifiantRateLimit !== undefined) return req.identifiantRateLimit;
+  const token = (req.headers['authorization'] || '').split(' ')[1];
+  let identifiant = null;
+  if (token) {
+    try {
+      identifiant = jwt.verify(token, process.env.SECRET_KEY).identifiant || null;
+    } catch (err) {
+      identifiant = null;
+    }
+  }
+  req.identifiantRateLimit = identifiant;
+  return identifiant;
+};
+
+// Configuration du middleware de rate limiting :
+// par utilisateur connecté (limite haute, navigation rapide dans le front), sinon par IP
 const globalRateLimit = rateLimit({
   windowMs: 5 * 60 * 1000,
-  max: 200,
+  limit: (req) => (identifiantDuToken(req) ? 2000 : 200),
+  keyGenerator: (req) => {
+    const identifiant = identifiantDuToken(req);
+    return identifiant ? `utilisateur:${identifiant}` : ipClient(req);
+  },
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -115,21 +163,44 @@ app.use(cors({
   credentials: true, // Autorise les cookies et les informations d'authentification
 }));
 
-// Appliquer le rate limit apres CORS pour conserver les headers CORS en 429
-app.use((req, res, next) => {
-  const host = req.headers.host || '';
-  const isLocal =
-    /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host) ||
-    /^::1$/.test(req.ip) ||
-    /^127\.0\.0\.1$/.test(req.ip) ||
-    req.ip === '81.80.207.65';
-  const isMenuRoute = req.path.startsWith('/menu');
+/**
+ * IP publiques exemptées des rate limits (bureaux, partenaires), séparées par des virgules dans
+ * RATE_LIMIT_IP_BLANCHES du .env ; 81.80.207.65 par défaut.
+ */
+const ipBlanches = (process.env.RATE_LIMIT_IP_BLANCHES || '81.80.207.65')
+  .split(',').map(ip => ip.trim()).filter(Boolean);
 
-  if (isLocal || isMenuRoute) {
+/**
+ * Clients exemptés des rate limits : machine locale, réseau Docker, LAN du bureau (estIpInterne)
+ * et liste blanche. D'après req.ip seulement : l'en-tête Host, choisi par le client, ne compte plus.
+ */
+const estExempteRateLimit = (req) => {
+  const ip = ipClient(req);
+  return estIpInterne(ip) || ipBlanches.includes(ip);
+};
+
+// Appliquer le rate limit apres CORS pour conserver les headers CORS en 429
+const appliquerRateLimitGlobal = (req, res, next) => {
+  if (estExempteRateLimit(req) || req.path.startsWith('/menu')) {
     return next();
   }
   return globalRateLimit(req, res, next);
+};
+app.use(appliquerRateLimitGlobal);
+
+// Connexion et mots de passe : limite propre par IP, contre le bruteforce et le spam de mails.
+// Pour le login, seuls les échecs comptent (skipSuccessfulRequests).
+const limiteAuth = (limit, skipSuccessfulRequests) => rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit,
+  skipSuccessfulRequests,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: estExempteRateLimit,
+  message: { message: 'Trop de tentatives, réessayez dans quelques minutes.' },
 });
+app.use('/auth/login', limiteAuth(10, true));
+app.use(['/auth/register', '/auth/forgot-password', '/auth/reset-password'], limiteAuth(5, false));
 
 
 // debugger les requêtes entrantes
@@ -141,20 +212,7 @@ app.use((req, res, next) => {
 
 
 // app.use(cors()); // Middleware CORS
-app.options('*', (req, res, next) => {
-  const host = req.headers.host || '';
-  const isLocal =
-    /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host) ||
-    /^::1$/.test(req.ip) ||
-    /^127\.0\.0\.1$/.test(req.ip) ||
-    req.ip === '81.80.207.65';
-  const isMenuRoute = req.path.startsWith('/menu');
-
-  if (isLocal || isMenuRoute) {
-    return next();
-  }
-  return globalRateLimit(req, res, next);
-}, cors()); // Répond à toutes les requêtes préflight
+app.options('*', appliquerRateLimitGlobal, cors()); // Répond à toutes les requêtes préflight
 app.use(express.json()); // Pour traiter les requêtes JSON
 app.use(express.urlencoded({ extended: true })); // Pour traiter les requêtes encodées en URL
 
