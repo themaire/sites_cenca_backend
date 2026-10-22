@@ -149,8 +149,8 @@ const construireArbre = (lignes) => {
     return trier(racines);
 };
 
-// Menu complet (Route non protégée) : /menu/arbre, ou /menu/arbre/admin avec « Paramètres »
-router.get("/arbre/:pref?", async (req, res) => {
+// Envoie l'arbre demandé ("public" ou "admin"), relu en base quand le cache a expiré
+const envoyerArbre = (version) => async (req, res) => {
     try {
         if (!cacheMenu || Date.now() > cacheMenu.expire) {
             const { rows } = await ExecuteQuerySitePromise(
@@ -166,7 +166,7 @@ router.get("/arbre/:pref?", async (req, res) => {
         }
         // res.json ajoute un ETag : le navigateur reçoit un 304 sans corps si rien n'a changé
         res.set("Cache-Control", "private, max-age=300");
-        res.json(cacheMenu.arbres[req.params.pref === "admin" ? "admin" : "public"]);
+        res.json(cacheMenu.arbres[version]);
     } catch (error) {
         console.error("Error in menu/arbre route: ", error);
         res.status(500).json({
@@ -174,6 +174,12 @@ router.get("/arbre/:pref?", async (req, res) => {
             message: "Erreur interne du serveur."
         });
     }
-});
+};
+
+// Menu complet sans « Paramètres » (Route non protégée)
+router.get("/arbre", envoyerArbre("public"));
+
+// Menu complet avec « Paramètres » (Route protégée)
+router.get("/arbre/admin", authenticateToken, envoyerArbre("admin"));
 
 module.exports = router;
