@@ -43,6 +43,7 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 | `FILES_DIR_ENV` | Path for static file serving (default: `./files`) |
 | `LIZMAP_USER`, `LIZMAP_PASSWORD` | External Lizmap WFS authentication |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Monitoring alerts |
+| `RATE_LIMIT_IP_BLANCHES` | Public IPs exempt from rate limits, comma-separated (default `81.80.207.65`); LAN IPs are always exempt |
 | `OLLAMA_URL`, `OLLAMA_MODEL`, `OLLAMA_NUM_CTX`, `OLLAMA_THINK`, `OLLAMA_TIMEOUT_MS` | Chatbot LLM: LAN Ollama servers in preference order (comma-separated, optional per-server model and GPU layers as `url|model|num_gpu`, e.g. the dev laptop `|gemma4:12b|15`), default model tag, context size, thinking on/off (default off), max time per question, queue + prompt reading + generation (default 15 min, then aborted and the Ollama server freed; undici agent, Node fetch would abort at 300 s) |
 | `CHAT_QUESTIONS_MAX` | Chatbot: questions per conversation (default 10), then `413` → front opens a new conversation |
 | `CHAT_SIMULTANES_MAX` | Chatbot: questions at once per Ollama server (default 1); when every server is full, `POST /chat` answers `503 sonneur_occupe` and `GET /chat/etat` reports `occupe: true` (in-process counter: per backend process) |
@@ -115,7 +116,8 @@ Read-only MCP server giving Claude SQL access to the database. Self-contained su
 - **DB queries**: Use `ExecuteQuerySite` for callback style or `ExecuteQuerySitePromise` for async/await. Always pass a descriptive `message` field for logging.
 - **Geometry**: All spatial data is stored in SRID=2154 (Lambert 93). Use `convertToWKT()` to convert GeoJSON coordinates to EWKT before inserting.
 - **CORS**: Origins are allowlisted in `node_base_sites.js`. Add new allowed origins there.
-- **Rate limiting**: Applied globally (200 req / 5 min) but skipped for localhost requests.
+- **Rate limiting**: Applied globally per 5 min: 2000 req per user when the request carries a valid JWT (signature checked, no DB lookup), otherwise 200 req per IP. `/auth/login` allows 10 failures / 15 min per IP; register, forgot/reset-password 5 / 15 min. Exempt: loopback, LAN and Docker ranges (`estIpInterne`, from `req.ip`, never `Host` or `X-Forwarded-For`), `RATE_LIMIT_IP_BLANCHES`, and `/menu`.
+- **Metrics**: `/metrics` answers only LAN/Docker IPs (Prometheus scrapes `node_app:8887`). Every label value is a series kept in memory: 404 paths are collapsed to `#inconnu`, `/files/*` to `/files/#fichier`, Internet client IPs to `externe`.
 
 ### Chatbot (`/chat`)
 

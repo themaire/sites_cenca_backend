@@ -14,7 +14,8 @@ const PYTHON_SCRIPT = path.join(__dirname, PROCESS_FOLDER, 'extraction_foncier.p
 console.log('Les fichiers à traiter seront stockés dans :');
 console.log(A_TRAITER);
 
-const UPLOAD = multer({ dest: A_TRAITER });
+// Un seul fichier de 100 Mo au plus : sans limite, un envoi sans fin remplit le disque
+const UPLOAD = multer({ dest: A_TRAITER, limits: { fileSize: 100 * 1024 * 1024, files: 1 } });
 
 // Utilisation du MIDDLEWARE multer pour traiter les fichiers dans les applications Express
 // Multer doit traiter un seul fichier téléchargé avec le champ de formulaire arrivant du POST nommé file
