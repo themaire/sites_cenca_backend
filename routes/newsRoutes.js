@@ -51,9 +51,11 @@ const SELECT_COMMENTAIRE = `
     FROM gestint.news_comments c
     JOIN admin.salaries s ON s.cd_salarie = c.cd_salarie`;
 
-async function newsPubliee(db, id) {
+// `publie` ne sert qu'à l'affichage sur l'accueil : un billet masqué reste consultable
+// et accepte réactions, commentaires et vues.
+async function newsExiste(db, id) {
     const { rowCount } = await db.query(
-        "SELECT 1 FROM gestint.news WHERE id = $1 AND publie = true;", [id]
+        "SELECT 1 FROM gestint.news WHERE id = $1;", [id]
     );
     return rowCount > 0;
 }
@@ -75,34 +77,37 @@ const asyncRoute = (message, handler) => async (req, res) => {
     }
 };
 
-// Liste paginée des news publiées, avec réactions, nombre de commentaires et statut de lecture
+// Liste paginée des news, avec réactions, nombre de commentaires et statut de lecture.
+// Par défaut les seules news publiées (accueil) ; ?tous=true renvoie aussi les masquées.
 router.get("/", asyncRoute("news/lite", async (req, res) => {
     const limite = parseInt(req.query.limite, 10);
     const offset = parseInt(req.query.offset, 10);
+    const tous = req.query.tous === "true";
 
     const { rows } = await pool.query(
-        `SELECT n.id, n.titre, n.resume, n.date_publication, n.lien, n.image_url,
+        `SELECT n.id, n.titre, n.resume, n.date_publication, n.lien, n.image_url, n.publie,
                 ${champsSociaux(1)}
          FROM gestint.news n
-         WHERE n.publie
+         WHERE n.publie OR $4
          ORDER BY n.date_publication DESC, n.id DESC
          LIMIT $2 OFFSET $3;`,
         [
             req.salarie.cd_salarie,
             Number.isInteger(limite) && limite > 0 ? limite : null, // LIMIT NULL = pas de limite
-            Number.isInteger(offset) && offset > 0 ? offset : 0
+            Number.isInteger(offset) && offset > 0 ? offset : 0,
+            tous
         ]
     );
     res.status(200).json(rows);
 }));
 
-// Détail complet d'une news publiée
+// Détail complet d'une news, publiée ou non
 router.get("/:id(\\d+)", asyncRoute("news/full", async (req, res) => {
     const { rows } = await pool.query(
-        `SELECT n.id, n.titre, n.resume, n.contenu, n.date_publication, n.lien, n.image_url,
+        `SELECT n.id, n.titre, n.resume, n.contenu, n.date_publication, n.lien, n.image_url, n.publie,
                 ${champsSociaux(2)}
          FROM gestint.news n
-         WHERE n.id = $1 AND n.publie = true;`,
+         WHERE n.id = $1;`,
         [req.params.id, req.salarie.cd_salarie]
     );
     if (rows.length === 0) return erreur(res, 404, "News introuvable.");
@@ -119,7 +124,7 @@ router.post("/:id(\\d+)/reactions", asyncRoute("news/reactions", async (req, res
     const client = await pool.connect();
     try {
         await client.query("BEGIN");
-        if (!(await newsPubliee(client, newsId))) {
+        if (!(await newsExiste(client, newsId))) {
             await client.query("ROLLBACK");
             return erreur(res, 404, "News introuvable.");
         }
@@ -149,7 +154,7 @@ router.post("/:id(\\d+)/reactions", asyncRoute("news/reactions", async (req, res
 
 // Commentaires d'une news, du plus ancien au plus récent
 router.get("/:id(\\d+)/comments", asyncRoute("news/comments", async (req, res) => {
-    if (!(await newsPubliee(pool, req.params.id))) return erreur(res, 404, "News introuvable.");
+    if (!(await newsExiste(pool, req.params.id))) return erreur(res, 404, "News introuvable.");
     const { rows } = await pool.query(
         `${SELECT_COMMENTAIRE} WHERE c.news_id = $1 ORDER BY c.date_creation, c.id;`,
         [req.params.id]
@@ -163,7 +168,7 @@ router.post("/:id(\\d+)/comments", asyncRoute("news/comments/create", async (req
     if (contenu.length < 1 || contenu.length > 1000) {
         return erreur(res, 400, "Le commentaire doit contenir entre 1 et 1000 caractères.");
     }
-    if (!(await newsPubliee(pool, req.params.id))) return erreur(res, 404, "News introuvable.");
+    if (!(await newsExiste(pool, req.params.id))) return erreur(res, 404, "News introuvable.");
 
     const { rows } = await pool.query(
         `WITH c AS (
@@ -181,7 +186,6 @@ router.delete("/comments/:commentId(\\d+)", asyncRoute("news/comments/delete", a
     const { rows } = await pool.query(
         `SELECT c.cd_salarie
          FROM gestint.news_comments c
-         JOIN gestint.news n ON n.id = c.news_id AND n.publie = true
          WHERE c.id = $1;`,
         [req.params.commentId]
     );
@@ -196,7 +200,7 @@ router.delete("/comments/:commentId(\\d+)", asyncRoute("news/comments/delete", a
 
 // Marquer une news comme lue par l'utilisateur
 router.post("/:id(\\d+)/vue", asyncRoute("news/vue", async (req, res) => {
-    if (!(await newsPubliee(pool, req.params.id))) return erreur(res, 404, "News introuvable.");
+    if (!(await newsExiste(pool, req.params.id))) return erreur(res, 404, "News introuvable.");
     await pool.query(
         `INSERT INTO gestint.news_vues (news_id, cd_salarie) VALUES ($1, $2) ON CONFLICT DO NOTHING;`,
         [req.params.id, req.salarie.cd_salarie]
