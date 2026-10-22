@@ -16,11 +16,23 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { Ollama } = require('ollama');
 const { Agent, fetch: fetchUndici } = require('undici');
+const promClient = require('prom-client');
 
 const { authenticateToken } = require('../fonctions/fonctionsAuth.js');
 const { listerOutils, appelerOutil } = require('../fonctions/clientMcp.js');
 
 const router = express.Router();
+
+// Sollicitations de Sonneur, exposées par /metrics (même registre qu'express-prom-bundle).
+// Un seul label, à valeurs fixes (jamais l'utilisateur) : chaque valeur distincte est une série en mémoire.
+// Grafana : sum by (issue) (increase(sonneur_questions_total[1h]))
+const ISSUES = ['reponse', 'aide', 'occupe', 'erreur', 'interrompue'];
+const questionsSonneur = new promClient.Counter({
+    name: 'sonneur_questions_total',
+    help: 'Questions posées à Sonneur, par issue : reponse, aide (réponse directe), occupe (refusée), erreur, interrompue (panneau fermé)',
+    labelNames: ['issue'],
+});
+ISSUES.forEach(issue => questionsSonneur.labels(issue).inc(0));   // séries à 0 dès le démarrage
 
 // Serveurs Ollama du LAN, par ordre de préférence, séparés par des virgules.
 // Modèle propre à un serveur possible avec « | » : http://pi5:11434|gemma4:e2b (sinon OLLAMA_MODEL).
@@ -422,10 +434,12 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform' });
         res.write(`event: texte\ndata: ${JSON.stringify({ texte: "Je suis Sonneur, l'assistant des données des sites du CENCA. " + CAPACITES })}\n\n`);
         res.write(`event: fin\ndata: ${JSON.stringify({ outils: [], duree_ms: 0, modele: 'réponse directe', questions_restantes: QUESTIONS_MAX - questions })}\n\n`);
+        questionsSonneur.labels('aide').inc();
         return res.end();
     }
 
     if (etatSonneur().occupe) {
+        questionsSonneur.labels('occupe').inc();
         return res.status(503).json({ message: MESSAGE_OCCUPE, code: 'sonneur_occupe', ...etatSonneur() });
     }
 
@@ -442,6 +456,7 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
     let relanceSansOutil = false;   // relance déjà faite après une réponse inventée (données sans outil)
     let relanceRefus = false;       // relance déjà faite après un refus hors périmètre malgré des outils appelés
     let reponseInventee = false;
+    let issue = 'erreur';           // compteur questionsSonneur, incrémenté une fois dans le finally
 
     res.writeHead(200, {
         'Content-Type': 'text/event-stream; charset=utf-8',
@@ -660,8 +675,10 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
             envoyer('erreur', { message: "Le modèle n'a pas formulé de réponse à partir des données. Reformulez la question ou réessayez." });
         } else {
             envoyer('fin', { outils: outilsAppeles, duree_ms: Date.now() - debut, modele: serveur.modele, questions_restantes: QUESTIONS_MAX - questions });
+            issue = 'reponse';
         }
     } catch (err) {
+        if (err?.code === 'sonneur_occupe') issue = 'occupe';
         if (!interrompu) {
             console.error(`Erreur chatbot (${etape}) :`, err);
             envoyer('erreur', { message: messageErreur(err, etape, serveur), ...(err?.code === 'sonneur_occupe' && { code: 'sonneur_occupe' }) });
@@ -670,6 +687,7 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
         clearInterval(battement);
         clearTimeout(delai);
         liberer(serveur);
+        questionsSonneur.labels(interrompu ? 'interrompue' : issue).inc();
         console.log(`[chat] ${identifiant} (${serveur ? `${serveur.modele} @ ${serveur.host}` : 'aucun serveur'}) : ${outilsAppeles.length} outil(s) [${outilsAppeles.join(', ')}] en ${Date.now() - debut} ms${interrompu ? ' (interrompu)' : ''}`);
         if (!interrompu) res.end();
     }
