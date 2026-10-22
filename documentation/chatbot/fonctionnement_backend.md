@@ -51,3 +51,20 @@ Le même mécanisme s'applique au délai global de `OLLAMA_TIMEOUT_MS` (15 min p
 ## Performances sur CPU
 
 Le prompt système, avec la description des outils, est relu entièrement par Ollama dès qu'il change (environ 5 min 30 sur le serveur actuel) ; tant qu'il ne change pas, le cache de préfixe d'Ollama le réutilise et les questions suivantes vont beaucoup plus vite. Toute modification du prompt, des consignes ou des outils refait donc payer la première question. Pour garder les réponses rapides : peu de tours d'outils (outils qui répondent en un appel, comme `travaux_site`), résultats compacts, et capacités hors du prompt (servies par la réponse directe aux questions d'aide).
+
+## Serveurs Ollama de dev et de prod
+
+- **Prod** : `docker-compose.yml` impose `OLLAMA_URL` (gros serveur 192.168.1.26, CPU), `OLLAMA_MODEL=gemma4:26b` et `OLLAMA_NUM_CTX=32768`, quel que soit le `.env` copié dans l'image.
+- **Dev** (`npm start`, `.env`) : portable ZBook en premier (`gemma4:12b`, contexte 16 384), gros serveur en secours s'il est éteint ou injoignable. Deux backends sur le même Ollama se ralentissent et se vident mutuellement le cache du prompt.
+- **Couches sur la carte graphique** : troisième champ de `OLLAMA_URL` (`url|modèle|num_gpu`). Sur la RTX A500 (4 Go) du portable, Ollama ne plaçait d'office que 7 couches sur 49 ; mesures du 2026-10-20 avec `OLLAMA_FLASH_ATTENTION=1` et `OLLAMA_KV_CACHE_TYPE=q8_0` :
+
+| Couches | Lecture du prompt | Écriture |
+|---|---|---|
+| automatique | 120 j/s | 5,0 j/s |
+| 12 | 166 j/s | 5,4 j/s |
+| **15 (retenu)** | **173 j/s** | **5,4 j/s** |
+| 18 | 196 j/s | 4,3 j/s |
+| 21 | 177 j/s | 3,8 j/s |
+
+Au-delà de 15, Windows déborde de la mémoire vidéo vers la mémoire partagée et l'écriture ralentit. Pour comparaison, le gros serveur lit 27 j/s et écrit 5,5 j/s ; `gemma4:26b` ne tient pas sur le portable (0,2 j/s).
+

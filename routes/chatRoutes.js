@@ -61,8 +61,11 @@ function clientOllama(serveur, signal) {
 const serveursOllama = (process.env.OLLAMA_URL || 'http://127.0.0.1:11434')
     .split(',').map(s => s.trim()).filter(Boolean)
     .map((entree, rang) => {
-        const [host, modele] = entree.split('|').map(s => s.trim());
-        return { rang, host, modele: modele || OLLAMA_MODEL, enCours: 0 };
+        // « url|modèle|couches_gpu » : modèle et nombre de couches sur la carte graphique facultatifs.
+        // couches_gpu force num_gpu sur un serveur à petite carte (Ollama y reste trop prudent sous Windows)
+        const [host, modele, couches] = entree.split('|').map(s => s.trim());
+        const numGpu = /^\d+$/.test(couches || '') ? Number(couches) : undefined;
+        return { rang, host, modele: modele || OLLAMA_MODEL, numGpu, enCours: 0 };
     });
 
 // Questions traitées en même temps par serveur Ollama : au-delà, Sonneur est « occupé » et refuse les
@@ -507,7 +510,7 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
                 tools: avecOutils ? outils : undefined,
                 stream: true,
                 think: OLLAMA_THINK,
-                options: { num_ctx: OLLAMA_NUM_CTX, num_predict: OLLAMA_JETONS_MAX },
+                options: { num_ctx: OLLAMA_NUM_CTX, num_predict: OLLAMA_JETONS_MAX, ...(serveur.numGpu !== undefined && { num_gpu: serveur.numGpu }) },
             });
 
             let contenu = '';
