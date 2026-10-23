@@ -4,7 +4,8 @@
 // côté front, sinon les deux cartes ne concordent plus.
 //
 // Les couleurs sont regroupées par famille (végétation en verts, pâturage en orangés/bruns,
-// hydraulique en bleus...) et évitent le jaune, réservé au contour du site.
+// hydraulique en bleus...). Seule la fauche est jaune (blé, doré) : le jaune citron
+// reste réservé au contour du site.
 
 // Types de niveau 2 (opegerer.operations.action_2)
 const COULEURS_ACTION_2 = {
@@ -12,7 +13,7 @@ const COULEURS_ACTION_2 = {
     "201": "00796b", // Bûcheronnage
     "202": "c5e1a5", // Débroussaillage
     "203": "7cb342", // Broyage
-    "204": "2ecc40", // Fauche
+    "204": "e8b923", // Fauche (jaune blé, plus doré que le contour du site)
     "205": "4db6ac", // Taille
     "206": "33691e", // Arrachage
 
