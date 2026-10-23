@@ -67,6 +67,7 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 | `/sites` | `routes/sites/getTravauxRoutes.js` | GET works projects (`opegerer`, TRV): projects, operations, objectives, Word sheet |
 | `/sites` | `routes/sites/getListesRoutes.js` | GET form choice lists (`/selectvalues`) |
 | `/sites` | `routes/sites/getDocsLiesRoutes.js` | GET documents linked to items (`files.docs`) |
+| `/sites/autres` | `routes/projetsAutres/{get,put,delete}ProjetsAutresRoutes.js` | Non-works projects (SEN, ETU, POL, FON, PAR, ACC, ADM, AUT) in the MS Access schema `opeautres`: search, project + operations with their places, targets, indicators, contributors. GET public, writes JWT. Shared SQL and checks in `fonctions/projetsAutres.js`; front contract in `documentation/instructions_front_projets_autres.md`. Mounted before the `/sites` routers |
 | `/sites` | `routes/sites/putSitesRoutes.js` | PUT/update site data |
 | `/sites` | `routes/sites/deleteSitesRoutes.js` | DELETE site data |
 | `/sites` | `routes/sites/foncierRoutes.js` | Land registry (foncier) endpoints |

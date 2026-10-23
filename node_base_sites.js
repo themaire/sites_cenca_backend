@@ -227,6 +227,11 @@ const listesRoutesGet = require('./routes/sites/getListesRoutes.js');
 const docsLiesRoutesGet = require('./routes/sites/getDocsLiesRoutes.js');
 const siteRoutesPut = require('./routes/sites/putSitesRoutes.js');
 
+// Projets autres que travaux (sensibilisation, études, police...), schéma opeautres
+const projetsAutresRoutesGet = require('./routes/projetsAutres/getProjetsAutresRoutes.js');
+const projetsAutresRoutesPut = require('./routes/projetsAutres/putProjetsAutresRoutes.js');
+const projetsAutresRoutesDelete = require('./routes/projetsAutres/deleteProjetsAutresRoutes.js');
+
 // Import du middleware d'authentification
 const { authenticateToken } = require('./fonctions/fonctionsAuth.js');
 
@@ -286,6 +291,11 @@ async function run() {
     app.use('/admin', newsRoutesAdmin);
     app.use('/admin', adminRoutes);
     app.use('/news', newsRoutes);
+
+    // Monté avant les routeurs /sites : GET en accès libre, POST/PUT/DELETE avec JWT
+    app.use('/sites/autres', projetsAutresRoutesGet);
+    app.use('/sites/autres', projetsAutresRoutesPut);
+    app.use('/sites/autres', projetsAutresRoutesDelete);
 
     app.use('/sites', siteRoutesGet);
     app.use('/sites', pgestionRoutesGet);
