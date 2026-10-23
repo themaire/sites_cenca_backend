@@ -110,7 +110,14 @@ Outils `indicateurs_sites`, `indicateurs_activite`, `controle_donnees_sites` : m
 ## Autres schémas (domaines spécialisés)
 
 - `chiro` : suivi des chiroptères (gîtes `chiro.sites`, `chiro.localisations`, relevés, observations, mortalités, nombreuses tables `typ_*`).
-- `hab` : habitats naturels ; `obsbiodiv` : observations ; `irenee`, `life_connexions`, `rqdb`, `librevo`, `mescomp` : projets et programmes spécifiques.
+- `obsbiodiv` : observations ; `irenee`, `life_connexions`, `rqdb`, `librevo` : projets et programmes spécifiques.
+- `hab` : habitats naturels cartographiés (outils `habitats_site`, `habitats_cartographie`).
+  - `hab.fiches_releves` : un polygone de végétation par relevé (~17 000, 2006-2023) ; colonnes entre guillemets (casse mixte) : `"geomReleve"` (MultiPolygon 2154), `"dateReleve"` (année, numeric), `"intituleVegetation"`, `"zoneHumide"` (1 = oui), `"idEtat"` → `hab.typ_etatcons."intituleEtat"` (Bon, Altéré, Dégradé, Inconnu), `"idNatureObservation"` → `hab.typ_natureobs`, `"idUnite"` → `hab.typ_unitesveg`, `"idEchelle"` → `hab.typ_echelleobs`. Pas de lien vers les sites : croiser par `ST_Intersects` avec `esp.geometries`.
+  - Les campagnes se superposent : sommer les surfaces de plusieurs années compte deux fois une même zone ; pour une surface couverte, faire `ST_Union`.
+  - `hab.pourcentage_carto` (vue, `uuid_espace`, `pourcentage`) : part de chaque espace couverte par des relevés.
+- `mescomp` : mesures compensatoires (outil `mesures_compensatoires`). `mescomp.projets` (nom, société, durée, début, objectifs, document, `validite` en texte 'true'/'false'), `mescomp.sites_mc` (projet ↔ site, `typ_intervention` → `mescomp.typ_interventions` : PON actions ponctuelles, LIE contrat lié à) ; vue `mescomp.v_mescomp` = les trois joints, `site` = `sitcenca.sites.uuid_site`.
+- Objectifs des projets de gestion (outil `objectifs_projets`) : `opegerer.objectifs` (`projet` → `opegerer.projets.uuid_proj`), libellés dans `opegerer.typ_objectifs` (UG unité de gestion, AC accueil du public), `opegerer.typ_enjeux` (`nv_enjeux` : ESP, COM, HAB, AUT), `opegerer.typ_objectifope` (`obj_ope` : CON, RES, ENT, MENT…). `surf_totale` / `surf_prevue` sont du texte libre (« 2,53 ha », « 6000 »).
+- `sitcenca.v_export_fcen_sites` : export annuel des sites à la FCEN (une ligne par site exporté, sa géométrie retenue) ; `date_maj_s` = mise à jour du contour, `date_crea_site`, `date_maj_site` (fiche), `terrain_militaire`. Outil `perimetres_modifies`.
 - `gestint` : intranet (actualités `news`, menus) ; `files` : documents attachés (`files.docs`, `ref_id`, `doc_type`).
 - `lizmap_maps` : couches techniques des cartes Lizmap.
 
@@ -142,6 +149,41 @@ Actes d'un site, multi-sites compris :
 SELECT a.* FROM sitcenca.actes_mfu a
 WHERE a.site = $1
    OR EXISTS (SELECT 1 FROM sitcenca.actes_mfu_multi m WHERE m.ref_uuid_acte = a.uuid_acte AND m.ref_uuid_site = $1);
+```
+
+Requêtes reprises de `ressources/bdd/exemples_sql.json` (vérifiées en octobre 2026 ; ce fichier contient aussi des requêtes sur des vues disparues, à ne pas réutiliser) :
+
+Surface d'habitats relevée par année :
+```sql
+SELECT "dateReleve", round(sum(ST_Area("geomReleve"))::numeric / 10000, 1) AS ha
+FROM hab.fiches_releves GROUP BY 1 ORDER BY 1;
+```
+
+Pourcentage cartographié des sites gérés :
+```sql
+SELECT s.code, e.nom, p.pourcentage
+FROM sitcenca.sites s
+JOIN esp.espaces e ON e.uuid_espace = s.espace
+LEFT JOIN hab.pourcentage_carto p ON p.uuid_espace = s.espace
+WHERE s.typ_site = '1' AND s.actuel IS NOT FALSE AND s.validite IS NOT FALSE
+ORDER BY p.pourcentage DESC NULLS LAST;
+```
+
+Sites dont le contour a changé l'année précédente :
+```sql
+SELECT id_site_cen, nom_site, date_crea_site, date_maj_s
+FROM sitcenca.v_export_fcen_sites
+WHERE EXTRACT(year FROM date_maj_s) = EXTRACT(year FROM CURRENT_DATE) - 1
+  AND EXTRACT(year FROM date_maj_s) IS DISTINCT FROM EXTRACT(year FROM date_crea_site);
+```
+
+Objectifs d'un projet avec leurs libellés :
+```sql
+SELECT o.enjeux_eco, en.libelle AS niveau_enjeu, op.libelle AS objectif_ope, o.attentes, o.surf_prevue
+FROM opegerer.objectifs o
+LEFT JOIN opegerer.typ_enjeux en ON en.cd_type = o.nv_enjeux
+LEFT JOIN opegerer.typ_objectifope op ON op.cd_type = o.obj_ope
+WHERE o.projet = $1 AND o.validite IS NOT FALSE;
 ```
 
 ## À vérifier / à compléter

@@ -5,6 +5,7 @@ const { pool } = require('../dbPool');
 const { validerRequeteLecture, executerLectureSeule, estTableSensible, estColonneSensible } = require('./securiteSql');
 const { enregistrerRequetesMetier } = require('./requetesMetier');
 const { enregistrerRequetesWebobs } = require('./requetesWebobs');
+const { enregistrerRequetesHabitats } = require('./requetesHabitats');
 const { poolWebobs } = require('../dbPoolWebobs');
 const { LECTURE_SEULE, MAX_ROWS, QUERY_TIMEOUT_MS, reponse, erreur, journaliser, lire } = require('./utilitaires');
 
@@ -22,6 +23,7 @@ function enregistrerOutils(server) {
 
   // Outils métier (sites, foncier, travaux, spatial) + documentation_base
   enregistrerRequetesMetier(server);
+  enregistrerRequetesHabitats(server);
 
   // Observations naturalistes WebObs (autre base), croisées avec les emprises des sites
   if (poolWebobs) enregistrerRequetesWebobs(server);
