@@ -69,6 +69,7 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 | `/process` | `routes/processRoutes.js` | File upload → Python pipeline trigger |
 | `/picts` | `routes/pictureRoute.js` | Image upload/resize/serve |
 | `/docs` | `routes/docsRoutes.js` | Markdown docs served as HTML |
+| `/menu` | `routes/menuRoutes.js` | Header menu (`gestint.m_menu_header`): `/menu/arbre` (public) and `/menu/arbre/admin` (JWT, adds « Paramètres ») return the whole tree (`enfants[]`) in one query, cached 10 min in memory + ETag; legacy per-level `/parent=:id` routes kept until the front switches (`documentation/instructions_front_menu.md`) |
 | `/chat` | `routes/chatRoutes.js` | Chatbot (JWT): local LLM via Ollama + whitelisted MCP business tools, SSE stream |
 | `/files` | static | Static file serving from `FILES_DIR_ENV` |
 | `/metrics` | express-prom-bundle | Prometheus metrics |
