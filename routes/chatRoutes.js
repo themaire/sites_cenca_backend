@@ -16,11 +16,23 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { Ollama } = require('ollama');
 const { Agent, fetch: fetchUndici } = require('undici');
+const promClient = require('prom-client');
 
 const { authenticateToken } = require('../fonctions/fonctionsAuth.js');
 const { listerOutils, appelerOutil } = require('../fonctions/clientMcp.js');
 
 const router = express.Router();
+
+// Sollicitations de Sonneur, exposées par /metrics (même registre qu'express-prom-bundle).
+// Un seul label, à valeurs fixes (jamais l'utilisateur) : chaque valeur distincte est une série en mémoire.
+// Grafana : sum by (issue) (increase(sonneur_questions_total[1h]))
+const ISSUES = ['reponse', 'aide', 'occupe', 'erreur', 'interrompue'];
+const questionsSonneur = new promClient.Counter({
+    name: 'sonneur_questions_total',
+    help: 'Questions posées à Sonneur, par issue : reponse, aide (réponse directe), occupe (refusée), erreur, interrompue (panneau fermé)',
+    labelNames: ['issue'],
+});
+ISSUES.forEach(issue => questionsSonneur.labels(issue).inc(0));   // séries à 0 dès le démarrage
 
 // Serveurs Ollama du LAN, par ordre de préférence, séparés par des virgules.
 // Modèle propre à un serveur possible avec « | » : http://pi5:11434|gemma4:e2b (sinon OLLAMA_MODEL).
@@ -131,11 +143,16 @@ const CAPACITES = `Je réponds aux questions sur les sites du CENCA, en lecture 
   Ex. : « Fiche du site 10035 »
 - Donner les chiffres clés et indicateurs du tableau de bord (rapport d'activité) : nombre et surface des sites gérés, nouveaux sites d'une année, synthèses par département, par milieu naturel, par type d'acte foncier, par type de propriétaire, Natura 2000 et autres classements, protection forte, animations et personnes sensibilisées, animation foncière. État actuel ou fin de l'année précédente.
   Ex. : « Combien de sites gérés et quelle surface totale ? », « Surface par type d'acte à la fin de l'année dernière »
-- Repérer les sites gérés aux données incomplètes : sans géométrie, sans acte foncier, données manquantes.
+- Repérer les sites gérés aux données incomplètes : sans géométrie, sans acte foncier, données manquantes ; et les sites dont le contour a été modifié une année donnée.
+  Ex. : « Quels sites ont changé de périmètre l'an dernier ? »
 - Maîtrise foncière : actes d'un site (dates, échéances, parcelles) et actes de tous les sites qui arrivent à échéance.
   Ex. : « Quels actes arrivent à échéance dans les 6 mois ? »
-- Projets de gestion : travaux réalisés ou prévus sur un site, recherche de projets par année, site, responsable, statut ou type, détail des opérations d'un projet, bilan des opérations par type d'action et par année.
-  Ex. : « Bilan des travaux réalisés en 2025 par type d'action »
+- Projets de gestion : travaux réalisés ou prévus sur un site, recherche de projets par année, site, responsable, statut ou type, détail des opérations d'un projet, bilan des opérations par type d'action et par année, objectifs de gestion des projets (enjeux, objectif opérationnel, résultats attendus).
+  Ex. : « Bilan des travaux réalisés en 2025 par type d'action », « Quels sont les objectifs de gestion du Marais de Villechétif ? »
+- Mesures compensatoires suivies par le CENCA (projets éoliens, carrières, centrales…) et leurs sites.
+  Ex. : « Quelles mesures compensatoires sont liées aux carrières ? »
+- Habitats naturels cartographiés (relevés de végétation depuis 2006) : habitats d'un site avec leur surface et leur état de conservation, surface cartographiée par année, sites les plus ou moins cartographiés, sites où une végétation est présente.
+  Ex. : « Quels habitats sur la Pelouse de Champ Cognier ? », « Sur quels sites trouve-t-on des phragmitaies ? »
 - Observations naturalistes (WebObs, faune et flore depuis 2000) : statistiques par année, groupe, département ou commune ; espèces observées avec leurs statuts (protection, directives, listes rouges) ; inventaire d'un site du CENCA ; sites où une espèce est présente, sites les plus riches ou les moins prospectés.
   Ex. : « Quelles espèces protégées ont été vues sur le site 10035 ? », « Sur quels sites trouve-t-on le Sonneur à ventre jaune ? », « Combien d'observations d'oiseaux en 2025 ? »
 Pour une longue liste, je donne le total et un résumé (par département, par type…) : précisez la question pour réduire la liste, ex. « Quels sont les nouveaux sites des Ardennes en 2025 ? ».
@@ -153,6 +170,7 @@ const GUIDE_METIER = `- Site : site géré par le CENCA, identifié par son code
 - Documents de gestion (plans de gestion) : période annee_deb – annee_fin, actuel = document en vigueur.
 - Projets de gestion : typ_projet TRV = travaux ; les projets saisis dans la webapp (pro_webapp) ont des opérations détaillées, pas les anciens projets MS Access. Opérations : le type affiché est le libellé de action_2 ; quantite + unite, surf (surface), lin (linéaire), maître d'œuvre (entreprise de l'annuaire), financeurs, animaux (pâturage).
 - Conservateurs : bénévoles référents d'un site.
+- Habitats : relevés de végétation cartographiés (intitulé de la végétation, année de relevé, état de conservation bon / altéré / dégradé / inconnu, zone humide). Plusieurs campagnes peuvent se superposer : les surfaces par végétation s'additionnent d'une année à l'autre, la surface cartographiée d'un site non.
 - Observations naturalistes : base WebObs, export arrêté à une date (indiquée par « source ») ; groupes taxonomiques = observatoire (Oiseaux, Insectes, Flore…). Patrimoniale = protégée, directive européenne, menacée (liste rouge CR/EN/VU) ou déterminante ZNIEFF. « Espèce sensible (nom masqué) » : ne jamais chercher à deviner le nom.`;
 
 /**
@@ -168,7 +186,7 @@ function promptSysteme() {
         "- Ne demande pas de précision quand un outil permet déjà de répondre à l'interprétation la plus probable : réponds avec celle-ci ; seulement si la question était ambiguë, indique en une ligne comment tu l'as comprise. « Nouveaux sites », « sites contractualisés » ou « apparus » une année donnée = année de premier contrat (rechercher_sites, annee_premier_contrat).",
         "- Réponds toujours en français, de façon concise, en Markdown (listes, tableaux courts).",
         "- Tes seules sources de données sont les outils fournis (requêtes métier en lecture seule). Appelle-les pour chaque question portant sur les données ; tu peux en enchaîner plusieurs.",
-        "- Si le message se limite à demander ce que tu sais faire, de l'aide, des exemples ou à saluer, réponds en deux phrases, sans appeler d'outil : tu réponds sur les sites, le foncier, les projets et travaux, les indicateurs du tableau de bord et les observations naturalistes ; « Aide » donne la liste détaillée avec des exemples. Si une salutation accompagne une question (« salut, on a un site à … ? »), ne te présente pas : traite directement la question avec les outils.",
+        "- Si le message se limite à demander ce que tu sais faire, de l'aide, des exemples ou à saluer, réponds en deux phrases, sans appeler d'outil : tu réponds sur les sites, le foncier, les projets et travaux, les indicateurs du tableau de bord, les observations naturalistes et les habitats cartographiés ; « Aide » donne la liste détaillée avec des exemples. Si une salutation accompagne une question (« salut, on a un site à … ? »), ne te présente pas : traite directement la question avec les outils.",
         "- Appelle l'outil adapté directement, sans demander la permission ni annoncer ce que tu vas faire.",
         "- Passe aux outils les noms (communes, sites) tels que l'utilisateur les a écrits. N'invente jamais de code INSEE ni de code de site : n'utilise un code que s'il vient de l'utilisateur ou d'un résultat d'outil.",
         "- Si un outil ne renvoie aucune ligne, réessaie autrement (nom partiel, autre outil) avant de conclure qu'il n'y a rien.",
@@ -187,7 +205,7 @@ function promptSysteme() {
         "- Si l'utilisateur donne un nom de site, cherche d'abord le site avec rechercher_sites, sauf pour ses travaux : travaux_site accepte directement le nom.",
         "- Actes, dates et échéances d'un site précis : foncier_site. echeances_actes ne sert qu'aux échéances de tous les sites confondus.",
         "- « Depuis 2025 » = de 2025 jusqu'à aujourd'hui, année en cours comprise : utilise annee_debut (travaux_site, rechercher_projets, bilan_operations), jamais une seule année. Travaux d'un site : un seul appel à travaux_site, avec le nom ou le code du site tel que l'utilisateur l'a écrit (inutile de chercher le site avant) et annee_debut ; résume par année et par action en recopiant les totaux de bilan_par_annee_et_action (ne les recalcule pas), avec les dates et maîtres d'œuvre des opérations.",
-        "- Faune, flore, espèces, observations, inventaires naturalistes : outils webobs_*. Espèces d'un site : webobs_site ; sites où vit une espèce ou classement des sites : webobs_sites_cenca ; ailleurs (commune, département) : webobs_especes ou webobs_statistiques.",
+        "- Faune, flore, espèces, observations, inventaires naturalistes : outils webobs_*. Espèces d'un site : webobs_site ; sites où vit une espèce ou classement des sites : webobs_sites_cenca ; ailleurs (commune, département) : webobs_especes ou webobs_statistiques. Habitats, végétations, état de conservation, cartographie : habitats_site (un site) ou habitats_cartographie (synthèses, sites où se trouve une végétation).",
         "- Les surfaces sont en hectares sauf mention contraire ; précise l'unité quand tu donnes une surface.",
         "- Réponses courtes : au-delà de 10 résultats, ne liste pas : donne le total exact et un résumé léger d'après la « Répartition exacte » jointe au résultat (par département, type…, surface totale), au plus 5 exemples, puis propose de filtrer (département, type, commune…). Un résultat peut n'afficher que ses premières lignes : le total exact est alors indiqué, c'est lui qu'il faut donner.",
         "- Si l'utilisateur demande la liste complète d'un résultat de plus de 10 lignes, ne la recopie pas : réponds que la liste est trop longue pour le chat, redonne le résumé et propose de la découper par un filtre (ex. par département). Ne complète jamais une liste avec des sites absents des résultats.",
@@ -422,10 +440,12 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform' });
         res.write(`event: texte\ndata: ${JSON.stringify({ texte: "Je suis Sonneur, l'assistant des données des sites du CENCA. " + CAPACITES })}\n\n`);
         res.write(`event: fin\ndata: ${JSON.stringify({ outils: [], duree_ms: 0, modele: 'réponse directe', questions_restantes: QUESTIONS_MAX - questions })}\n\n`);
+        questionsSonneur.labels('aide').inc();
         return res.end();
     }
 
     if (etatSonneur().occupe) {
+        questionsSonneur.labels('occupe').inc();
         return res.status(503).json({ message: MESSAGE_OCCUPE, code: 'sonneur_occupe', ...etatSonneur() });
     }
 
@@ -442,6 +462,7 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
     let relanceSansOutil = false;   // relance déjà faite après une réponse inventée (données sans outil)
     let relanceRefus = false;       // relance déjà faite après un refus hors périmètre malgré des outils appelés
     let reponseInventee = false;
+    let issue = 'erreur';           // compteur questionsSonneur, incrémenté une fois dans le finally
 
     res.writeHead(200, {
         'Content-Type': 'text/event-stream; charset=utf-8',
@@ -660,8 +681,10 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
             envoyer('erreur', { message: "Le modèle n'a pas formulé de réponse à partir des données. Reformulez la question ou réessayez." });
         } else {
             envoyer('fin', { outils: outilsAppeles, duree_ms: Date.now() - debut, modele: serveur.modele, questions_restantes: QUESTIONS_MAX - questions });
+            issue = 'reponse';
         }
     } catch (err) {
+        if (err?.code === 'sonneur_occupe') issue = 'occupe';
         if (!interrompu) {
             console.error(`Erreur chatbot (${etape}) :`, err);
             envoyer('erreur', { message: messageErreur(err, etape, serveur), ...(err?.code === 'sonneur_occupe' && { code: 'sonneur_occupe' }) });
@@ -670,6 +693,7 @@ router.post('/', authenticateToken, chatRateLimit, async (req, res) => {
         clearInterval(battement);
         clearTimeout(delai);
         liberer(serveur);
+        questionsSonneur.labels(interrompu ? 'interrompue' : issue).inc();
         console.log(`[chat] ${identifiant} (${serveur ? `${serveur.modele} @ ${serveur.host}` : 'aucun serveur'}) : ${outilsAppeles.length} outil(s) [${outilsAppeles.join(', ')}] en ${Date.now() - debut} ms${interrompu ? ' (interrompu)' : ''}`);
         if (!interrompu) res.end();
     }

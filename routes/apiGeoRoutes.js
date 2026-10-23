@@ -82,6 +82,10 @@ const {
     getInfosParcellesByIdus
 } = require("../fonctions/geo_api.js");
 
+// Plafond du nombre d'objets demandés aux WFS : ces routes sont publiques
+const MAX_FEATURES_PLAFOND = 10000;
+const lireMaxFeatures = (valeur, defaut) => Math.min(parseInt(valeur) || defaut, MAX_FEATURES_PLAFOND);
+
 /**
  * Route pour récupérer les infos principales d'une liste de parcelles (idu/code_parcelle)
  * POST /api-geo/parcelles/infos-by-idus
@@ -99,7 +103,7 @@ router.post("/parcelles/infos-by-idus", async (req, res) => {
         }
         const options = {
             srs: req.query.srs || 'EPSG:4326',
-            maxFeatures: parseInt(req.query.maxFeatures) || Math.max(idus.length, 100)
+            maxFeatures: lireMaxFeatures(req.query.maxFeatures, Math.max(idus.length, 100))
         };
         const infos = await getInfosParcellesByIdus(idus, options);
         res.setHeader("Access-Control-Allow-Origin", "*");
@@ -248,7 +252,7 @@ router.get("/parcelles/bbox", async (req, res) => {
         const validatedBbox = validateAndAdjustBbox(bbox);
         
         const options = {
-            maxFeatures: parseInt(req.query.maxFeatures) || 1000,
+            maxFeatures: lireMaxFeatures(req.query.maxFeatures, 1000),
             srs: req.query.srs || 'EPSG:4326'
         };
         
@@ -311,7 +315,7 @@ router.get("/parcelles/commune/:codeInsee", async (req, res) => {
         }
         
         const options = {
-            maxFeatures: parseInt(req.query.maxFeatures) || 5000,
+            maxFeatures: lireMaxFeatures(req.query.maxFeatures, 5000),
             srs: req.query.srs || 'EPSG:4326'
         };
         

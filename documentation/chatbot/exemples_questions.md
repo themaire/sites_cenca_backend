@@ -1,6 +1,6 @@
 # Exemples de questions à poser à Sonneur
 
-Pour l'aide utilisateur du chatbot. Sonneur choisit lui-même l'outil à appeler : il suffit de poser la question en français, sans nommer l'outil. Chaque exemple ci-dessous correspond à un outil du MCP (`fonctions/clientMcp.js`, `OUTILS_AUTORISES`) et a été vérifié sur les données le 2026-10-20.
+Pour l'aide utilisateur du chatbot. Sonneur choisit lui-même l'outil à appeler : il suffit de poser la question en français, sans nommer l'outil. Chaque exemple ci-dessous correspond à un outil du MCP (`fonctions/clientMcp.js`, `OUTILS_AUTORISES`) et a été vérifié sur les données le 2026-10-20 (le 2026-10-23 pour les périmètres modifiés, mesures compensatoires, objectifs et habitats).
 
 Conseils généraux :
 
@@ -83,6 +83,17 @@ Conseils généraux :
 - Quels sites gérés n'ont pas d'acte foncier en cours ?
 - Quels sites ont des données manquantes (surface, milieu, commune…) ?
 
+### Périmètres modifiés (`perimetres_modifies`)
+
+- Quels sites ont changé de périmètre l'an dernier ?
+- Quels sites ont vu leur contour modifié en 2024 ?
+
+### Mesures compensatoires (`mesures_compensatoires`)
+
+- Quelles mesures compensatoires suit-on ?
+- Quelles mesures compensatoires sont liées aux carrières ?
+- Quels sites sont concernés par la mesure compensatoire de la centrale photovoltaïque du Bois du Roi ?
+
 ## Maîtrise foncière
 
 ### Actes fonciers d'un site (`foncier_site`)
@@ -126,6 +137,29 @@ Conseils généraux :
 - Combien d'hectares pâturés chaque année depuis 2022 ?
 - Bilan des opérations par site en 2025.
 - Bilan des opérations du site 10030 depuis 2020.
+
+### Objectifs des projets (`objectifs_projets`)
+
+- Quels sont les objectifs de gestion du Marais de Villechétif ?
+- Quels enjeux visent les projets 2025 de la Pelouse de Champ Cognier ?
+
+## Habitats cartographiés
+
+Relevés de végétation cartographiés depuis 2006, avec leur état de conservation. Une même zone peut avoir été relevée plusieurs années : Sonneur le précise quand il additionne des surfaces.
+
+### Habitats d'un site (`habitats_site`)
+
+- Quels habitats sur la Pelouse de Champ Cognier ?
+- Quel est l'état de conservation des habitats du site 10030 ?
+- Quelle part du Marais du Paradis est cartographiée, et en quelle année ?
+- Quels habitats de zone humide trouve-t-on sur le site 08001 ?
+
+### Synthèses de la cartographie (`habitats_cartographie`)
+
+- Combien d'hectares d'habitats ont été cartographiés chaque année ?
+- Quels sites gérés de l'Aube sont les moins cartographiés ?
+- Sur quels sites trouve-t-on des phragmitaies ?
+- Quelles sont les végétations de zone humide les plus cartographiées ?
 
 ## Observations naturalistes (WebObs)
 

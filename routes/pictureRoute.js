@@ -15,6 +15,7 @@ const FILES_DIR_ENV = process.env.FILES_DIR_ENV || path.join(__dirname, 'files')
 // Pour rappel, FILES_DIR_ENV est défini dans .env
 const IMAGES_DIR = path.resolve(FILES_DIR_ENV, "photos");
 const CACHE_DIR = path.resolve(FILES_DIR_ENV, "cache");
+const LARGEUR_MAX = 4000; // en pixels
 
 // S'assurer que le dossier cache existe
 if (!fs.existsSync(CACHE_DIR)) {
@@ -34,7 +35,8 @@ router.get("/img", async (req, res) => {
     }
 
     const w = parseInt(width);
-    if (isNaN(w) || w <= 0) {
+    // Plafond : une largeur énorme ferait allouer à sharp des gigaoctets de mémoire en une requête
+    if (isNaN(w) || w <= 0 || w > LARGEUR_MAX) {
         return res.status(400).send("Largeur invalide");
     }
 
@@ -43,6 +45,10 @@ router.get("/img", async (req, res) => {
     let originalPath = path.join(FILES_DIR_ENV, file);
     if (!fs.existsSync(originalPath)) {
         originalPath = path.join(IMAGES_DIR, file);
+    }
+    // Refuse les "../" qui sortiraient du dossier des fichiers
+    if (!path.resolve(originalPath).startsWith(path.resolve(FILES_DIR_ENV) + path.sep)) {
+        return res.status(400).send("Chemin de fichier invalide");
     }
 
     // Nom du fichier de cache (même calcul que la suppression, voir fonctionsFichiers.js)

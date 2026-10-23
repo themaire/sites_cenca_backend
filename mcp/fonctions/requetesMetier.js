@@ -713,6 +713,103 @@ function enregistrerRequetesMetier(server) {
     };
     return resultat(await lire(requetes[anomalie]), { anomalie });
   });
+
+  // ---------------------------------------------------------------- Suivi (requêtes de ressources/bdd/exemples_sql.json)
+  outil(server, 'perimetres_modifies', {
+    title: 'Périmètres de sites modifiés',
+    description: "Sites gérés dont le contour (géométrie) a été modifié une année donnée, hors sites créés cette année-là (vue sitcenca.v_export_fcen_sites, celle de l'export annuel à la FCEN). "
+      + "Par défaut l'année précédente (rapport d'activité). Renvoie le code, le nom, la surface actuelle, la date de création du site et les dates de modification de la fiche et du contour. "
+      + "Ex. : « Quels sites ont changé de périmètre en 2025 ? ». Pour les nouveaux sites d'une année, utiliser rechercher_sites (annee_premier_contrat).",
+    inputSchema: {
+      annee: z.number().int().min(2000).max(2100).optional().describe("Année de modification du contour (défaut : l'année précédente)"),
+    },
+  }, async ({ annee }) => {
+    const an = annee ?? new Date().getFullYear() - 1;
+    const lignes = await lire(`
+      SELECT id_site_cen AS code, nom_site AS nom, round((ST_Area(geom) / 10000)::numeric, 2) AS surface_ha,
+             date_crea_site::text AS creation_site, date_maj_site::text AS modification_fiche, date_maj_s::text AS modification_contour
+      FROM sitcenca.v_export_fcen_sites
+      WHERE EXTRACT(year FROM date_maj_s) = $1
+        AND EXTRACT(year FROM date_maj_s) IS DISTINCT FROM EXTRACT(year FROM date_crea_site)
+      ORDER BY date_maj_s, id_site_cen`, [an]);
+    return resultat(lignes, { annee: an });
+  });
+
+  outil(server, 'mesures_compensatoires', {
+    title: 'Mesures compensatoires',
+    description: "Projets de mesures compensatoires suivis par le CENCA (vue mescomp.v_mescomp) : nom du projet (éolien, carrière…), société, durée, année de début, objectifs, "
+      + "et les sites concernés avec le type d'intervention (actions ponctuelles, contrat lié à). Filtres : texte (nom du projet ou de la société), site. "
+      + "Ex. : « Quelles mesures compensatoires suit-on ? », « Mesures compensatoires liées aux carrières ».",
+    inputSchema: {
+      texte: z.string().min(2).optional().describe('Partie du nom du projet ou de la société (ex. éolien, carrière, EQIOM)'),
+      site: z.string().min(2).optional().describe('Code, uuid_site ou nom du site'),
+    },
+  }, async ({ texte, site }) => {
+    const s = site ? await trouverSiteParNom(site) : null;
+    const lignes = await lire(`
+      SELECT m.uuid_projet, m.nom AS projet, nullif(m.societe, '') AS societe, nullif(m.duree, '') AS duree, m.debut,
+             nullif(m.objectifs, '') AS objectifs, nullif(m.document, '') AS document,
+             m.libelle AS type_intervention, s.code, e.nom AS site, s.uuid_site
+      FROM mescomp.v_mescomp m
+      LEFT JOIN sitcenca.sites s ON s.uuid_site = m.site
+      LEFT JOIN esp.espaces e ON e.uuid_espace = s.espace
+      WHERE m.validite IS DISTINCT FROM 'false'
+        AND ($1::text IS NULL OR ${contientTexte('m.nom', '$1')} OR ${contientTexte('m.societe', '$1')})
+        AND ($2::text IS NULL OR m.uuid_projet IN (SELECT projet FROM mescomp.sites_mc WHERE site = $2))
+      ORDER BY m.nom, s.code`, [texte || null, s?.uuid_site || null]);
+    // Une entrée par projet, ses sites imbriqués
+    const projets = new Map();
+    for (const { uuid_projet, code, site: nom, uuid_site, type_intervention, ...projet } of lignes) {
+      if (!projets.has(uuid_projet)) {
+        projets.set(uuid_projet, { ...Object.fromEntries(Object.entries(projet).filter(([, v]) => v !== null)), sites: [] });
+      }
+      if (uuid_site) projets.get(uuid_projet).sites.push({ code, nom, uuid_site, type_intervention });
+    }
+    return resultat([...projets.values()], { nb_projets: projets.size });
+  });
+
+  outil(server, 'objectifs_projets', {
+    title: 'Objectifs des projets de gestion',
+    description: "Objectifs des projets de gestion d'un site (ou d'un projet) : type d'objectif (unité de gestion, accueil du public), niveau d'enjeu (espèces, communauté, habitat), "
+      + "enjeux écologiques visés, objectif opérationnel (conserver, restaurer, entretenir…), résultats attendus, surfaces totale et prévue. "
+      + "site = code, uuid_site ou nom ; ou uuid_proj (donné par rechercher_projets ou travaux_site). Période : annee_debut / annee_fin. "
+      + "Ex. : « Quels sont les objectifs de gestion du Marais de Villechétif ? ». Pour les travaux réalisés, utiliser travaux_site.",
+    inputSchema: {
+      site: z.string().min(2).optional().describe('Code (ex. 10035), uuid_site ou nom du site'),
+      uuid_proj: z.string().min(8).optional().describe("Identifiant d'un projet précis"),
+      annee_debut: z.number().int().optional().describe('Première année de projet incluse'),
+      annee_fin: z.number().int().optional().describe('Dernière année de projet incluse'),
+    },
+  }, async ({ site, uuid_proj, annee_debut, annee_fin }) => {
+    if (!site && !uuid_proj) throw new Error('Indiquer un site (code, uuid ou nom) ou un uuid_proj.');
+    const s = site ? await trouverSiteParNom(site) : null;
+    const lignes = await lire(`
+      SELECT p.uuid_proj, l.annee, l.titre, l.statut,
+             CASE WHEN o.typ_objectif <> '' THEN t.libelle END AS type_objectif, en.libelle AS niveau_enjeu,
+             CASE WHEN length(o.enjeux_eco) > 300 THEN left(o.enjeux_eco, 300) || '…' ELSE nullif(o.enjeux_eco, '') END AS enjeux,
+             op.libelle AS objectif_operationnel,
+             CASE WHEN length(o.attentes) > 300 THEN left(o.attentes, 300) || '…' ELSE nullif(o.attentes, '') END AS attentes,
+             nullif(o.surf_totale, '') AS surface_totale, nullif(o.surf_prevue, '') AS surface_prevue,
+             nullif(o.unite_gestion, '') AS unite_gestion, nullif(o.pression_maitrise, '') AS pression_maitrise
+      FROM opegerer.projets p
+      JOIN ope.listeprojets l ON l.uuid_proj = p.uuid_proj
+      JOIN opegerer.objectifs o ON o.projet = p.uuid_proj AND o.validite IS NOT FALSE
+      LEFT JOIN opegerer.typ_objectifs t ON t.cd_type = o.typ_objectif
+      LEFT JOIN opegerer.typ_enjeux en ON en.cd_type = o.nv_enjeux
+      LEFT JOIN opegerer.typ_objectifope op ON op.cd_type = o.obj_ope
+      WHERE ($1::text IS NULL OR p.site = $1)
+        AND ($2::text IS NULL OR upper(p.uuid_proj) = upper($2))
+        AND ($3::int IS NULL OR l.annee >= $3)
+        AND ($4::int IS NULL OR l.annee <= $4)
+      ORDER BY l.annee DESC, l.titre`, [s?.uuid_site || null, uuid_proj || null, annee_debut ?? null, annee_fin ?? null]);
+    // Une entrée par projet, ses objectifs imbriqués (champs vides retirés)
+    const projets = new Map();
+    for (const { uuid_proj: id, annee, titre, statut, ...objectif } of lignes) {
+      if (!projets.has(id)) projets.set(id, { uuid_proj: id, annee, titre, statut, objectifs: [] });
+      projets.get(id).objectifs.push(Object.fromEntries(Object.entries(objectif).filter(([, v]) => v !== null)));
+    }
+    return reponse({ ...(s && { site: { uuid_site: s.uuid_site, code: s.code, nom: s.nom } }), nb_projets: projets.size, projets: [...projets.values()] });
+  });
 }
 
-module.exports = { enregistrerRequetesMetier, trouverSite, trouverSiteParNom, numeroDepartement };
+module.exports = { enregistrerRequetesMetier, outil, trouverSite, trouverSiteParNom, numeroDepartement };
