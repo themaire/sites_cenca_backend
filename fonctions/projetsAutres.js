@@ -106,7 +106,22 @@ async function lireProjet(db, uuidProj) {
     );
     if (!projet.rows.length) return null;
     const operations = await db.query(sqlOperations("projet"), [uuidProj]);
-    return { ...projet.rows[0], operations: operations.rows };
+    return { ...projet.rows[0], ouvert_par: await ouvertPar(db, uuidProj), operations: operations.rows };
+}
+
+// Collègues ayant la fiche projet ouverte en modification dans l'interface MS Access : elle pose un verrou
+// dans gestint.editions (table, uuid, compte) à l'ouverture et l'efface à la fermeture. La webapp ne pose
+// pas de verrou et ne bloque rien : elle informe seulement. Un verrou peut rester si Access a planté.
+async function ouvertPar(db, uuidProj) {
+    const result = await db.query(
+        `SELECT e.compte, concat(s.prenom, ' ', s.nom) AS nom
+           FROM gestint.editions e
+           LEFT JOIN admin.salaries s ON s.cd_salarie = e.compte
+          WHERE e."table" = 'opeautres.projets' AND e.uuid = $1
+          ORDER BY e.compte`,
+        [uuidProj]
+    );
+    return result.rows;
 }
 
 // Opération complète ; null si introuvable

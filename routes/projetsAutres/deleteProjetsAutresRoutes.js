@@ -6,7 +6,12 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../../dbPool/poolConnect.js");
 const { authenticateToken } = require("../../fonctions/fonctionsAuth.js");
-const { codeSalarie, journaliser } = require("../../fonctions/projetsAutres.js");
+const { codeSalarie, journaliser, lireProjet, lireOperation } = require("../../fonctions/projetsAutres.js");
+
+// Suppression autorisée à tout utilisateur connecté (choix du 2026-10-23, contrairement à l'interface Access
+// qui passait par une demande au gestionnaire). Garde-fou : avant de supprimer, une copie complète de ce qui
+// disparaît (projet ou opération avec toutes ses listes, en JSON) est écrite dans gestint.historiques
+// (action « DELETE - Sauvegarde : {...} »). On sait qui a supprimé quoi, et un administrateur peut restaurer.
 
 function sendError(res, message, err) {
     console.error(`[projets autres] ${message}`, err?.message || err);
@@ -33,6 +38,7 @@ router.delete("/projets/:uuid", authenticateToken, async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query("BEGIN");
+        const sauvegarde = await lireProjet(client, req.params.uuid);
         const opes = await client.query("SELECT uuid_ope FROM opeautres.operations WHERE projet = $1", [req.params.uuid]);
         const uuidsOpe = opes.rows.map((r) => r.uuid_ope);
         await supprimerListes(client, uuidsOpe);
@@ -45,6 +51,8 @@ router.delete("/projets/:uuid", authenticateToken, async (req, res) => {
         const compte = await codeSalarie(client, req.tokenInfos?.identifiant);
         for (const uuidOpe of uuidsOpe) await journaliser(client, compte, "opeautres.operations", uuidOpe, "DELETE");
         await journaliser(client, compte, "opeautres.projets", req.params.uuid, "DELETE");
+        delete sauvegarde.ouvert_par;
+        await journaliser(client, compte, "opeautres.projets", req.params.uuid, "DELETE - Sauvegarde : " + JSON.stringify(sauvegarde));
         await client.query("COMMIT");
         res.status(200).json({ success: true, message: "Projet supprimé.", uuid_proj: req.params.uuid, operations_supprimees: uuidsOpe.length });
     } catch (err) {
@@ -61,13 +69,16 @@ router.delete("/operations/:uuid", authenticateToken, async (req, res) => {
     const client = await pool.connect();
     try {
         await client.query("BEGIN");
+        const sauvegarde = await lireOperation(client, req.params.uuid);
         await supprimerListes(client, [req.params.uuid]);
         const result = await client.query("DELETE FROM opeautres.operations WHERE uuid_ope = $1 RETURNING uuid_ope", [req.params.uuid]);
         if (!result.rows.length) {
             await client.query("ROLLBACK");
             return res.status(404).json({ success: false, message: "Opération introuvable." });
         }
-        await journaliser(client, await codeSalarie(client, req.tokenInfos?.identifiant), "opeautres.operations", req.params.uuid, "DELETE");
+        const compte = await codeSalarie(client, req.tokenInfos?.identifiant);
+        await journaliser(client, compte, "opeautres.operations", req.params.uuid, "DELETE");
+        await journaliser(client, compte, "opeautres.operations", req.params.uuid, "DELETE - Sauvegarde : " + JSON.stringify(sauvegarde));
         await client.query("COMMIT");
         res.status(200).json({ success: true, message: "Opération supprimée.", uuid_ope: req.params.uuid });
     } catch (err) {

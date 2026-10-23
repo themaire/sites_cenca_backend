@@ -106,6 +106,7 @@ Valeurs de `cat` : `SITE CENCA`, `AUTRE CENCA`, `N2000`, `RN`, `AP`, `ZIE`, `PN`
 ```json
 { "uuid_proj": "…", "code": "…", "nom": "…", "annee": 2026, "statut": "En cours", "typ_projet": "SEN", "typ_projet_libelle": "…",
   "responsable": "VGS", "responsable_str": "…", "programme": null, "createur": "VGS", "date_crea": "2026-10-15", "validite": true,
+  "ouvert_par": [{ "compte": "VGS", "nom": "Virginie Schmitt" }],   // fiche ouverte dans l'interface Access, [] sinon
   "operations": [{
     "uuid_ope": "…", "uuid_proj": "…", "action": "167",
     "action_chemin": [{ "cd_action": "9", "libelle": "Sensibilisation" }, { "cd_action": "46", "libelle": "Sorties et animations" }, { "cd_action": "167", "libelle": "Animations grand public" }],
@@ -149,9 +150,26 @@ Règles appliquées par le backend :
 - **Action** : une action travaux (`004_TRAV`…) est refusée. Les travaux se saisissent dans le module travaux.
 - **Listes en PUT** : une liste envoyée **remplace** entièrement l'ancienne, et `[]` la vide ; une liste absente n'est pas touchée. On peut donc envoyer le formulaire complet à chaque enregistrement. Chaque PUT est transactionnel.
 - **Duplication** : `clone` copie l'opération et toutes ses listes, avec de nouvelles dates si on en fournit. Utile pour une animation répétée ou un suivi à plusieurs passages. `projet` copie l'opération dans un autre projet.
-- **Suppressions** : elles sont définitives, sans corbeille, et suppriment les listes rattachées. Demander une confirmation, en rappelant le nombre d'opérations pour un projet. *(Règle provisoire : l'interface Access ne supprime pas un projet ou une opération déjà enregistrés, elle envoie une demande au gestionnaire de l'outil ; à aligner, voir plus bas.)*
-- **Journal** : chaque écriture est tracée dans `gestint.historiques`, au même format que l'interface Access (compte, date, table, uuid, action). Rien à faire côté front.
+- **Suppressions** : tout utilisateur connecté peut supprimer un projet ou une opération, directement, avec les listes rattachées. C'est un choix assumé, différent de l'interface Access qui envoyait une demande au gestionnaire de l'outil. Pas de corbeille dans l'écran, mais un garde-fou côté serveur (point suivant).
+- **Journal et sauvegarde** : chaque écriture est tracée dans `gestint.historiques` au format de l'interface Access (compte, date, table, uuid, action). Avant une suppression, le backend y écrit en plus une **copie complète** de ce qui disparaît (projet avec ses opérations et toutes leurs listes, ou opération seule), en JSON, dans une action `DELETE - Sauvegarde : {…}`. On sait donc toujours qui a supprimé quoi, et un administrateur peut restaurer. Rien à faire côté front, sauf le dire dans la confirmation.
 - **Réponse des créations et modifications** : elle renvoie l'objet complet relu en base. Le front peut s'en servir directement, sans relire.
+
+## Suppression et fiche ouverte par un collègue (à afficher)
+
+Pendant la transition, l'interface MS Access et la webapp écrivent dans les mêmes tables. Deux règles, décidées le 2026-10-23 :
+
+**Suppression directe, avec confirmation explicite.**
+- Bouton « Supprimer » sur le projet et sur chaque opération, pour tout utilisateur connecté.
+- Dialogue de confirmation qui rappelle ce qui part. Pour un projet : « Supprimer le projet *nom* et ses *N* opérations ? ». Pour une opération : son action et ses dates.
+- Ajouter dans le dialogue : « La suppression est enregistrée à votre nom dans l'historique, avec une copie des données. »
+- Après succès, retirer l'objet de l'écran et afficher un message ; en cas de `404`, il a déjà été supprimé (par un collègue) : recharger la liste.
+
+**Fiche ouverte dans Access : on informe, on ne bloque pas.**
+- L'interface Access pose un verrou dans `gestint.editions` quand un collègue ouvre une fiche projet en modification. `GET projets/:uuid` le renvoie dans `ouvert_par` (tableau vide si personne).
+- Si `ouvert_par` n'est pas vide, afficher un bandeau d'avertissement en haut de la fiche, sans rien désactiver : « Ce projet est ouvert en modification dans Access par *Virginie Schmitt*. Vos modifications et les siennes peuvent s'écraser : coordonnez-vous. »
+- Ignorer l'utilisateur connecté lui-même s'il apparaît dans la liste (il a peut-être Access ouvert à côté).
+- Relire `ouvert_par` à l'ouverture de la fiche et juste avant l'enregistrement (`GET projets/:uuid`). S'il est apparu entre-temps, redemander confirmation avant d'envoyer le PUT.
+- La webapp ne pose pas de verrou de son côté : un collègue sur Access ne voit pas qu'on modifie le projet dans la webapp. Un verrou peut aussi rester après un plantage d'Access : d'où un simple avertissement, jamais un blocage.
 
 ## Comportements de l'interface Access à reproduire
 
