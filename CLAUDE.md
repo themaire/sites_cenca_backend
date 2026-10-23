@@ -61,7 +61,12 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 |---|---|---|
 | `/auth` | `routes/admin/userRoutes.js` | Register, login, logout, JWT management |
 | `/admin` | `routes/admin/adminRoute.js` | Admin-only operations |
-| `/sites` | `routes/sites/getSitesRoutes.js` | GET site data |
+| `/sites` | `routes/sites/getSitesRoutes.js` | GET sites: search, site sheet, communes, milieux, conservateurs |
+| `/sites` | `routes/sites/getPgestionRoutes.js` | GET management plans (docplan) |
+| `/sites` | `routes/sites/getMfuRoutes.js` | GET land control: MFU acts, parcels, MFU projects (pmfu) |
+| `/sites` | `routes/sites/getTravauxRoutes.js` | GET works projects (`opegerer`, TRV): projects, operations, objectives, Word sheet |
+| `/sites` | `routes/sites/getListesRoutes.js` | GET form choice lists (`/selectvalues`) |
+| `/sites` | `routes/sites/getDocsLiesRoutes.js` | GET documents linked to items (`files.docs`) |
 | `/sites` | `routes/sites/putSitesRoutes.js` | PUT/update site data |
 | `/sites` | `routes/sites/deleteSitesRoutes.js` | DELETE site data |
 | `/sites` | `routes/sites/foncierRoutes.js` | Land registry (foncier) endpoints |

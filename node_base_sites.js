@@ -218,7 +218,13 @@ app.use(express.urlencoded({ extended: true })); // Pour traiter les requêtes e
 
 // Importation des routes
 const menuRoutes = require('./routes/menuRoutes');
+// Routes GET de /sites, un fichier par thème
 const siteRoutesGet = require('./routes/sites/getSitesRoutes.js');
+const pgestionRoutesGet = require('./routes/sites/getPgestionRoutes.js');
+const mfuRoutesGet = require('./routes/sites/getMfuRoutes.js');
+const travauxRoutesGet = require('./routes/sites/getTravauxRoutes.js');
+const listesRoutesGet = require('./routes/sites/getListesRoutes.js');
+const docsLiesRoutesGet = require('./routes/sites/getDocsLiesRoutes.js');
 const siteRoutesPut = require('./routes/sites/putSitesRoutes.js');
 
 // Import du middleware d'authentification
@@ -282,6 +288,11 @@ async function run() {
     app.use('/news', newsRoutes);
 
     app.use('/sites', siteRoutesGet);
+    app.use('/sites', pgestionRoutesGet);
+    app.use('/sites', mfuRoutesGet);
+    app.use('/sites', travauxRoutesGet);
+    app.use('/sites', listesRoutesGet);
+    app.use('/sites', docsLiesRoutesGet);
     app.use('/sites', siteRoutesPut);
     app.use('/sites', siteRoutesDelete);
 
