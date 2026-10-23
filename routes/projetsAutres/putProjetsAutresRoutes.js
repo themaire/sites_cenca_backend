@@ -6,7 +6,11 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../../dbPool/poolConnect.js");
 const { authenticateToken } = require("../../fonctions/fonctionsAuth.js");
-const { lireProjet, lireOperation, codeSalarie, verifierProjet, verifierOperation, ecrireListesOperation, journaliser, vide } = require("../../fonctions/projetsAutres.js");
+const { lireProjet, lireOperation, codeSalarie, verifierProjet, verifierOperation, ecrireListesOperation, journaliser, formaterTexte, vide } = require("../../fonctions/projetsAutres.js");
+
+// Champs texte libre : retours à la ligne stockés « | », comme l'interface Access (formaterTexte)
+const TEXTES_LIBRES = ["nom", "detail", "com_interv"];
+const valeurChamp = (c, v) => (c === "annee" ? parseInt(v, 10) : TEXTES_LIBRES.includes(c) ? formaterTexte(v) : vide(v) ? null : v);
 
 function sendJson(res, data, status = 200) {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -46,8 +50,8 @@ async function insererOperation(client, uuidProj, corps, compte) {
         `INSERT INTO opeautres.operations (uuid_ope, projet, action, date_deb, date_fin, detail, typ_interv, com_interv, validite)
          VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, true)
          RETURNING uuid_ope`,
-        [uuidProj, corps.action, corps.date_deb || null, corps.date_fin || null, vide(corps.detail) ? null : corps.detail,
-            corps.typ_interv || null, vide(corps.com_interv) ? null : corps.com_interv]
+        [uuidProj, corps.action, corps.date_deb || null, corps.date_fin || null, formaterTexte(corps.detail),
+            corps.typ_interv || null, formaterTexte(corps.com_interv)]
     );
     const uuidOpe = result.rows[0].uuid_ope;
     await journaliser(client, compte, "opeautres.operations", uuidOpe, "INSERT");
@@ -77,7 +81,7 @@ router.post("/projets", authenticateToken, async (req, res) => {
                  VALUES (gen_random_uuid()::text, $1 || coalesce($2, '') || to_char(current_date, 'DD/MM/YYYY'), true,
                          $3, $4, $5, $6, $7, $1, $2, current_date)
                  RETURNING uuid_proj`,
-                [corps.typ_projet, createur, corps.programme || null, corps.nom, parseInt(corps.annee, 10),
+                [corps.typ_projet, createur, corps.programme || null, formaterTexte(corps.nom), parseInt(corps.annee, 10),
                     corps.statut || "En cours", corps.responsable || createur]
             );
             const uuid = result.rows[0].uuid_proj;
@@ -100,7 +104,7 @@ router.put("/projets/:uuid", authenticateToken, async (req, res) => {
     try {
         const erreurs = await verifierProjet(pool, corps, true);
         if (erreurs.length) return refuser(res, erreurs);
-        const valeurs = champs.map((c) => (c === "annee" ? parseInt(corps[c], 10) : vide(corps[c]) ? null : corps[c]));
+        const valeurs = champs.map((c) => valeurChamp(c, corps[c]));
         const compte = await codeSalarie(pool, req.tokenInfos?.identifiant);
         const trouve = await enTransaction(async (client) => {
             const result = await client.query(
@@ -154,7 +158,7 @@ router.put("/operations/:uuid", authenticateToken, async (req, res) => {
                 await client.query(
                     `UPDATE opeautres.operations SET ${champs.map((c, i) => `${c} = $${i + 1}`).join(", ")}
                       WHERE uuid_ope = $${champs.length + 1}`,
-                    [...champs.map((c) => (vide(corps[c]) ? null : corps[c])), req.params.uuid]
+                    [...champs.map((c) => valeurChamp(c, corps[c])), req.params.uuid]
                 );
                 await journaliser(client, compte, "opeautres.operations", req.params.uuid, "UPDATE");
             }

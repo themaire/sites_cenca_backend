@@ -139,6 +139,18 @@ async function codeSalarie(db, identifiant) {
 
 const vide = (v) => v === undefined || v === null || v === "";
 
+// Équivalent de la fonction Formatage de l'interface MS Access (module public_functions), appliqué aux
+// textes libres avant écriture : dans opeautres, un retour à la ligne est stocké « | » (convention suivie
+// par 352 détails d'opération contre 4 vrais retours à la ligne), les « || » sont fusionnés et la puce « • »
+// devient « - ». Les apostrophes ne sont pas doublées : les requêtes sont paramétrées.
+function formaterTexte(texte) {
+    if (vide(texte)) return null;
+    return String(texte)
+        .replace(/\r\n|\n\r|\r|\n/g, "|")
+        .replace(/•/g, "-")
+        .replace(/\|{2,}/g, "|");
+}
+
 // Contrôle des champs d'un projet ; partiel = true pour une modification (champs absents conservés).
 // Renvoie la liste des erreurs (vide si valide).
 async function verifierProjet(db, corps, partiel = false) {
@@ -252,7 +264,7 @@ const LISTES_OPERATION = {
     cibles: {
         table: "opeautres.cibles_ope",
         colonne: "operation",
-        normaliser: (c) => ({ typ_cible: c.typ_cible, detail: vide(c.detail) ? null : c.detail }),
+        normaliser: (c) => ({ typ_cible: c.typ_cible, detail: formaterTexte(c.detail) }),
         cle: (c) => c.typ_cible + "|" + (c.detail ?? ""),
         libelle: (c) => "Cible : " + c.typ_cible,
         inserer: (client, uuidOpe, c) =>
@@ -301,5 +313,5 @@ async function ecrireListesOperation(client, uuidOpe, corps, compte) {
 
 module.exports = {
     TYPES_EXCLUS, STATUTS, RACINES_PAR_TYPE, SQL_ARBRE_ACTIONS, LISTES_OPERATION,
-    lireProjet, lireOperation, codeSalarie, verifierProjet, verifierOperation, ecrireListesOperation, journaliser, vide,
+    lireProjet, lireOperation, codeSalarie, verifierProjet, verifierOperation, ecrireListesOperation, journaliser, formaterTexte, vide,
 };
