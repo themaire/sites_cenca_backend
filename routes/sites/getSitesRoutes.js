@@ -842,7 +842,13 @@ router.get("/projets/uuid=:uuid/operations/geojson", async (req, res) => {
                         'action_2_libelle', act2.libelle,
                         'type', concat(ope.get_action_libelle(op.action), ' / ', ope.get_action_libelle(op.action_2)),
                         'date_debut', to_char(op.date_debut, 'DD/MM/YYYY'),
-                        'surf', op.surf
+                        'surf', op.surf,
+                        -- Un point par partie (multipolygone = fauche ici et là-bas), garanti sur la partie
+                        -- (le centroïde d'un polygone concave peut tomber dehors) : badges de la carte de la fiche travaux
+                        'points_etiquette', (
+                            SELECT ST_AsGeoJSON(ST_Transform(ST_Collect(ST_PointOnSurface(part.geom)), 4326))::json
+                            FROM ST_Dump(COALESCE(loc.loc_poly, loc.loc_point, loc.loc_line)) part
+                        )
                     )
                 )
             ) FILTER (WHERE loc.loc_poly IS NOT NULL OR loc.loc_point IS NOT NULL OR loc.loc_line IS NOT NULL), '[]')
