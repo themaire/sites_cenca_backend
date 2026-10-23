@@ -2,7 +2,7 @@ const { AlignmentType, ImageRun, convertInchesToTwip, Header, Footer, SectionTyp
 const fs = require("fs");
 const path = require('path');
 const sharp = require("sharp");
-const { generateOperationsMapImage } = require("../fonctions/mapGenerator.js");
+const { generateOperationsMaps } = require("../fonctions/mapGenerator.js");
 const { slugifier } = require("../fonctions/fonctionsFichiers.js");
 
 // Taille d'impression de la carte de localisation des opérations (dernière page)
@@ -189,18 +189,28 @@ async function generateFicheTravauxWord(bilan) {
     const sortedOperations = sortOperationsByDate(bilan.operations);
     const operationNumberByUuid = {};
     const operationNumberByKey = {};
+    const keyCounts = {};
+    sortedOperations.forEach((op) => {
+        const key = operationMatchKey(op.action, op.action_2, op.date_debut_str);
+        keyCounts[key] = (keyCounts[key] || 0) + 1;
+    });
     sortedOperations.forEach((op, i) => {
         operationNumberByUuid[op.uuid_ope] = i + 1;
-        operationNumberByKey[operationMatchKey(op.action, op.action_2, op.date_debut_str)] = i + 1;
+        // Clé partagée par plusieurs opérations (même action, même date) : ambiguë, la carte
+        // retombe alors sur uuid_ope, sinon elles porteraient toutes le même numéro
+        const key = operationMatchKey(op.action, op.action_2, op.date_debut_str);
+        if (keyCounts[key] === 1) operationNumberByKey[key] = i + 1;
     });
 
+    // Carte générale + zooms (au plus 3) sur les zones trop denses, une page chacun
     let operationsMapBuffer = null;
+    let operationsMapZooms = [];
     try {
-        operationsMapBuffer = await generateOperationsMapImage(bilan.operations_geojson, bilan.site?.geojson, {
+        ({ main: operationsMapBuffer, zooms: operationsMapZooms } = await generateOperationsMaps(bilan.operations_geojson, bilan.site?.geojson, {
             aspectRatio: MAP_WIDTH_PX / MAP_HEIGHT_PX,
             numberByUuid: operationNumberByUuid,
             numberByKey: operationNumberByKey,
-        });
+        }));
     } catch (err) {
         console.error("Erreur lors de la génération de la carte des opérations :", err.message);
     }
@@ -874,7 +884,7 @@ async function generateFicheTravauxWord(bilan) {
                             alignment: AlignmentType.CENTER,
                             spacing: { before: 200 },
                             style: "aside",
-                            text: "Carte non disponible : aucune géométrie d'opération n'a été saisie pour ce projet."
+                            text: "Carte non disponible : aucune géométrie d'opération exploitable n'a été saisie pour ce projet."
                         })]),
                 ],
                 footers: {
@@ -882,7 +892,46 @@ async function generateFicheTravauxWord(bilan) {
                         children: [footer]
                     }),
                 }
-            }
+            },
+
+            // Une page par zoom, encadré « Zoom n » sur la carte générale
+            ...operationsMapZooms.map((zoom) => ({
+                properties: {
+                    type: SectionType.NEXT_PAGE,
+                    page: {
+                        margin: { top: 720, right: 720, bottom: 720, left: 720 },
+                        size: { orientation: "landscape" }
+                    },
+                },
+                headers: {
+                    default: new Header({
+                        children: [header]
+                    }),
+                },
+                children: [
+                    new Paragraph({
+                        text: `ZOOM ${zoom.index} – OPÉRATION${zoom.numbers.length > 1 ? "S" : ""} N° ${zoom.numbers.join(", ")}`,
+                        style: "TitreColore",
+                        spacing: { before: 240 }
+                    }),
+                    new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 120 },
+                        children: [
+                            new ImageRun({
+                                data: zoom.buffer,
+                                type: "png",
+                                transformation: { width: MAP_WIDTH_PX, height: MAP_HEIGHT_PX },
+                            })
+                        ]
+                    }),
+                ],
+                footers: {
+                    default: new Footer({
+                        children: [footer]
+                    }),
+                }
+            })),
         ] // Fin de la troisième section
     });
     
