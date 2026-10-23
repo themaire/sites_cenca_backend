@@ -2,7 +2,7 @@ const { AlignmentType, ImageRun, convertInchesToTwip, Header, Footer, SectionTyp
 const fs = require("fs");
 const path = require('path');
 const sharp = require("sharp");
-const { generateOperationsMapImage } = require("../fonctions/mapGenerator.js");
+const { generateOperationsMaps } = require("../fonctions/mapGenerator.js");
 const { slugifier } = require("../fonctions/fonctionsFichiers.js");
 
 // Taille d'impression de la carte de localisation des opérations (dernière page)
@@ -202,13 +202,15 @@ async function generateFicheTravauxWord(bilan) {
         if (keyCounts[key] === 1) operationNumberByKey[key] = i + 1;
     });
 
+    // Carte générale + zooms (au plus 3) sur les zones trop denses, une page chacun
     let operationsMapBuffer = null;
+    let operationsMapZooms = [];
     try {
-        operationsMapBuffer = await generateOperationsMapImage(bilan.operations_geojson, bilan.site?.geojson, {
+        ({ main: operationsMapBuffer, zooms: operationsMapZooms } = await generateOperationsMaps(bilan.operations_geojson, bilan.site?.geojson, {
             aspectRatio: MAP_WIDTH_PX / MAP_HEIGHT_PX,
             numberByUuid: operationNumberByUuid,
             numberByKey: operationNumberByKey,
-        });
+        }));
     } catch (err) {
         console.error("Erreur lors de la génération de la carte des opérations :", err.message);
     }
@@ -890,7 +892,46 @@ async function generateFicheTravauxWord(bilan) {
                         children: [footer]
                     }),
                 }
-            }
+            },
+
+            // Une page par zoom, encadré « Zoom n » sur la carte générale
+            ...operationsMapZooms.map((zoom) => ({
+                properties: {
+                    type: SectionType.NEXT_PAGE,
+                    page: {
+                        margin: { top: 720, right: 720, bottom: 720, left: 720 },
+                        size: { orientation: "landscape" }
+                    },
+                },
+                headers: {
+                    default: new Header({
+                        children: [header]
+                    }),
+                },
+                children: [
+                    new Paragraph({
+                        text: `ZOOM ${zoom.index} – OPÉRATION${zoom.numbers.length > 1 ? "S" : ""} N° ${zoom.numbers.join(", ")}`,
+                        style: "TitreColore",
+                        spacing: { before: 240 }
+                    }),
+                    new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        spacing: { before: 120 },
+                        children: [
+                            new ImageRun({
+                                data: zoom.buffer,
+                                type: "png",
+                                transformation: { width: MAP_WIDTH_PX, height: MAP_HEIGHT_PX },
+                            })
+                        ]
+                    }),
+                ],
+                footers: {
+                    default: new Footer({
+                        children: [footer]
+                    }),
+                }
+            })),
         ] // Fin de la troisième section
     });
     

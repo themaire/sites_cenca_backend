@@ -419,7 +419,8 @@ function groupByGeometry(features, numberOf) {
         let g = groups.get(key);
         if (!g) {
             const geometry = projectGeometry(f.geometry);
-            g = { geometry, extent: extentOf(geometry), labelPoints: labelPointsMerc(f), numbers: [], actions2: [] };
+            // parts[i] et labelPoints[i] désignent la même partie (ST_Dump suit l'ordre des coordonnées GeoJSON)
+            g = { geometry, parts: geometryParts(geometry), extent: extentOf(geometry), labelPoints: labelPointsMerc(f), numbers: [], actions2: [] };
             groups.set(key, g);
         }
         const num = numberOf(f);
@@ -436,26 +437,26 @@ function groupByGeometry(features, numberOf) {
 
 // Si une géométrie passe sous la légende, recadre pour que les opérations tiennent
 // soit à gauche de la légende, soit au-dessus, en gardant le cadrage le plus serré.
-function reserveLegendSpace(bbox, groups, legend, w, h) {
+function reserveLegendSpace(bbox, focusGroups, legend, w, h, minSpanMeters) {
     const margin = 12;
     const lx0 = legend.x0 - margin, ly0 = legend.y0 - margin;
-    const hidden = groups.some(({ extent }) => {
+    const hidden = focusGroups.some(({ extent }) => {
         const [x1, y1] = toPixel([extent.minX, extent.maxY], bbox, w, h);
         const [x2, y2] = toPixel([extent.maxX, extent.minY], bbox, w, h);
         return x2 > lx0 && y2 > ly0 && x1 < w && y1 < h;
     });
     if (!hidden) return bbox;
 
-    const geoms = groups.map((g) => ({ geometry: g.geometry }));
+    const geoms = focusGroups.map((g) => ({ geometry: g.geometry }));
     const candidates = [];
     if (lx0 > w * 0.4) {
         // Opérations dans la bande gauche, la légende occupe le reste à droite
-        const b = computeMercatorBBox(geoms, { targetAspectRatio: lx0 / h });
+        const b = computeMercatorBBox(geoms, { targetAspectRatio: lx0 / h, minSpanMeters });
         candidates.push({ ...b, maxX: b.minX + (b.maxX - b.minX) * w / lx0 });
     }
     if (ly0 > h * 0.4) {
         // Opérations dans la bande haute, la légende occupe le bas
-        const b = computeMercatorBBox(geoms, { targetAspectRatio: w / ly0 });
+        const b = computeMercatorBBox(geoms, { targetAspectRatio: w / ly0, minSpanMeters });
         candidates.push({ ...b, minY: b.maxY - (b.maxY - b.minY) * h / ly0 });
     }
     if (candidates.length === 0) return bbox;
@@ -464,38 +465,137 @@ function reserveLegendSpace(bbox, groups, legend, w, h) {
 
 // Badges de chaque groupe sur toutes ses parties ; une partie trop proche d'un badge
 // déjà posé du même groupe (petits morceaux voisins) n'en reçoit pas un de plus.
+// Retourne aussi ces grappes de parties fusionnées sous un seul badge : ce sont
+// elles qui méritent une page de zoom.
 function buildBadgesSvg(groups, shownNumbers, bbox, w, h) {
     let svg = "";
+    const clusters = [];
     for (const g of groups) {
         const numbers = g.numbers.filter((n) => shownNumbers.has(n)); // pas de badge sans entrée de légende
         if (numbers.length === 0) continue;
         const halfW = Math.max(15, estimateTextWidth(numbers.join(", "), 15, { bold: true }) / 2 + 9);
-        const placed = [];
-        for (const pt of g.labelPoints) {
+        const placed = []; // { px, py, members: indices des parties couvertes par ce badge }
+        g.labelPoints.forEach((pt, i) => {
             const [px, py] = toPixel(pt, bbox, w, h);
-            if (placed.some(([qx, qy]) => Math.abs(px - qx) < 2 * halfW + 4 && Math.abs(py - qy) < 34)) continue;
-            placed.push([px, py]);
+            const near = placed.find((q) => Math.abs(px - q.px) < 2 * halfW + 4 && Math.abs(py - q.py) < 34);
+            if (near) { near.members.push(i); return; }
+            placed.push({ px, py, members: [i] });
             svg += buildBadgeSvg(numbers, pt, g.color, bbox, w, h);
+        });
+        for (const q of placed) {
+            if (q.members.length > 1) clusters.push({ group: g, members: q.members });
         }
     }
-    return svg;
+    return { svg, clusters };
 }
 
-function buildOverlaySvg(groups, legendLayout, siteContourMerc, bbox, w, h, basemapProviderName) {
+function sortBySize(groups) {
+    const area = ({ extent: e }) => (e.maxX - e.minX) * (e.maxY - e.minY);
+    return [...groups].sort((a, b) => area(b) - area(a));
+}
+
+// Prépare une carte (sans réseau) : emprise, légende, badges. focusGroups fixe
+// l'emprise ; tous les groupes sont dessinés, ceux hors cadre sont simplement coupés.
+function planMap({ groups, focusGroups, focusExtent, entries, siteContourMerc, w, h, aspectRatio, minSpanMeters }) {
+    const legendLayout = layoutLegend(entries, !!siteContourMerc, w, h);
+    const focus = focusExtent
+        ? [{ geometry: { type: "MultiPoint", coordinates: [[focusExtent.minX, focusExtent.minY], [focusExtent.maxX, focusExtent.maxY]] }, extent: focusExtent }]
+        : focusGroups;
+    let bbox = computeMercatorBBox(focus, { targetAspectRatio: aspectRatio, minSpanMeters });
+    bbox = reserveLegendSpace(bbox, focus, legendLayout, w, h, minSpanMeters);
+    const bySize = sortBySize(groups);
+    const shownNumbers = new Set(legendLayout.items.map((e) => e.num));
+    const badges = buildBadgesSvg(bySize, shownNumbers, bbox, w, h);
+    return { bbox, legendLayout, bySize, badges };
+}
+
+async function drawMap(plan, siteContourMerc, w, h, extraSvg = "") {
+    const { bbox, legendLayout, bySize, badges } = plan;
+    const { buffer: basemapBuffer, providerName } = await fetchBasemapImage(bbox, w, h);
     const siteContour = siteContourMerc
         ? geometryToSvg(siteContourMerc, SITE_CONTOUR_COLOR, bbox, w, h, { dashed: true, fillOpacity: 0 })
         : "";
     // Les plus grandes emprises d'abord : une petite opération posée sur une grande reste visible
-    const area = ({ extent: e }) => (e.maxX - e.minX) * (e.maxY - e.minY);
-    const bySize = [...groups].sort((a, b) => area(b) - area(a));
     const shapes = bySize.map((g) => geometryToSvg(g.geometry, g.color, bbox, w, h)).join("");
-    const shownNumbers = new Set(legendLayout.items.map((e) => e.num));
-    const badges = buildBadgesSvg(bySize, shownNumbers, bbox, w, h);
     const legend = buildLegendSvg(legendLayout);
     const northArrow = buildNorthArrowSvg(w, h);
     const scaleBar = buildScaleBarSvg(bbox, w, h);
-    const credit = buildCreditSvg(basemapProviderName, w, h);
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${siteContour}${shapes}${badges}${scaleBar}${northArrow}${credit}${legend}</svg>`;
+    const credit = buildCreditSvg(providerName, w, h);
+    const overlaySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${siteContour}${shapes}${badges.svg}${extraSvg}${scaleBar}${northArrow}${credit}${legend}</svg>`;
+    return sharp(basemapBuffer)
+        .resize(w, h, { fit: "fill" })
+        .composite([{ input: Buffer.from(overlaySvg), top: 0, left: 0 }])
+        .png()
+        .toBuffer();
+}
+
+// Pages de zoom : au plus MAX_ZOOMS, choisies sur la carte générale.
+//  1. grappes de parties voisines fusionnées sous un seul badge (les plus grosses d'abord) ;
+//  2. opération d'au moins ZOOM_MIN_PARTS parties dont l'emprise fait moins de
+//     ZOOM_MAX_FRACTION de la carte générale.
+// Une zone déjà couverte par un zoom retenu n'en reçoit pas un second.
+const MAX_ZOOMS = 3;
+const ZOOM_MIN_PARTS = 5;
+const ZOOM_MAX_FRACTION = 0.15;
+const ZOOM_MIN_SPAN_METERS = 200; // en deçà, l'ortho IGN devient floue et on perd le contexte
+
+function unionExtent(extents) {
+    return extents.reduce((a, e) => ({
+        minX: Math.min(a.minX, e.minX), minY: Math.min(a.minY, e.minY),
+        maxX: Math.max(a.maxX, e.maxX), maxY: Math.max(a.maxY, e.maxY),
+    }));
+}
+
+function extentContains(outer, inner) {
+    return inner.minX >= outer.minX && inner.maxX <= outer.maxX && inner.minY >= outer.minY && inner.maxY <= outer.maxY;
+}
+
+function extentsIntersect(a, b) {
+    return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
+}
+
+function chooseZooms(mainPlan, w, h) {
+    const { bbox, bySize, badges, legendLayout } = mainPlan;
+    const shown = new Set(legendLayout.items.map((e) => e.num));
+    const candidates = [];
+
+    const byCluster = [...badges.clusters].sort((a, b) => b.members.length - a.members.length);
+    for (const { group, members } of byCluster) {
+        const extents = members.map((i) => (group.parts.length === group.labelPoints.length
+            ? extentOf(group.parts[i])
+            : { minX: group.labelPoints[i][0], minY: group.labelPoints[i][1], maxX: group.labelPoints[i][0], maxY: group.labelPoints[i][1] }));
+        candidates.push(unionExtent(extents));
+    }
+
+    const spanX = bbox.maxX - bbox.minX, spanY = bbox.maxY - bbox.minY;
+    const smallMultiParts = bySize
+        .filter((g) => g.parts.length >= ZOOM_MIN_PARTS && g.numbers.some((n) => shown.has(n)))
+        .filter((g) => Math.max((g.extent.maxX - g.extent.minX) / spanX, (g.extent.maxY - g.extent.minY) / spanY) < ZOOM_MAX_FRACTION)
+        .sort((a, b) => b.parts.length - a.parts.length);
+    for (const g of smallMultiParts) candidates.push(g.extent);
+
+    const zooms = [];
+    for (const extent of candidates) {
+        if (zooms.length >= MAX_ZOOMS) break;
+        if (zooms.some((z) => extentContains(z.bbox, extent))) continue;
+        zooms.push({ extent, bbox: computeMercatorBBox([{ geometry: { type: "MultiPoint", coordinates: [[extent.minX, extent.minY], [extent.maxX, extent.maxY]] } }], { targetAspectRatio: w / h, minSpanMeters: ZOOM_MIN_SPAN_METERS }) });
+    }
+    return zooms;
+}
+
+// Cadre « Zoom n » sur la carte générale : emprise exacte de la page de zoom.
+function buildZoomFrameSvg(zoomBbox, index, bbox, w, h) {
+    const [x1, y1] = toPixel([zoomBbox.minX, zoomBbox.maxY], bbox, w, h);
+    const [x2, y2] = toPixel([zoomBbox.maxX, zoomBbox.minY], bbox, w, h);
+    const x = Math.max(2, x1), y = Math.max(2, y1);
+    const rw = Math.min(w - 2, x2) - x, rh = Math.min(h - 2, y2) - y;
+    const label = `Zoom ${index}`;
+    const labelW = estimateTextWidth(label, 13, { bold: true }) + 12;
+    const ly = y >= 22 ? y - 20 : y + 2; // étiquette au-dessus du cadre, dedans s'il touche le haut
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}" fill="none" stroke="#000000" stroke-opacity="0.6" stroke-width="5"/>` +
+        `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${rw.toFixed(1)}" height="${rh.toFixed(1)}" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-dasharray="10,6"/>` +
+        `<rect x="${x.toFixed(1)}" y="${ly.toFixed(1)}" width="${labelW.toFixed(1)}" height="18" rx="3" fill="#1a1a1a" fill-opacity="0.85"/>` +
+        `<text x="${(x + 6).toFixed(1)}" y="${(ly + 13.5).toFixed(1)}" font-size="13" font-weight="bold" font-family="Calibri, sans-serif" fill="#ffffff">${label}</text>`;
 }
 
 // Doit produire exactement la même clé que operationMatchKey() dans scripts/gen_fiche_travaux.js.
@@ -504,11 +604,15 @@ function operationMatchKey(properties) {
 }
 
 /**
- * Génère l'image (PNG) de la carte de localisation des opérations d'un projet :
- * fond de plan satellite/ORTHO zoomé sur les géométries des opérations, avec ces
- * géométries dessinées par-dessus et le contour du site en repère visuel.
- * Retourne null (jamais ne lève) si aucune carte ne peut être produite, pour que
- * le rapport Word reste généré même en cas d'échec réseau.
+ * Génère les images (PNG) de localisation des opérations d'un projet : la carte
+ * générale (fond de plan satellite/ORTHO zoomé sur les géométries des opérations,
+ * géométries dessinées par-dessus, contour du site en repère visuel) et jusqu'à
+ * MAX_ZOOMS cartes de zoom sur les zones trop denses pour être lisibles (cf. chooseZooms),
+ * encadrées « Zoom n » sur la carte générale.
+ * Retourne { main: null, zooms: [] } (jamais ne lève) si aucune carte ne peut être
+ * produite, pour que le rapport Word reste généré même en cas d'échec réseau ;
+ * un zoom en échec est simplement omis.
+ * zooms[i] = { index, buffer, numbers } : index = n° du cadre « Zoom n », numbers = N° des opérations visibles.
  *
  * options.numberByKey (action|action_2|date_debut -> N°) et options.numberByUuid
  * (uuid_ope -> N°) imposent la numérotation des badges/légende, avec la même
@@ -520,7 +624,7 @@ function operationMatchKey(properties) {
  * (sinon toutes les opérations de même clé prendraient le même numéro).
  * Une opération sans correspondance reçoit un numéro après le dernier connu.
  */
-async function generateOperationsMapImage(operationsFeatureCollection, siteGeoJsonRaw, options = {}) {
+async function generateOperationsMaps(operationsFeatureCollection, siteGeoJsonRaw, options = {}) {
     try {
         const allFeatures = (operationsFeatureCollection?.features || [])
             .filter((f) => f?.geometry && GEOM_DEPTH[f.geometry.type] !== undefined);
@@ -530,7 +634,7 @@ async function generateOperationsMapImage(operationsFeatureCollection, siteGeoJs
         }
         if (features.length === 0) {
             console.warn("[mapGenerator] Aucune géométrie d'opération exploitable : carte non générée.");
-            return null;
+            return { main: null, zooms: [] };
         }
 
         const aspectRatio = options.aspectRatio || MAP_ASPECT_RATIO;
@@ -559,26 +663,40 @@ async function generateOperationsMapImage(operationsFeatureCollection, siteGeoJs
         const siteGeoJson = typeof siteGeoJsonRaw === "string" ? JSON.parse(siteGeoJsonRaw) : siteGeoJsonRaw;
         const siteContourMerc = siteGeoJson ? projectGeometry(siteGeoJson) : null;
 
-        const legendLayout = layoutLegend(entries, !!siteContourMerc, w, h);
-        let bbox = computeMercatorBBox(groups.map((g) => ({ geometry: g.geometry })), { targetAspectRatio: aspectRatio });
-        bbox = reserveLegendSpace(bbox, groups, legendLayout, w, h);
+        const mainPlan = planMap({ groups, focusGroups: groups, entries, siteContourMerc, w, h, aspectRatio });
+        // Légende d'un zoom : les opérations dont une géométrie entre dans le cadre ;
+        // le cadre « Zoom n » de la carte générale reprend l'emprise finale du zoom
+        const zoomPlans = chooseZooms(mainPlan, w, h).map((z) => {
+            const visible = new Set(groups.filter((g) => extentsIntersect(g.extent, z.bbox)).flatMap((g) => g.numbers));
+            const zoomEntries = entries.filter((e) => visible.has(e.num));
+            const plan = planMap({ groups, focusExtent: z.extent, entries: zoomEntries, siteContourMerc, w, h, aspectRatio, minSpanMeters: ZOOM_MIN_SPAN_METERS });
+            return { plan, numbers: zoomEntries.map((e) => e.num) };
+        });
+        const frames = zoomPlans.map((z, i) => buildZoomFrameSvg(z.plan.bbox, i + 1, mainPlan.bbox, w, h)).join("");
+        const main = await drawMap(mainPlan, siteContourMerc, w, h, frames);
 
-        const { buffer: basemapBuffer, providerName } = await fetchBasemapImage(bbox, w, h);
-
-        const overlaySvg = buildOverlaySvg(groups, legendLayout, siteContourMerc, bbox, w, h, providerName);
-
-        return await sharp(basemapBuffer)
-            .resize(w, h, { fit: "fill" })
-            .composite([{ input: Buffer.from(overlaySvg), top: 0, left: 0 }])
-            .png()
-            .toBuffer();
+        const zooms = [];
+        for (const [i, z] of zoomPlans.entries()) {
+            try {
+                zooms.push({ index: i + 1, buffer: await drawMap(z.plan, siteContourMerc, w, h), numbers: z.numbers });
+            } catch (err) {
+                console.error("[mapGenerator] Échec génération d'un zoom :", err.message);
+            }
+        }
+        return { main, zooms };
     } catch (err) {
         console.error("[mapGenerator] Échec génération carte des opérations :", err.message);
-        return null;
+        return { main: null, zooms: [] };
     }
 }
 
+// Carte générale seule (compatibilité)
+async function generateOperationsMapImage(operationsFeatureCollection, siteGeoJsonRaw, options = {}) {
+    return (await generateOperationsMaps(operationsFeatureCollection, siteGeoJsonRaw, options)).main;
+}
+
 module.exports = {
+    generateOperationsMaps,
     generateOperationsMapImage,
     MAP_ASPECT_RATIO,
 };
