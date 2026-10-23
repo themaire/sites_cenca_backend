@@ -59,7 +59,7 @@ async function insererOperation(client, uuidProj, corps) {
 
 // ─── POST /sites/autres/projets ───────────────────────────────────────────────
 // Crée un projet. Corps : { nom, typ_projet, annee, statut?, responsable?, programme?, operations?: [...] }
-// createur = salarié connecté ; code = type + créateur + date, comme MS Access (ex. SENVGS15/10/2026)
+// createur = salarié connecté ; code = type + créateur + date, comme l'interface MS Access (ex. SENVGS15/10/2026)
 router.post("/projets", authenticateToken, async (req, res) => {
     const corps = req.body || {};
     try {

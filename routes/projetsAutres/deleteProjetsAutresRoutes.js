@@ -13,7 +13,7 @@ function sendError(res, message, err) {
 }
 
 // Listes rattachées à une opération. Les clés étrangères sont en ON DELETE CASCADE mais NOT VALID
-// (reprise MS Access) : on supprime explicitement, dans la transaction, pour ne rien laisser d'orphelin.
+// (reprise des données historiques) : on supprime explicitement, dans la transaction, pour ne rien laisser d'orphelin.
 const LISTES_OPERATION = [
     ["opeautres.localisations", "uuid_ope"],
     ["opeautres.cibles_ope", "operation"],

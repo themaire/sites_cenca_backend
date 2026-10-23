@@ -5,9 +5,11 @@
 
 ## Pourquoi
 
-La webapp ne sait saisir que les projets **travaux** (`typ_projet = 'TRV'`, schéma `opegerer`). Les collègues saisissent encore tous les autres types dans l'application MS Access historique : sensibilisation, études et suivis, police, foncier, partenariats, accompagnement, administratif, autre. Ils le font encore en 2026, dans le schéma `opeautres`.
+La webapp ne sait saisir que les projets **travaux** (`typ_projet = 'TRV'`, schéma `opegerer`). Les collègues saisissent encore tous les autres types dans l'interface MS Access historique : sensibilisation, études et suivis, police, foncier, partenariats, accompagnement, administratif, autre. Cette interface est branchée sur la même base PostgreSQL, et ils l'utilisent encore en 2026 ; les données vont dans le schéma `opeautres`.
 
-Le backend expose maintenant ces projets sous `/sites/autres`. Le front doit offrir **une recherche** et **un formulaire projet + opérations**, distincts de ceux des travaux. Les données restent dans les tables Access : les projets saisis dans la webapp et ceux d'Access se lisent et se modifient indifféremment.
+Le backend expose maintenant ces projets sous `/sites/autres`. Le front doit offrir **une recherche** et **un formulaire projet + opérations**, distincts de ceux des travaux. La webapp écrit dans les mêmes tables que l'interface Access : un projet saisi d'un côté se lit et se modifie de l'autre.
+
+**Un seul formulaire pour tous les types.** Dans `opeautres`, un projet de sensibilisation, d'étude ou de police a exactement la même structure : aucune colonne ni table n'est propre à un type. Ce qui distingue une animation d'un suivi, ce sont les valeurs saisies : l'action choisie dans l'arbre, la famille de cibles et les indicateurs. Le type de projet sert donc à **préremplir et ordonner** les listes, pas à changer les champs du formulaire. Les travaux font exception : ils ont des colonnes dédiées (fauche, pâturage, hydraulique…) et gardent leurs propres écrans.
 
 ## Modèle de données (pour concevoir le formulaire)
 
@@ -73,7 +75,7 @@ Salariés (responsable) : la route existante `GET sites/selectvalues=admin.salar
  …]
 ```
 
-Toute action de l'arbre est acceptée, les nœuds intermédiaires compris, comme dans Access. Il vaut mieux faire choisir une feuille : une liste en cascade sur 2 ou 3 niveaux, ou un sélecteur arborescent avec recherche.
+Toute action de l'arbre est acceptée, les nœuds intermédiaires compris, car les données historiques en contiennent. Il vaut mieux faire choisir une feuille : une liste en cascade sur 2 ou 3 niveaux, ou un sélecteur arborescent avec recherche.
 
 **`GET localisants?q=fepin`** (optionnel : `&cat=COM`, `&limite=50`, maximum 500) : autocomplétion des lieux, sans accents, sur le nom ou le code (code site, n° INSEE). Il faut au moins 2 caractères, sinon `400`.
 
@@ -85,7 +87,7 @@ Valeurs de `cat` : `SITE CENCA`, `AUTRE CENCA`, `N2000`, `RN`, `AP`, `ZIE`, `PN`
 
 ### Recherche
 
-**`GET selectors`** : `{ annees: [2026, 2025…], responsables: [{ cd_type, libelle }], typ_projets: [...], statuts: [...] }` pour la barre de recherche (le type NR, « ancien format Access », y figure pour retrouver les anciens projets).
+**`GET selectors`** : `{ annees: [2026, 2025…], responsables: [{ cd_type, libelle }], typ_projets: [...], statuts: [...] }` pour la barre de recherche (le type NR, « Non renseigné », y figure pour retrouver les anciens projets saisis sans type).
 
 **`GET projets?annee=2026&typ_projet=SEN&responsable=VGS&statut=Terminé&texte=armoise&uuid_site=…&cd_localisation=…&limite=500`** : tous les paramètres sont facultatifs. `texte` cherche dans le nom du projet et le détail des opérations, sans accents. `uuid_site` sert pour l'onglet « autres actions » de la fiche site. Le tri se fait par année puis par date de création, en ordre décroissant ; limite par défaut 500, maximum 2000.
 

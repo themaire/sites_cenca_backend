@@ -1,6 +1,9 @@
 "use strict";
 
-// Projets « autres » (tous les types sauf les travaux) : schéma opeautres, hérité de MS Access.
+// Projets « autres » (tous les types sauf les travaux) : schéma PostgreSQL opeautres, saisi jusqu'ici
+// par l'ancienne interface MS Access branchée sur la base.
+// Un seul modèle pour tous les types : la nature de l'action est portée par les valeurs (action de
+// l'arbre ope.actions, famille de cibles, indicateurs code/valeur), pas par des colonnes propres au type.
 //
 //   opeautres.projets ─< opeautres.operations ─< localisations    (lieux : vue opeautres.localisants)
 //                                              ─< cibles_ope       (public visé ou compartiment écologique)
@@ -10,7 +13,7 @@
 // Les travaux (TRV) sont saisis dans opegerer (routes/sites/getTravauxRoutes.js), jamais ici.
 // Les projets opeautres apparaissent aussi dans la vue ope.listeprojets (pro_webapp = false).
 
-// Types de projets qu'on ne crée pas dans opeautres : TRV vit dans opegerer, NR est l'ancien format Access
+// Types de projets qu'on ne crée pas dans opeautres : TRV vit dans opegerer, NR (« Non renseigné ») = anciens projets sans type
 const TYPES_EXCLUS = ["TRV", "NR"];
 
 // Valeurs de opeautres.projets.statut (texte libre en base, mêmes valeurs que les projets travaux)
