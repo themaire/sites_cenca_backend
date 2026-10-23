@@ -19,6 +19,8 @@ const dbConfig = {
   port: PG_PORT,
   idleTimeoutMillis: 1200000, // Timeout après 2 minutes d'inactivité
   max: 20, // Limite de connexions simultanées
+  // Pool saturé : la requête échoue après 15 s au lieu d'attendre indéfiniment (sinon les requêtes s'empilent en mémoire)
+  connectionTimeoutMillis: 15000,
   keepAlive: true, // Active le keep-alive
   application_name: 'node_pgsql_backend', // Nom de l'application
 };

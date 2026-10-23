@@ -28,6 +28,13 @@ Pour démarrer le serveur, utilisez la commande suivante :
 npm start
 ```
 
+Pour lancer le développement ou redéployer la production (Docker, HTTPS), utilisez `start.sh` :
+```bash
+./start.sh dev             # développement, port 8887
+./start.sh prod -b -d -r   # redéploiement de la prod : tests, build, redémarrage, vérification
+```
+Détail des options, des étapes et des pièges : [documentation/deploiement_start_sh.md](documentation/deploiement_start_sh.md).
+
 Contribution
 Les contributions sont les bienvenues. Veuillez soumettre une pull request avec une description détaillée des modifications.
 

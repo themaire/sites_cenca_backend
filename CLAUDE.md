@@ -19,6 +19,9 @@ npm start
 # Development (outside Docker): npm install + npm start, port 8887
 ./start.sh dev
 
+# Production redeploy (MCP tests, image build BEFORE stopping prod, down/up, health checks): see documentation/deploiement_start_sh.md
+./start.sh prod -b -d -r
+
 # Docker (production — HTTPS + SSL certs): docker-compose.yml is the complete prod config
 docker-compose up -d
 # equivalent, kept for start.sh prod: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
@@ -40,6 +43,7 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 | `FILES_DIR_ENV` | Path for static file serving (default: `./files`) |
 | `LIZMAP_USER`, `LIZMAP_PASSWORD` | External Lizmap WFS authentication |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Monitoring alerts |
+| `RATE_LIMIT_IP_BLANCHES` | Public IPs exempt from rate limits, comma-separated (default `81.80.207.65`); LAN IPs are always exempt |
 | `OLLAMA_URL`, `OLLAMA_MODEL`, `OLLAMA_NUM_CTX`, `OLLAMA_THINK`, `OLLAMA_TIMEOUT_MS` | Chatbot LLM: LAN Ollama servers in preference order (comma-separated, optional per-server model and GPU layers as `url|model|num_gpu`, e.g. the dev laptop `|gemma4:12b|15`), default model tag, context size, thinking on/off (default off), max time per question, queue + prompt reading + generation (default 15 min, then aborted and the Ollama server freed; undici agent, Node fetch would abort at 300 s) |
 | `CHAT_QUESTIONS_MAX` | Chatbot: questions per conversation (default 10), then `413` → front opens a new conversation |
 | `CHAT_SIMULTANES_MAX` | Chatbot: questions at once per Ollama server (default 1); when every server is full, `POST /chat` answers `503 sonneur_occupe` and `GET /chat/etat` reports `occupe: true` (in-process counter: per backend process) |
@@ -65,6 +69,7 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 | `/process` | `routes/processRoutes.js` | File upload → Python pipeline trigger |
 | `/picts` | `routes/pictureRoute.js` | Image upload/resize/serve |
 | `/docs` | `routes/docsRoutes.js` | Markdown docs served as HTML |
+| `/menu` | `routes/menuRoutes.js` | Header menu (`gestint.m_menu_header`): `/menu/arbre` (public) and `/menu/arbre/admin` (JWT, adds « Paramètres ») return the whole tree (`enfants[]`) in one query, cached 10 min in memory + ETag; legacy per-level `/parent=:id` routes kept until the front switches (`documentation/instructions_front_menu.md`) |
 | `/chat` | `routes/chatRoutes.js` | Chatbot (JWT): local LLM via Ollama + whitelisted MCP business tools, SSE stream |
 | `/files` | static | Static file serving from `FILES_DIR_ENV` |
 | `/metrics` | express-prom-bundle | Prometheus metrics |
@@ -104,7 +109,7 @@ A separate Docker service (`surveillance/`) runs a Node.js monitoring agent that
 
 ### MCP server (`mcp/`)
 
-Read-only MCP server giving Claude SQL access to the database. Self-contained sub-project: own `package.json`, `.env`, pool, `Dockerfile`. Runs as service `mcp_sites` in the root `docker-compose.yml` with `network_mode: host` (deliberately on no compose network, isolated from `node_app`/`surveillance`); listens on `MCP_HOST:MCP_PORT` (8891). Never import it from `node_base_sites.js` nor reuse the backend pool. Offline tests: `cd mcp && npm test`. Business knowledge for Claude lives in `mcp/documentation/base_sites_cenca.md`. See `mcp/README.md`. A second, optional pool (`mcp/dbPoolWebobs.js`, `WEBOBS_DB_*`) reaches the WebObs naturalist observations database (`natobs`, another PostgreSQL server) through predefined `webobs_*` tools only (`fonctions/requetesWebobs.js`); site geometries are read from the sites DB and sent to natobs as EWKB. `export_obs.webobs` columns are shifted by one from column `i` onwards (see the header of `requetesWebobs.js`).
+Read-only MCP server giving Claude SQL access to the database. Self-contained sub-project: own `package.json`, `.env`, pool, `Dockerfile`. Runs as service `mcp_sites` in the root `docker-compose.yml` with `network_mode: host` (deliberately on no compose network, isolated from `node_app`/`surveillance`); listens on `MCP_HOST:MCP_PORT` (8891). Never import it from `node_base_sites.js` nor reuse the backend pool. Offline tests: `cd mcp && npm test`. Business knowledge for Claude lives in `mcp/documentation/base_sites_cenca.md`. See `mcp/README.md`. A second, optional pool (`mcp/dbPoolWebobs.js`, `WEBOBS_DB_*`) reaches the WebObs naturalist observations database (`natobs`, another PostgreSQL server) through predefined `webobs_*` tools only (`fonctions/requetesWebobs.js`); site geometries are read from the sites DB and sent to natobs as EWKB. `export_obs.webobs` columns are shifted by one from column `i` onwards (see the header of `requetesWebobs.js`). Habitat tools (`habitats_site`, `habitats_cartographie`, schema `hab`) live in `fonctions/requetesHabitats.js`; `perimetres_modifies`, `mesures_compensatoires`, `objectifs_projets` in `requetesMetier.js`. They come from the still-valid queries of `ressources/bdd/exemples_sql.json` (ignored file, not versioned; 31 of its 81 queries target dropped views or are auth/write queries: do not reuse them).
 
 ## Key Conventions
 
@@ -112,7 +117,8 @@ Read-only MCP server giving Claude SQL access to the database. Self-contained su
 - **DB queries**: Use `ExecuteQuerySite` for callback style or `ExecuteQuerySitePromise` for async/await. Always pass a descriptive `message` field for logging.
 - **Geometry**: All spatial data is stored in SRID=2154 (Lambert 93). Use `convertToWKT()` to convert GeoJSON coordinates to EWKT before inserting.
 - **CORS**: Origins are allowlisted in `node_base_sites.js`. Add new allowed origins there.
-- **Rate limiting**: Applied globally (200 req / 5 min) but skipped for localhost requests.
+- **Rate limiting**: Applied globally per 5 min: 2000 req per user when the request carries a valid JWT (signature checked, no DB lookup), otherwise 200 req per IP. `/auth/login` allows 10 failures / 15 min per IP; register, forgot/reset-password 5 / 15 min. Exempt: loopback, LAN and Docker ranges (`estIpInterne`, from `req.ip`, never `Host` or `X-Forwarded-For`), `RATE_LIMIT_IP_BLANCHES`, and `/menu`.
+- **Metrics**: `/metrics` answers only LAN/Docker IPs (Prometheus scrapes `node_app:8887`). Every label value is a series kept in memory: 404 paths are collapsed to `#inconnu`, `/files/*` to `/files/#fichier`, Internet client IPs to `externe`. Chatbot usage: counter `sonneur_questions_total{issue}` (`reponse`, `aide`, `occupe`, `erreur`, `interrompue`), declared in `routes/chatRoutes.js` on the same prom-client registry; never add a per-user label.
 
 ### Chatbot (`/chat`)
 

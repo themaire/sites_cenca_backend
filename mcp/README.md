@@ -27,6 +27,11 @@ Il vit dans le dépôt du backend mais tourne dans **son propre processus et son
 | `indicateurs_sites` | Chiffres clés et synthèses des sites gérés (départements, Natura 2000/APB…, milieux, types d'actes, propriétaires, agences de l'eau, réserves, protection forte, nouveaux sites par an), état actuel ou fin d'année précédente | Tableau de bord Grafana « Sites CENCA » (vues `sitcenca.synth_*`) |
 | `indicateurs_activite` | Animations et plans de gestion de l'année précédente, parcelles questionnées en animation foncière | Grafana (`opeautres.synth_*_n-1`, `irenee.histo_foncier`) |
 | `controle_donnees_sites` | Sites gérés sans géométrie, sans acte (ou acte sans parcelle), avec données manquantes | Grafana |
+| `perimetres_modifies` | Sites gérés dont le contour a été modifié une année donnée (défaut : année précédente) | `ressources/bdd/exemples_sql.json` (`v_export_fcen_sites`) |
+| `mesures_compensatoires` | Projets de mesures compensatoires (société, durée, objectifs, document) et leurs sites | `exemples_sql.json` (`mescomp.v_mescomp`) |
+| `objectifs_projets` | Objectifs des projets de gestion d'un site : enjeux, objectif opérationnel, résultats attendus, surfaces | `exemples_sql.json` (`opegerer.objectifs`) |
+| `habitats_site` | Habitats cartographiés dans un site : surface et % cartographiés, années, zones humides, état de conservation, végétations | `exemples_sql.json` (`hab.fiches_releves`) |
+| `habitats_cartographie` | Surface relevée par année, % cartographié par site (plus ou moins cartographiés), sites où une végétation est présente, végétations les plus cartographiées | `exemples_sql.json` (`hab.pourcentage_carto`) |
 
 Les outils qui portent sur un site (`fiche_site`, `geometrie_site`, `foncier_site`, `travaux_site`, `webobs_site`) acceptent son code, son uuid ou son nom (même partiel). Les recherches de texte (noms de sites et de communes, milieux, titres, espèces) ignorent la casse, les accents, la ponctuation (« Colombey-les-Deux-Églises » = « Colombey les Deux Eglises ») et les abréviations « St » / « Ste » (`texteNormalise` dans `fonctions/utilitaires.js`). C'est utile car la base des sites écrit les communes sans traits d'union, alors que WebObs les écrit avec.
 
@@ -139,7 +144,8 @@ dbPool.js                    Pool pg dédié (4 connexions), session en lecture 
 fonctions/securiteSql.js     Validation lecture seule, exécution en transaction READ ONLY + ROLLBACK, masquage
 fonctions/securiteReseau.js  Filtre IP (CIDR) et vérification du jeton
 fonctions/outilsMcp.js       Outils génériques (schéma, SQL libre), ressource et prompt
-fonctions/requetesMetier.js  Outils métier (sites, foncier, travaux, spatial) + documentation_base
+fonctions/requetesMetier.js  Outils métier (sites, foncier, travaux, spatial, mesures compensatoires) + documentation_base
+fonctions/requetesHabitats.js Habitats cartographiés (schéma hab)
 fonctions/utilitaires.js     Formatage des réponses, journalisation, lecture
 documentation/               Guide métier lu par Claude, script du rôle lecture seule
 test/                        Tests hors ligne des garde-fous (npm test)
