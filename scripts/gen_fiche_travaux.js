@@ -189,17 +189,9 @@ async function generateFicheTravauxWord(bilan) {
     const sortedOperations = sortOperationsByDate(bilan.operations);
     const operationNumberByUuid = {};
     const operationNumberByKey = {};
-    const keyCounts = {};
-    sortedOperations.forEach((op) => {
-        const key = operationMatchKey(op.action, op.action_2, op.date_debut_str);
-        keyCounts[key] = (keyCounts[key] || 0) + 1;
-    });
     sortedOperations.forEach((op, i) => {
         operationNumberByUuid[op.uuid_ope] = i + 1;
-        // Clé partagée par plusieurs opérations (même action, même date) : ambiguë, la carte
-        // retombe alors sur uuid_ope, sinon elles porteraient toutes le même numéro
-        const key = operationMatchKey(op.action, op.action_2, op.date_debut_str);
-        if (keyCounts[key] === 1) operationNumberByKey[key] = i + 1;
+        operationNumberByKey[operationMatchKey(op.action, op.action_2, op.date_debut_str)] = i + 1;
     });
 
     let operationsMapBuffer = null;
@@ -882,7 +874,7 @@ async function generateFicheTravauxWord(bilan) {
                             alignment: AlignmentType.CENTER,
                             spacing: { before: 200 },
                             style: "aside",
-                            text: "Carte non disponible : aucune géométrie d'opération exploitable n'a été saisie pour ce projet."
+                            text: "Carte non disponible : aucune géométrie d'opération n'a été saisie pour ce projet."
                         })]),
                 ],
                 footers: {
