@@ -6,6 +6,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../../dbPool/poolConnect.js");
 const { authenticateToken } = require("../../fonctions/fonctionsAuth.js");
+const { codeSalarie, journaliser } = require("../../fonctions/projetsAutres.js");
 
 function sendError(res, message, err) {
     console.error(`[projets autres] ${message}`, err?.message || err);
@@ -41,6 +42,9 @@ router.delete("/projets/:uuid", authenticateToken, async (req, res) => {
             await client.query("ROLLBACK");
             return res.status(404).json({ success: false, message: "Projet introuvable." });
         }
+        const compte = await codeSalarie(client, req.tokenInfos?.identifiant);
+        for (const uuidOpe of uuidsOpe) await journaliser(client, compte, "opeautres.operations", uuidOpe, "DELETE");
+        await journaliser(client, compte, "opeautres.projets", req.params.uuid, "DELETE");
         await client.query("COMMIT");
         res.status(200).json({ success: true, message: "Projet supprimé.", uuid_proj: req.params.uuid, operations_supprimees: uuidsOpe.length });
     } catch (err) {
@@ -63,6 +67,7 @@ router.delete("/operations/:uuid", authenticateToken, async (req, res) => {
             await client.query("ROLLBACK");
             return res.status(404).json({ success: false, message: "Opération introuvable." });
         }
+        await journaliser(client, await codeSalarie(client, req.tokenInfos?.identifiant), "opeautres.operations", req.params.uuid, "DELETE");
         await client.query("COMMIT");
         res.status(200).json({ success: true, message: "Opération supprimée.", uuid_ope: req.params.uuid });
     } catch (err) {

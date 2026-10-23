@@ -210,38 +210,81 @@ async function verifierOperation(db, corps, partiel = false) {
     return erreurs;
 }
 
-// Remplace les listes rattachées fournies (un tableau vide vide la liste ; une liste absente n'est pas touchée).
-// client = client de transaction
-async function ecrireListesOperation(client, uuidOpe, corps) {
-    if (Array.isArray(corps.localisations)) {
-        await client.query("DELETE FROM opeautres.localisations WHERE uuid_ope = $1", [uuidOpe]);
-        const ids = [...new Set(corps.localisations.map((l) => (typeof l === "string" ? l : l.cd_localisation)))];
-        for (const id of ids)
-            await client.query("INSERT INTO opeautres.localisations (uuid_ope, cd_localisation) VALUES ($1, $2)", [uuidOpe, id]);
-    }
-    if (Array.isArray(corps.cibles)) {
-        await client.query("DELETE FROM opeautres.cibles_ope WHERE operation = $1", [uuidOpe]);
-        for (const c of corps.cibles)
-            await client.query("INSERT INTO opeautres.cibles_ope (operation, typ_cible, detail) VALUES ($1, $2, $3)",
-                [uuidOpe, c.typ_cible, vide(c.detail) ? null : c.detail]);
-    }
-    if (Array.isArray(corps.indicateurs)) {
-        await client.query("DELETE FROM opeautres.eval_indicateurs WHERE operation = $1", [uuidOpe]);
-        for (const i of corps.indicateurs)
-            await client.query(
+// Journal des modifications partagé avec l'interface MS Access (sa fonction Suivi_modif) :
+// une ligne par écriture dans gestint.historiques, compte = code salarié, enregistrement = uuid du projet
+// ou de l'opération. Tables principales : action « INSERT », « UPDATE » ou « DELETE » ; listes rattachées :
+// « INSERT - Cible : 1.3 », comme Access (et « DELETE - … » pour un retrait).
+async function journaliser(client, compte, table, enregistrement, action) {
+    await client.query(
+        `INSERT INTO gestint.historiques (uuid_histo, compte, date, "table", enregistrement, action)
+         VALUES (gen_random_uuid()::text, $1, current_date, $2, $3, $4)`,
+        [compte, table, enregistrement, action]
+    );
+}
+
+// Listes rattachées à une opération : table, colonne de l'opération, lecture de l'existant, clé de
+// comparaison, libellé du journal (format Access) et insertion
+const LISTES_OPERATION = {
+    localisations: {
+        table: "opeautres.localisations",
+        colonne: "uuid_ope",
+        normaliser: (l) => ({ cd_localisation: typeof l === "string" ? l : l.cd_localisation }),
+        cle: (l) => l.cd_localisation,
+        libelle: (l) => "UUID localisation =" + l.cd_localisation,
+        inserer: (client, uuidOpe, l) =>
+            client.query("INSERT INTO opeautres.localisations (uuid_ope, cd_localisation) VALUES ($1, $2)", [uuidOpe, l.cd_localisation]),
+    },
+    cibles: {
+        table: "opeautres.cibles_ope",
+        colonne: "operation",
+        normaliser: (c) => ({ typ_cible: c.typ_cible, detail: vide(c.detail) ? null : c.detail }),
+        cle: (c) => c.typ_cible + "|" + (c.detail ?? ""),
+        libelle: (c) => "Cible : " + c.typ_cible,
+        inserer: (client, uuidOpe, c) =>
+            client.query("INSERT INTO opeautres.cibles_ope (operation, typ_cible, detail) VALUES ($1, $2, $3)", [uuidOpe, c.typ_cible, c.detail]),
+    },
+    indicateurs: {
+        table: "opeautres.eval_indicateurs",
+        colonne: "operation",
+        normaliser: (i) => ({ typ_indicateur: i.typ_indicateur, evaluation: vide(i.evaluation) ? null : String(i.evaluation) }),
+        cle: (i) => i.typ_indicateur + "|" + (i.evaluation ?? ""),
+        libelle: (i) => "Indicateur : " + i.typ_indicateur,
+        inserer: (client, uuidOpe, i) =>
+            client.query(
                 "INSERT INTO opeautres.eval_indicateurs (uuid_indic, operation, typ_indicateur, evaluation) VALUES (gen_random_uuid()::text, $1, $2, $3)",
-                [uuidOpe, i.typ_indicateur, vide(i.evaluation) ? null : String(i.evaluation)]
-            );
-    }
-    if (Array.isArray(corps.intervenants)) {
-        await client.query("DELETE FROM opeautres.intervenants WHERE operation = $1", [uuidOpe]);
-        for (const i of corps.intervenants)
-            await client.query("INSERT INTO opeautres.intervenants (operation, typ_role, intervenant) VALUES ($1, $2, $3)",
-                [uuidOpe, i.typ_role, i.intervenant]);
+                [uuidOpe, i.typ_indicateur, i.evaluation]
+            ),
+    },
+    intervenants: {
+        table: "opeautres.intervenants",
+        colonne: "operation",
+        normaliser: (i) => ({ typ_role: i.typ_role, intervenant: i.intervenant }),
+        cle: (i) => i.typ_role + "|" + i.intervenant,
+        libelle: (i) => `Role : ${i.typ_role} (UUID intervenant =${i.intervenant})`,
+        inserer: (client, uuidOpe, i) =>
+            client.query("INSERT INTO opeautres.intervenants (operation, typ_role, intervenant) VALUES ($1, $2, $3)", [uuidOpe, i.typ_role, i.intervenant]),
+    },
+};
+
+// Remplace les listes rattachées fournies (un tableau vide vide la liste ; une liste absente n'est pas touchée).
+// Seules les différences sont journalisées (ajouts en INSERT, retraits en DELETE). client = client de transaction
+async function ecrireListesOperation(client, uuidOpe, corps, compte) {
+    for (const [nom, l] of Object.entries(LISTES_OPERATION)) {
+        if (!Array.isArray(corps[nom])) continue;
+        const anciens = (await client.query(`SELECT * FROM ${l.table} WHERE ${l.colonne} = $1`, [uuidOpe])).rows.map(l.normaliser);
+        const nouveaux = [...new Map(corps[nom].map(l.normaliser).map((x) => [l.cle(x), x])).values()];
+        const clesAnciennes = new Set(anciens.map(l.cle));
+        const clesNouvelles = new Set(nouveaux.map(l.cle));
+        await client.query(`DELETE FROM ${l.table} WHERE ${l.colonne} = $1`, [uuidOpe]);
+        for (const x of nouveaux) await l.inserer(client, uuidOpe, x);
+        for (const x of anciens.filter((x) => !clesNouvelles.has(l.cle(x))))
+            await journaliser(client, compte, l.table, uuidOpe, "DELETE - " + l.libelle(x));
+        for (const x of nouveaux.filter((x) => !clesAnciennes.has(l.cle(x))))
+            await journaliser(client, compte, l.table, uuidOpe, "INSERT - " + l.libelle(x));
     }
 }
 
 module.exports = {
-    TYPES_EXCLUS, STATUTS, RACINES_PAR_TYPE, SQL_ARBRE_ACTIONS,
-    lireProjet, lireOperation, codeSalarie, verifierProjet, verifierOperation, ecrireListesOperation, vide,
+    TYPES_EXCLUS, STATUTS, RACINES_PAR_TYPE, SQL_ARBRE_ACTIONS, LISTES_OPERATION,
+    lireProjet, lireOperation, codeSalarie, verifierProjet, verifierOperation, ecrireListesOperation, journaliser, vide,
 };

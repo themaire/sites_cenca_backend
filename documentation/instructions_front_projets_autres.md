@@ -149,21 +149,35 @@ Règles appliquées par le backend :
 - **Action** : une action travaux (`004_TRAV`…) est refusée. Les travaux se saisissent dans le module travaux.
 - **Listes en PUT** : une liste envoyée **remplace** entièrement l'ancienne, et `[]` la vide ; une liste absente n'est pas touchée. On peut donc envoyer le formulaire complet à chaque enregistrement. Chaque PUT est transactionnel.
 - **Duplication** : `clone` copie l'opération et toutes ses listes, avec de nouvelles dates si on en fournit. Utile pour une animation répétée ou un suivi à plusieurs passages. `projet` copie l'opération dans un autre projet.
-- **Suppressions** : elles sont définitives, sans corbeille, et suppriment les listes rattachées. Demander une confirmation, en rappelant le nombre d'opérations pour un projet.
+- **Suppressions** : elles sont définitives, sans corbeille, et suppriment les listes rattachées. Demander une confirmation, en rappelant le nombre d'opérations pour un projet. *(Règle provisoire : l'interface Access ne supprime pas un projet ou une opération déjà enregistrés, elle envoie une demande au gestionnaire de l'outil ; à aligner, voir plus bas.)*
+- **Journal** : chaque écriture est tracée dans `gestint.historiques`, au même format que l'interface Access (compte, date, table, uuid, action). Rien à faire côté front.
 - **Réponse des créations et modifications** : elle renvoie l'objet complet relu en base. Le front peut s'en servir directement, sans relire.
+
+## Comportements de l'interface Access à reproduire
+
+Tirés du code VBA des formulaires `2_opeaut_*` (ajout et modification de projet, sous-formulaire d'opération) :
+
+- **Champs obligatoires du projet** : nom, année, responsable et statut. Access refuse d'enregistrer sans eux, et sans une action, au minimum de niveau 1, sur chaque opération. Les afficher comme obligatoires, même si le backend sait compléter responsable et statut.
+- **Action en trois listes en cascade** : niveau 1, puis 2, puis 3. L'action enregistrée est **la plus profonde renseignée**. Changer un niveau vide les niveaux inférieurs. Le niveau 2 n'est actif qu'une fois le niveau 1 choisi.
+- **Localisation pré-remplie** : quand le projet est créé depuis une **fiche site** (ou espace), la première opération reçoit automatiquement le site comme localisation. Côté webapp : `cd_localisation` = `uuid_espace` du site, à mettre dans `localisations` à la création de l'opération.
+- **Choix d'un lieu** : catégorie d'abord (site CENCA, commune, N2000…), puis le lieu dans cette catégorie. Avec l'API : `GET localisants?cat=<cat>&q=…`.
+- **Choix d'un intervenant en trois temps** : type de contact → contact de l'annuaire → rôle. Un bouton « nouveau contact » ouvre la fiche annuaire pour en créer un à la volée.
+- **Cibles et indicateurs** : ajout ligne par ligne (liste + bouton « Ajouter »), chaque ligne ayant son bouton de suppression. Le détail d'une cible n'est saisissable qu'une fois la cible choisie, la valeur d'un indicateur qu'une fois l'indicateur choisi.
+- **Doublons refusés** : même cible, même lieu, ou même intervenant avec le même rôle, deux fois sur une opération (le backend les refuse aussi).
+- **Navigation** : Access fait défiler les opérations d'un projet avec « précédent / suivant ». Une liste des opérations sous l'en-tête du projet est plus pratique, l'essentiel est de garder la saisie de plusieurs opérations à la suite.
 
 ## Écrans à créer
 
 1. **Recherche des projets autres** : même ergonomie que la recherche des projets travaux, avec les filtres année, type, responsable, statut et texte. Le tableau affiche le type (badge), le nom, les localisations, le nombre d'opérations, la période et le statut.
 2. **Fiche projet** : l'en-tête du projet est éditable. En dessous, la liste des opérations, en cartes ou en tableau, avec les actions ajouter, modifier, dupliquer et supprimer.
 3. **Formulaire d'opération** (dialogue ou panneau), dans cet ordre :
-   - l'action, en cascade, avec les branches conseillées en premier ;
+   - l'action, en trois listes en cascade, avec les branches conseillées en premier ;
    - les dates ;
-   - les localisations, en autocomplétion multiple ;
+   - les localisations : catégorie puis lieu, pré-remplies avec le site si on vient d'une fiche site ;
    - les cibles : publics pour SEN, PAR et ADM, écologiques groupées par `groupe` pour ETU, POL et ACC, avec un bouton pour basculer ;
    - les indicateurs : des lignes « indicateur + valeur », la première proposée selon le tableau des usages ;
-   - les intervenants : contact de l'annuaire + rôle ;
+   - les intervenants : type de contact, contact de l'annuaire, rôle ;
    - le détail et le mode d'intervention.
-4. **Fiche site** : un onglet ou un bloc « Autres actions » alimenté par `GET projets?uuid_site=<uuid_site>`.
+4. **Fiche site** : un onglet ou un bloc « Autres actions » alimenté par `GET projets?uuid_site=<uuid_site>`, avec un bouton « Nouveau projet » qui pré-remplit la localisation.
 
 Les projets travaux ne changent pas : leurs routes (`sites/projets/…`, `sites/operations/…`, `sites/criteria_travaux/…`) restent les mêmes.

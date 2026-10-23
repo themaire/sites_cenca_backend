@@ -6,7 +6,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../../dbPool/poolConnect.js");
 const { authenticateToken } = require("../../fonctions/fonctionsAuth.js");
-const { lireProjet, lireOperation, codeSalarie, verifierProjet, verifierOperation, ecrireListesOperation, vide } = require("../../fonctions/projetsAutres.js");
+const { lireProjet, lireOperation, codeSalarie, verifierProjet, verifierOperation, ecrireListesOperation, journaliser, vide } = require("../../fonctions/projetsAutres.js");
 
 function sendJson(res, data, status = 200) {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -40,8 +40,8 @@ async function enTransaction(fn) {
     }
 }
 
-// Insère une opération et ses listes ; renvoie son uuid
-async function insererOperation(client, uuidProj, corps) {
+// Insère une opération et ses listes, journalisées pour compte ; renvoie son uuid
+async function insererOperation(client, uuidProj, corps, compte) {
     const result = await client.query(
         `INSERT INTO opeautres.operations (uuid_ope, projet, action, date_deb, date_fin, detail, typ_interv, com_interv, validite)
          VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, true)
@@ -50,7 +50,8 @@ async function insererOperation(client, uuidProj, corps) {
             corps.typ_interv || null, vide(corps.com_interv) ? null : corps.com_interv]
     );
     const uuidOpe = result.rows[0].uuid_ope;
-    await ecrireListesOperation(client, uuidOpe, corps);
+    await journaliser(client, compte, "opeautres.operations", uuidOpe, "INSERT");
+    await ecrireListesOperation(client, uuidOpe, corps, compte);
     return uuidOpe;
 }
 
@@ -80,7 +81,8 @@ router.post("/projets", authenticateToken, async (req, res) => {
                     corps.statut || "En cours", corps.responsable || createur]
             );
             const uuid = result.rows[0].uuid_proj;
-            for (const ope of corps.operations || []) await insererOperation(client, uuid, ope);
+            await journaliser(client, createur, "opeautres.projets", uuid, "INSERT");
+            for (const ope of corps.operations || []) await insererOperation(client, uuid, ope, createur);
             return uuid;
         });
         sendJson(res, { success: true, uuid_proj: uuidProj, projet: await lireProjet(pool, uuidProj) }, 201);
@@ -99,12 +101,17 @@ router.put("/projets/:uuid", authenticateToken, async (req, res) => {
         const erreurs = await verifierProjet(pool, corps, true);
         if (erreurs.length) return refuser(res, erreurs);
         const valeurs = champs.map((c) => (c === "annee" ? parseInt(corps[c], 10) : vide(corps[c]) ? null : corps[c]));
-        const result = await pool.query(
-            `UPDATE opeautres.projets SET ${champs.map((c, i) => `${c} = $${i + 1}`).join(", ")}
-              WHERE uuid_proj = $${champs.length + 1} RETURNING uuid_proj`,
-            [...valeurs, req.params.uuid]
-        );
-        if (!result.rows.length) return res.status(404).json({ success: false, message: "Projet introuvable." });
+        const compte = await codeSalarie(pool, req.tokenInfos?.identifiant);
+        const trouve = await enTransaction(async (client) => {
+            const result = await client.query(
+                `UPDATE opeautres.projets SET ${champs.map((c, i) => `${c} = $${i + 1}`).join(", ")}
+                  WHERE uuid_proj = $${champs.length + 1} RETURNING uuid_proj`,
+                [...valeurs, req.params.uuid]
+            );
+            if (result.rows.length) await journaliser(client, compte, "opeautres.projets", req.params.uuid, "UPDATE");
+            return result.rows.length > 0;
+        });
+        if (!trouve) return res.status(404).json({ success: false, message: "Projet introuvable." });
         sendJson(res, { success: true, uuid_proj: req.params.uuid, projet: await lireProjet(pool, req.params.uuid) });
     } catch (err) {
         sendError(res, "Erreur lors de la modification du projet.", err);
@@ -122,7 +129,8 @@ router.post("/projets/:uuid/operations", authenticateToken, async (req, res) => 
         if (!projet.rows.length) return res.status(404).json({ success: false, message: "Projet introuvable." });
         const erreurs = await verifierOperation(pool, corps);
         if (erreurs.length) return refuser(res, erreurs);
-        const uuidOpe = await enTransaction((client) => insererOperation(client, req.params.uuid, corps));
+        const compte = await codeSalarie(pool, req.tokenInfos?.identifiant);
+        const uuidOpe = await enTransaction((client) => insererOperation(client, req.params.uuid, corps, compte));
         sendJson(res, { success: true, uuid_ope: uuidOpe, operation: await lireOperation(pool, uuidOpe) }, 201);
     } catch (err) {
         sendError(res, "Erreur lors de la création de l'opération.", err);
@@ -140,14 +148,17 @@ router.put("/operations/:uuid", authenticateToken, async (req, res) => {
         if (!existe.rows.length) return res.status(404).json({ success: false, message: "Opération introuvable." });
         const erreurs = await verifierOperation(pool, corps, true);
         if (erreurs.length) return refuser(res, erreurs);
+        const compte = await codeSalarie(pool, req.tokenInfos?.identifiant);
         await enTransaction(async (client) => {
-            if (champs.length)
+            if (champs.length) {
                 await client.query(
                     `UPDATE opeautres.operations SET ${champs.map((c, i) => `${c} = $${i + 1}`).join(", ")}
                       WHERE uuid_ope = $${champs.length + 1}`,
                     [...champs.map((c) => (vide(corps[c]) ? null : corps[c])), req.params.uuid]
                 );
-            await ecrireListesOperation(client, req.params.uuid, corps);
+                await journaliser(client, compte, "opeautres.operations", req.params.uuid, "UPDATE");
+            }
+            await ecrireListesOperation(client, req.params.uuid, corps, compte);
         });
         sendJson(res, { success: true, uuid_ope: req.params.uuid, operation: await lireOperation(pool, req.params.uuid) });
     } catch (err) {
@@ -182,7 +193,8 @@ router.post("/operations/:uuid/clone", authenticateToken, async (req, res) => {
         for (const [nom, d] of [["date_deb", corps.date_deb], ["date_fin", corps.date_fin]])
             if (!vide(d) && isNaN(Date.parse(d))) erreurs.push(nom + " invalide (AAAA-MM-JJ)");
         if (erreurs.length) return refuser(res, erreurs);
-        const uuidOpe = await enTransaction((client) => insererOperation(client, uuidProj, copie));
+        const compte = await codeSalarie(pool, req.tokenInfos?.identifiant);
+        const uuidOpe = await enTransaction((client) => insererOperation(client, uuidProj, copie, compte));
         sendJson(res, { success: true, uuid_ope: uuidOpe, operation: await lireOperation(pool, uuidOpe) }, 201);
     } catch (err) {
         sendError(res, "Erreur lors de la duplication de l'opération.", err);
