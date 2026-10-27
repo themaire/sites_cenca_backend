@@ -131,10 +131,17 @@ function repartition(lignes) {
         return DEPARTEMENTS[numero] ? `${numero} ${DEPARTEMENTS[numero]}` : null;
     };
     const champType = ['typ_site_txt', 'typ_site_libelle', 'typ_mfu', 'typ_projet', 'action_2_libelle'].find(c => lignes.some(l => !vide(l[c])));
+    // Objectif d'un projet = début de son titre (« Milieu - Restaurer / Trait. végét » → « Milieu - Restaurer »)
+    const objectif = ligne => (vide(ligne.titre) ? null : String(ligne.titre).split(' / ')[0].trim());
+    const objectifs = lignes.some(l => !vide(l.titre) && String(l.titre).includes(' / ')) ? compter(objectif) : '';
     const parties = [
         ['département', compter(departement)],
         ['type', champType ? compter(l => l[champType]) : ''],
         ['statut', lignes.some(l => !vide(l.statut)) ? compter(l => l.statut) : ''],
+        // Sans l'année, une liste triée par année décroissante ne montre que les années récentes : le modèle
+        // concluait qu'il n'y avait rien pour les années suivantes, pourtant dans le résultat
+        ['année', lignes.some(l => !vide(l.annee)) ? compter(l => l.annee) : ''],
+        ['objectif (début du titre)', objectifs.split(', ').length <= 25 ? objectifs : ''],
     ].filter(([, texte]) => texte).map(([nom, texte]) => `par ${nom} : ${texte}`);
     if (lignes.some(l => !vide(l.surface_ha))) {
         const total = lignes.reduce((somme, l) => somme + (Number(l.surface_ha) || 0), 0);

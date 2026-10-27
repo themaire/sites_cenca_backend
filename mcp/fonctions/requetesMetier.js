@@ -541,7 +541,10 @@ function enregistrerRequetesMetier(server) {
   // ---------------------------------------------------------------- Travaux / gestion
   outil(server, 'rechercher_projets', {
     title: 'Rechercher des projets',
-    description: "Projets de gestion (vue ope.listeprojets, comme la recherche de projets de l'application) par année (ou période annee_debut / annee_fin, ex. « depuis 2025 » = annee_debut 2025), site, responsable, statut, type (TRV = travaux) ou texte du titre. Par défaut, seulement les projets saisis dans la webapp (pro_webapp) : les anciens projets MS Access n'ont pas d'opérations détaillées.",
+    description: "Projets de gestion (vue ope.listeprojets, comme la recherche de projets de l'application) par année (« en 2025 » = annee 2025 ; « depuis 2025 » = annee_debut 2025), site, milieu naturel du site, responsable, statut, type (TRV = travaux) ou texte du titre. "
+      + "Le titre commence par l'objectif puis les actions (« Milieu - Restaurer / Trait. végét », « Milieu - Entretenir / Pâturage ») : texte = « Restaurer », « Entretenir », « Pâturage »… filtre l'objectif ou l'action. "
+      + "nb_photos = photos avant / après travaux enregistrées sur le projet. Ex. : « Projets de restauration de pelouses en 2025 » = annee 2025, typ_projet TRV, texte Restaurer, milieu pelouse. "
+      + "Par défaut, seulement les projets saisis dans la webapp (pro_webapp).",
     inputSchema: {
       annee: z.number().int().optional().describe('Une seule année'),
       annee_debut: z.number().int().optional().describe('Première année incluse (période)'),
@@ -550,17 +553,21 @@ function enregistrerRequetesMetier(server) {
       responsable: z.string().optional().describe('Valeur de la colonne responsable de ope.listeprojets'),
       statut: z.string().optional(),
       typ_projet: z.string().optional().describe("Type de projet, ex. 'TRV' pour les travaux"),
-      texte: z.string().optional().describe('Partie du titre'),
+      texte: z.string().optional().describe('Partie du titre : objectif ou action (ex. Restaurer, Entretenir, Pâturage, Débroussaillage)'),
+      milieu: z.string().optional().describe('Partie du milieu naturel du site (ex. pelouse, marais, tourbière, prairie)'),
       webapp_uniquement: z.boolean().default(true),
       limite: z.number().int().min(1).max(2000).default(200),
     },
-  }, async ({ annee, annee_debut, annee_fin, code_site, responsable, statut, typ_projet, texte, webapp_uniquement, limite }) => {
+  }, async ({ annee, annee_debut, annee_fin, code_site, responsable, statut, typ_projet, texte, milieu, webapp_uniquement, limite }) => {
     const lignes = await lire(`
       SELECT p.uuid_proj, p.annee, p.responsable, p.loc, p.titre, p.nb_ope, p.statut, p.typ_projet,
-             s.uuid_site, s.code AS code_site, pr.pro_webapp
+             s.uuid_site, s.code AS code_site, ls.milieux_naturels AS milieux, pr.pro_webapp,
+             (SELECT count(*) FROM files.docs d WHERE upper(d.ref_id) = upper(p.uuid_proj) AND d.doc_type IN (7, 8)) AS nb_photos,
+             count(*) OVER () AS total_sans_limite
       FROM ope.listeprojets p
       LEFT JOIN opegerer.projets pr ON pr.uuid_proj = p.uuid_proj
       LEFT JOIN sitcenca.sites s ON s.uuid_site = pr.site
+      LEFT JOIN sitcenca.listesitescenca ls ON ls.uuid_site = s.uuid_site
       WHERE ($1::int IS NULL OR p.annee = $1)
         AND ($2::text IS NULL OR upper(s.code) = upper($2))
         AND ($3::text IS NULL OR p.responsable ILIKE '%' || $3 || '%')
@@ -570,10 +577,16 @@ function enregistrerRequetesMetier(server) {
         AND ($5::text IS NULL OR p.typ_projet = $5)
         AND ($6::text IS NULL OR ${contientTexte('p.titre', '$6')})
         AND (NOT $7 OR pr.pro_webapp IS TRUE)
+        AND ($11::text IS NULL OR ${contientTexte('ls.milieux_naturels', '$11')})
       ORDER BY p.annee DESC NULLS LAST, s.code
       LIMIT $8`, [annee ?? null, code_site || null, responsable || null, statut || null, typ_projet || null, texte || null, webapp_uniquement, limite,
-        annee_debut ?? null, annee_fin ?? null]);
-    return resultat(lignes);
+        annee_debut ?? null, annee_fin ?? null, milieu || null]);
+    // Total avant LIMIT : sans lui, une liste coupée à `limite` passait pour complète
+    const total = Number(lignes[0]?.total_sans_limite ?? 0);
+    for (const l of lignes) delete l.total_sans_limite;
+    return resultat(lignes, total > lignes.length
+      ? { total_projets: total, limite_atteinte: `seuls les ${lignes.length} premiers projets (les plus récents) sont renvoyés sur ${total} : préciser les filtres (année, texte, site) ou augmenter limite` }
+      : { total_projets: total });
   });
 
   outil(server, 'operations_projet', {
@@ -614,6 +627,7 @@ function enregistrerRequetesMetier(server) {
     const s = await trouverSiteParNom(site);
     const lignes = await lire(`
       SELECT p.uuid_proj, l.annee, l.titre, l.statut, l.typ_projet, l.responsable,
+             (SELECT count(*) FROM files.docs d WHERE upper(d.ref_id) = upper(p.uuid_proj) AND d.doc_type IN (7, 8)) AS nb_photos,
              op.date_debut, op.date_fin, ope.get_action_libelle(op.action_2) AS action,
              op.quantite, opegerer.get_libelle(op.unite) AS unite, op.surf AS surface, op.lin AS lineaire,
              COALESCE(mo.nom, op.nom_mo) AS maitre_oeuvre,
@@ -628,8 +642,8 @@ function enregistrerRequetesMetier(server) {
       ORDER BY l.annee DESC, l.titre, op.date_debut NULLS LAST`, [s.uuid_site, annee_debut ?? null, annee_fin ?? null]);
     // Une entrée par projet, ses opérations imbriquées
     const projets = new Map();
-    for (const { uuid_proj, annee, titre, statut, typ_projet, responsable, ...operation } of lignes) {
-      if (!projets.has(uuid_proj)) projets.set(uuid_proj, { annee, titre, statut, typ_projet, responsable, operations: [] });
+    for (const { uuid_proj, annee, titre, statut, typ_projet, responsable, nb_photos, ...operation } of lignes) {
+      if (!projets.has(uuid_proj)) projets.set(uuid_proj, { annee, titre, statut, typ_projet, responsable, nb_photos, operations: [] });
       // Champs vides retirés : moins de texte à lire pour un petit modèle sur CPU
       const utile = Object.fromEntries(Object.entries(operation).filter(([, v]) => v !== null && v !== ''));
       if (utile.action || utile.date_debut) projets.get(uuid_proj).operations.push(utile);

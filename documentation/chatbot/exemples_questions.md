@@ -136,6 +136,8 @@ Conseils généraux :
 - Quels projets de TC sont en cours en 2026 ?
 - Quels projets de pâturage en 2025 ?
 - Projets du site 10035 depuis 2023.
+- Quels projets de restauration sur des pelouses ont été faits en 2025 ?
+- Quels projets de travaux de 2026 ont des photos avant / après ?
 
 ### Détail d'un projet (`operations_projet`)
 
