@@ -127,6 +127,24 @@ async function trouverSiteParNom(site) {
   return exact[0] || sites[0];
 }
 
+/**
+ * Commune de terr.ign_commune par code INSEE ou nom (exact d'abord, puis partiel ; accents et casse ignorés).
+ * Erreur si aucune ou plusieurs communes correspondent.
+ */
+async function trouverCommune(commune) {
+  const brut = commune.trim();
+  const chercher = condition => lire(`
+    SELECT "NOM" AS nom, "INSEE_COM" AS insee, "INSEE_DEP" AS departement, "POPULATION" AS population
+    FROM terr.ign_commune WHERE ${condition} ORDER BY "NOM" LIMIT 10`, [brut]);
+  let communes = await chercher(`"INSEE_COM" = $1 OR ${texteNormalise('"NOM"')} = ${texteNormalise('$1')}`);
+  if (communes.length === 0) communes = await chercher(contientTexte('"NOM"', '$1'));
+  if (communes.length === 0) throw new Error(`Commune "${commune}" introuvable.`);
+  if (communes.length > 1) {
+    throw new Error(`Plusieurs communes correspondent à "${commune}" : ${communes.map(c => `${c.nom} (${c.insee})`).join(' ; ')}. Rappeler l'outil avec le code INSEE voulu.`);
+  }
+  return communes[0];
+}
+
 function enregistrerRequetesMetier(server) {
 
   // ---------------------------------------------------------------- Documentation
@@ -338,17 +356,7 @@ function enregistrerRequetesMetier(server) {
       commune: z.string().min(2).describe("Nom de la commune tel qu'écrit par l'utilisateur, ou code INSEE connu"),
     },
   }, async ({ commune }) => {
-    const brut = commune.trim();
-    const chercher = condition => lire(`
-      SELECT "NOM" AS nom, "INSEE_COM" AS insee, "INSEE_DEP" AS departement, "POPULATION" AS population
-      FROM terr.ign_commune WHERE ${condition} ORDER BY "NOM" LIMIT 10`, [brut]);
-    let communes = await chercher(`"INSEE_COM" = $1 OR ${texteNormalise('"NOM"')} = ${texteNormalise('$1')}`);
-    if (communes.length === 0) communes = await chercher(contientTexte('"NOM"', '$1'));
-    if (communes.length === 0) throw new Error(`Commune "${commune}" introuvable.`);
-    if (communes.length > 1) {
-      throw new Error(`Plusieurs communes correspondent à "${commune}" : ${communes.map(c => `${c.nom} (${c.insee})`).join(' ; ')}. Rappeler l'outil avec le code INSEE voulu.`);
-    }
-    const [c] = communes;
+    const c = await trouverCommune(commune);
     const [bassins, espaces] = await Promise.all([
       lire(`
         SELECT * FROM (
@@ -381,6 +389,30 @@ function enregistrerRequetesMetier(server) {
       t.espaces.push(Object.fromEntries(Object.entries(espace).filter(([, v]) => v !== null)));
     }
     return reponse({ commune: c, bassins_agence: bassins, nb_types_espace: types.size, types_espace: [...types.values()] });
+  });
+
+  outil(server, 'geometrie_commune', {
+    title: "Géométrie d'une commune",
+    description: "Pour une commune (nom ou code INSEE) : code INSEE, département, population, surface, centroïde et emprise (bbox) en WGS84, "
+      + "et contour IGN en GeoJSON WGS84 (EPSG:4326) simplifié. Pour une carte ou un calcul externe ; pour croiser avec les sites et zonages, "
+      + "infos_commune ou le SQL PostGIS en 2154 sur terr.ign_commune sont préférables. sans_contour = true pour n'avoir que l'INSEE, le centroïde et la bbox.",
+    inputSchema: {
+      commune: z.string().min(2).describe("Nom de la commune tel qu'écrit par l'utilisateur, ou code INSEE connu"),
+      tolerance_m: z.number().min(0).max(200).default(10).describe('Tolérance de simplification en mètres (0 = contour exact)'),
+      sans_contour: z.boolean().default(false),
+    },
+  }, async ({ commune, tolerance_m, sans_contour }) => {
+    const c = await trouverCommune(commune);
+    const [g] = await lire(`
+      SELECT round((ST_Area(geom) / 10000)::numeric, 2) AS surface_ha,
+             ST_AsGeoJSON(ST_Transform(ST_PointOnSurface(geom), 4326), 6)::json -> 'coordinates' AS centroide,
+             json_build_array(round(ST_XMin(b)::numeric, 6), round(ST_YMin(b)::numeric, 6), round(ST_XMax(b)::numeric, 6), round(ST_YMax(b)::numeric, 6)) AS bbox,
+             CASE WHEN NOT $3 THEN ST_AsGeoJSON(ST_Transform(ST_SimplifyPreserveTopology(geom, $2), 4326), 6)::json END AS contour
+      FROM terr.ign_commune
+      CROSS JOIN LATERAL (SELECT ST_Transform(geom, 4326)::box2d AS b) e
+      WHERE "INSEE_COM" = $1`, [c.insee, tolerance_m, sans_contour]);
+    const { contour, ...reste } = g;
+    return reponse({ ...c, ...reste, ...(contour ? { geojson: { type: 'Feature', geometry: contour, properties: { insee: c.insee, nom: c.nom } } } : {}) });
   });
 
   outil(server, 'rechercher_texte', {

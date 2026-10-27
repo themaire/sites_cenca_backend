@@ -18,6 +18,7 @@ Il vit dans le dépôt du backend mais tourne dans **son propre processus et son
 | `sites_autour_point` | Sites à moins de N m d'un point GPS | — |
 | `sites_par_commune` | Sites d'une commune (nom ou INSEE) | `/sites/commune` |
 | `infos_commune` | Pour une commune : département, population, bassin(s) d'agence de l'eau avec la part de la commune, espaces naturels qui la touchent par type (sites CENCA, Natura 2000, ZNIEFF, APB, réserves…) | croisement spatial `terr.ign_commune` × `terr.bassins_agences` / `esp.geom_espaces` |
+| `geometrie_commune` | Pour une commune (nom ou INSEE) : code INSEE, département, population, surface, centroïde et bbox WGS84, contour IGN en GeoJSON WGS84 simplifié (10 m par défaut ; `sans_contour` pour s'en passer) | `terr.ign_commune` |
 | `rechercher_texte` | Un mot ou une expression dans les descriptions et remarques des sites, des opérations (anciennes comprises) et des actes, avec un extrait | — |
 | `synthese_sites` | Nombre et surfaces par type de site (et par département) | — |
 | `foncier_site` | Actes MFU (multi-sites compris) et parcelles par type de propriétaire | `/sites/mfu/...`, `/parcelles_mfu` |
