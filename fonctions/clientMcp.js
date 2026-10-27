@@ -17,6 +17,8 @@ const OUTILS_AUTORISES = [
     'geometrie_site',
     'sites_autour_point',
     'sites_par_commune',
+    'infos_commune',
+    'rechercher_texte',
     'synthese_sites',
     'foncier_site',
     'echeances_actes',

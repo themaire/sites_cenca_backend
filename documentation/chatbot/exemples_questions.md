@@ -1,6 +1,6 @@
 # Exemples de questions à poser à Sonneur
 
-Pour l'aide utilisateur du chatbot. Sonneur choisit lui-même l'outil à appeler : il suffit de poser la question en français, sans nommer l'outil. Chaque exemple ci-dessous correspond à un outil du MCP (`fonctions/clientMcp.js`, `OUTILS_AUTORISES`) et a été vérifié sur les données le 2026-10-20 (le 2026-10-23 pour les périmètres modifiés, mesures compensatoires, objectifs et habitats).
+Pour l'aide utilisateur du chatbot. Sonneur choisit lui-même l'outil à appeler : il suffit de poser la question en français, sans nommer l'outil. Chaque exemple ci-dessous correspond à un outil du MCP (`fonctions/clientMcp.js`, `OUTILS_AUTORISES`) et a été vérifié sur les données le 2026-10-20 (le 2026-10-23 pour les périmètres modifiés, mesures compensatoires, objectifs et habitats ; le 2026-10-26 pour les communes, le bassin d'agence et la recherche dans les textes).
 
 Conseils généraux :
 
@@ -21,12 +21,25 @@ Conseils généraux :
 - Quels sont les nouveaux sites de 2025 ?
 - Quels sites sont entrés depuis 2020 dans la Marne ?
 - Liste des sites gérés en Haute-Marne, du plus grand au plus petit.
+- Quels sites gère-t-on dans le bassin Rhin-Meuse ?
 
 ### Sites d'une commune (`sites_par_commune`)
 
 - Quels sites gère-t-on à Villechétif ?
 - Y a-t-il des sites du CENCA à Saint-Dizier ?
 - Quels sites se trouvent sur la commune des Riceys ?
+
+### Une commune : bassin d'agence et types d'espace (`infos_commune`)
+
+- De quel bassin d'agence de l'eau dépend Villechétif ?
+- Quels zonages et types d'espace trouve-t-on à Givet ?
+- Y a-t-il une ZNIEFF ou un site Natura 2000 sur la commune de Villechétif ?
+
+### Chercher un mot dans les textes (`rechercher_texte`)
+
+- Je cherche le mot grille dans les descriptions de sites.
+- Quelles opérations parlent de castor ?
+- Quels actes fonciers mentionnent un bail emphytéotique ?
 
 ### Sites autour d'un point GPS (`sites_autour_point`)
 

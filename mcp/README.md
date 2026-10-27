@@ -12,11 +12,13 @@ Il vit dans le dépôt du backend mais tourne dans **son propre processus et son
 
 | Outil | Rôle | Origine |
 |---|---|---|
-| `rechercher_sites` | Recherche par texte (sans accents), type, commune, milieu, responsable | `/sites/criteria/...` (`listesitescenca`) |
+| `rechercher_sites` | Recherche par texte (sans accents), type, commune, département, bassin d'agence (croisement spatial), milieu, responsable | `/sites/criteria/...` (`listesitescenca`) |
 | `fiche_site` | Site + espace, surfaces déclarée et calculée, centroïde, communes, conservateurs, documents de gestion, actes, projets | `/sites/uuid=`, `/commune`, `/conservateur`, `/pgestion` |
 | `geometrie_site` | Contour en GeoJSON WGS84 simplifié | `/sites/uuid=` |
 | `sites_autour_point` | Sites à moins de N m d'un point GPS | — |
 | `sites_par_commune` | Sites d'une commune (nom ou INSEE) | `/sites/commune` |
+| `infos_commune` | Pour une commune : département, population, bassin(s) d'agence de l'eau avec la part de la commune, espaces naturels qui la touchent par type (sites CENCA, Natura 2000, ZNIEFF, APB, réserves…) | croisement spatial `terr.ign_commune` × `terr.bassins_agences` / `esp.geom_espaces` |
+| `rechercher_texte` | Un mot ou une expression dans les descriptions et remarques des sites, des opérations (anciennes comprises) et des actes, avec un extrait | — |
 | `synthese_sites` | Nombre et surfaces par type de site (et par département) | — |
 | `foncier_site` | Actes MFU (multi-sites compris) et parcelles par type de propriétaire | `/sites/mfu/...`, `/parcelles_mfu` |
 | `echeances_actes` | Actes arrivant à échéance ou échus récemment | — |

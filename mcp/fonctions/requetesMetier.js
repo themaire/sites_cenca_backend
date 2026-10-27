@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { z } = require('zod');
-const { LECTURE_SEULE, reponse, erreur, journaliser, lire, resultat, contientTexte } = require('./utilitaires');
+const { LECTURE_SEULE, reponse, erreur, journaliser, lire, resultat, contientTexte, texteNormalise } = require('./utilitaires');
 
 const FICHIER_DOC = path.join(__dirname, '..', 'documentation', 'base_sites_cenca.md');
 
@@ -21,6 +21,24 @@ function numeroDepartement(valeur) {
   if (DEPARTEMENTS[texte]) return DEPARTEMENTS[texte];
   const chiffres = texte.match(/^\d{1,2}$/);
   return chiffres ? chiffres[0].padStart(2, '0') : texte;
+}
+
+// Bassins des agences de l'eau (couche terr.bassins_agences) : code ou nom → code
+const BASSINS = {
+  aerm: 'AERM', 'rhin meuse': 'AERM', 'agence de l eau rhin meuse': 'AERM',
+  aermc: 'AERMC', 'rhone mediterranee corse': 'AERMC', 'rhone mediterranee': 'AERMC', rmc: 'AERMC',
+  aesn: 'AESN', 'seine normandie': 'AESN', 'agence de l eau seine normandie': 'AESN',
+  'aesn sa': 'AESN-SA', 'seine amont': 'AESN-SA',
+  'aesn vm': 'AESN-VM', 'vallee de la marne': 'AESN-VM',
+  'aesn vo': 'AESN-VO', 'vallee de l oise': 'AESN-VO',
+};
+function codeBassin(valeur) {
+  if (!valeur) return null;
+  const texte = normaliser(valeur);
+  if (BASSINS[texte]) return BASSINS[texte];
+  const trouve = Object.keys(BASSINS).find(cle => cle.length > 4 && texte.includes(cle));
+  if (trouve) return BASSINS[trouve];
+  throw new Error(`Bassin "${valeur}" inconnu : AERM (Rhin-Meuse), AERMC (Rhône-Méditerranée-Corse), AESN (Seine-Normandie) ou ses sous-bassins AESN-SA (Seine Amont), AESN-VM (Vallée de la Marne), AESN-VO (Vallée de l'Oise).`);
 }
 
 const schemaSite = z.string().min(1).describe('Code du site (ex. 10035, 51BOIS01), uuid_site ou nom du site (même partiel, sans accents)');
@@ -66,6 +84,18 @@ function normaliser(texte) {
     .replace(/\bste\b/g, 'sainte').replace(/\bst\b/g, 'saint').trim();
 }
 
+/** Extrait d'un texte libre autour de la première occurrence de `terme` (accents et casse ignorés) */
+function extrait(texte, terme, largeur = 90) {
+  // Caractère par caractère : même longueur que le texte d'origine, les positions restent valables
+  const plat = s => [...s].map(c => c.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().charAt(0) || c).join('');
+  const t = String(texte).replace(/\s+/g, ' ').trim();
+  if (t.length <= 2 * largeur) return t;
+  const i = plat(t).indexOf(plat(terme.trim()));
+  if (i < 0) return `${t.slice(0, 2 * largeur)}…`;
+  const debut = Math.max(0, i - largeur), fin = Math.min(t.length, i + terme.length + largeur);
+  return `${debut > 0 ? '…' : ''}${t.slice(debut, fin)}${fin < t.length ? '…' : ''}`;
+}
+
 /**
  * Comme trouverSite, mais accepte aussi un nom de site (même partiel, sans accents ni casse).
  */
@@ -108,7 +138,7 @@ function enregistrerRequetesMetier(server) {
   // ---------------------------------------------------------------- Sites
   outil(server, 'rechercher_sites', {
     title: 'Rechercher des sites',
-    description: "Recherche des sites gérés (vue sitcenca.listesitescenca, celle de la barre de recherche de l'application) par texte (nom ou code, sans tenir compte des accents), type, commune, milieu naturel, responsable ou année de premier contrat (prem_ctr = année d'entrée du site, « nouveaux sites » d'une année). Renvoie la surface de chaque site (surface_ha, calculée sur la géométrie) ; tri = 'surface' pour les plus grands d'abord. Ne pas passer une année dans texte : utiliser annee_premier_contrat ou premier_contrat_depuis.",
+    description: "Recherche des sites gérés (vue sitcenca.listesitescenca, celle de la barre de recherche de l'application) par texte (nom ou code, sans tenir compte des accents), type, commune, département, bassin d'agence de l'eau, milieu naturel, responsable ou année de premier contrat (prem_ctr = année d'entrée du site, « nouveaux sites » d'une année). Renvoie la surface de chaque site (surface_ha, calculée sur la géométrie) ; tri = 'surface' pour les plus grands d'abord. Ne pas passer une année dans texte : utiliser annee_premier_contrat ou premier_contrat_depuis.",
     inputSchema: {
       texte: z.string().optional().describe('Partie du nom ou du code du site'),
       typ_site: z.string().optional().describe('Code du type de site (cf. sitcenca.typ_sites)'),
@@ -116,13 +146,14 @@ function enregistrerRequetesMetier(server) {
       milieu: z.string().optional().describe('Partie du libellé de milieu naturel'),
       responsable: z.string().optional().describe('Responsable du site : code salarié (ex. AL) ou prénom / nom (ex. Aurore)'),
       departement: z.string().optional().describe('Département : 08 (Ardennes), 10 (Aube), 51 (Marne) ou 52 (Haute-Marne)'),
+      bassin_agence: z.string().optional().describe("Bassin d'agence de l'eau : AERM (Rhin-Meuse), AERMC (Rhône-Méditerranée-Corse), AESN (Seine-Normandie), AESN-SA, AESN-VM, AESN-VO, ou leur nom ; d'après le contour du site"),
       annee_premier_contrat: z.number().int().min(1900).max(2100).optional().describe("Année exacte du premier contrat (nouveaux sites de cette année), ex. 2025"),
       premier_contrat_depuis: z.number().int().min(1900).max(2100).optional().describe("Premier contrat cette année-là ou après, ex. 2020"),
       tri: z.enum(['code', 'surface']).default('code').describe("Ordre des résultats : 'surface' = plus grands sites d'abord (surface calculée sur la géométrie)"),
       inclure_invalides: z.boolean().default(false).describe('Inclure les sites marqués validite = false'),
       limite: z.number().int().min(1).max(2000).default(200),
     },
-  }, async ({ texte, typ_site, commune, milieu, responsable, departement, annee_premier_contrat, premier_contrat_depuis, tri, inclure_invalides, limite }) => {
+  }, async ({ texte, typ_site, commune, milieu, responsable, departement, bassin_agence, annee_premier_contrat, premier_contrat_depuis, tri, inclure_invalides, limite }) => {
     const lignes = await lire(`
       SELECT uuid_site, code, nom, typ_site, typ_site_txt, statut, communes, insee, milieux_naturels,
              bassin_agence, responsable,
@@ -148,9 +179,13 @@ function enregistrerRequetesMetier(server) {
         -- Département : d'après l'INSEE des communes s'il est renseigné, sinon le préfixe du code site
         AND ($10::text IS NULL OR CASE WHEN coalesce(insee, '') <> '' THEN insee ~ ('(^|\\|)' || $10)
                                       ELSE left(code, 2) = $10 END)
+        -- Bassin d'agence : par croisement spatial (le champ bassin_agence est souvent vide)
+        AND ($12::text IS NULL OR EXISTS (
+              SELECT 1 FROM esp.geometries g JOIN terr.bassins_agences b ON b.cd_bassin = $12 AND ST_Intersects(b.geom, g.geom)
+              WHERE g.espace = listesitescenca.espace AND g.validite IS NOT FALSE))
       ORDER BY CASE WHEN $11 = 'surface' THEN surf.surface_ha END DESC NULLS LAST, code
       LIMIT $7`, [texte || null, typ_site || null, commune || null, milieu || null, responsable || null, inclure_invalides, limite,
-                  annee_premier_contrat ?? null, premier_contrat_depuis ?? null, numeroDepartement(departement), tri]);
+                  annee_premier_contrat ?? null, premier_contrat_depuis ?? null, numeroDepartement(departement), tri, codeBassin(bassin_agence)]);
     return resultat(lignes);
   });
 
@@ -292,6 +327,116 @@ function enregistrerRequetesMetier(server) {
       WHERE com.insee_com = $1 OR ${contientTexte('com.nom', '$1')}
       ORDER BY com.nom, s.code`, [commune.trim()]);
     return resultat(lignes);
+  });
+
+  outil(server, 'infos_commune', {
+    title: 'Informations sur une commune',
+    description: "Pour une commune (nom ou code INSEE) : département, population, bassin(s) d'agence de l'eau (et sous-bassin Seine-Normandie) avec la part de la commune dans chacun, "
+      + "et tous les espaces naturels qui la touchent, regroupés par type d'espace (sites du CENCA, Natura 2000 ZSC/ZPS, ZNIEFF 1 et 2, APB, réserves naturelles, PNR, Ramsar…) avec leur surface dans la commune. "
+      + "Ex. : « De quel bassin d'agence dépend Villechétif ? », « Quels types d'espace et zonages sur la commune de Givet ? ». Pour la seule liste des sites gérés d'une commune, sites_par_commune suffit.",
+    inputSchema: {
+      commune: z.string().min(2).describe("Nom de la commune tel qu'écrit par l'utilisateur, ou code INSEE connu"),
+    },
+  }, async ({ commune }) => {
+    const brut = commune.trim();
+    const chercher = condition => lire(`
+      SELECT "NOM" AS nom, "INSEE_COM" AS insee, "INSEE_DEP" AS departement, "POPULATION" AS population
+      FROM terr.ign_commune WHERE ${condition} ORDER BY "NOM" LIMIT 10`, [brut]);
+    let communes = await chercher(`"INSEE_COM" = $1 OR ${texteNormalise('"NOM"')} = ${texteNormalise('$1')}`);
+    if (communes.length === 0) communes = await chercher(contientTexte('"NOM"', '$1'));
+    if (communes.length === 0) throw new Error(`Commune "${commune}" introuvable.`);
+    if (communes.length > 1) {
+      throw new Error(`Plusieurs communes correspondent à "${commune}" : ${communes.map(c => `${c.nom} (${c.insee})`).join(' ; ')}. Rappeler l'outil avec le code INSEE voulu.`);
+    }
+    const [c] = communes;
+    const [bassins, espaces] = await Promise.all([
+      lire(`
+        SELECT * FROM (
+          SELECT b.niveau::int AS niveau, b.cd_bassin AS code, b.libelle,
+                 round((ST_Area(ST_Intersection(b.geom, c.geom)) / ST_Area(c.geom) * 100)::numeric) AS part_commune_pct
+          FROM terr.ign_commune c
+          JOIN terr.bassins_agences b ON ST_Intersects(b.geom, c.geom)
+          WHERE c."INSEE_COM" = $1) x
+        WHERE part_commune_pct >= 1
+        ORDER BY niveau, part_commune_pct DESC`, [c.insee]),
+      lire(`
+        SELECT g.typ_espace, t.libelle AS type_libelle, coalesce(e.nom, max(g.nom)) AS nom, s.code AS code_site,
+               round((sum(ST_Area(ST_Intersection(g.geom, c.geom))) / 10000)::numeric, 2) AS surface_dans_commune_ha
+        FROM terr.ign_commune c
+        JOIN esp.geom_espaces g ON g.validite IS NOT FALSE AND ST_Intersects(g.geom, c.geom)
+        LEFT JOIN esp.espaces e ON e.uuid_espace = g.espace
+        LEFT JOIN esp.typ_espaces t ON t.cd_type = g.typ_espace
+        LEFT JOIN sitcenca.sites s ON s.espace = g.espace AND s.validite IS NOT FALSE
+        WHERE c."INSEE_COM" = $1
+        GROUP BY g.typ_espace, t.libelle, g.espace, e.nom, s.code
+        ORDER BY t.libelle, surface_dans_commune_ha DESC`, [c.insee]),
+    ]);
+    // Regroupement par type ; les contacts de quelques m² le long des limites communales sont ignorés
+    const types = new Map();
+    for (const { typ_espace, type_libelle, ...espace } of espaces) {
+      if (Number(espace.surface_dans_commune_ha) < 0.01) continue;
+      if (!types.has(typ_espace)) types.set(typ_espace, { type: typ_espace, libelle: type_libelle, nb: 0, espaces: [] });
+      const t = types.get(typ_espace);
+      t.nb += 1;
+      t.espaces.push(Object.fromEntries(Object.entries(espace).filter(([, v]) => v !== null)));
+    }
+    return reponse({ commune: c, bassins_agence: bassins, nb_types_espace: types.size, types_espace: [...types.values()] });
+  });
+
+  outil(server, 'rechercher_texte', {
+    title: 'Rechercher un mot dans les textes',
+    description: "Cherche un mot ou une expression (accents et casse ignorés) dans les textes libres de la base : descriptions et remarques de sensibilité des sites, "
+      + "descriptions et remarques des opérations de travaux, remarques des actes fonciers. Renvoie pour chaque texte trouvé la source, le site, l'année et un extrait autour du mot. "
+      + "dans = tout, sites, operations ou actes. Ex. : « Je cherche le mot grille dans les descriptions de sites », « Quelles opérations parlent de castor ? », « Actes dont la remarque mentionne un bail rural ».",
+    inputSchema: {
+      terme: z.string().min(3).describe('Mot ou expression recherché, tel quel (ex. grille, castor, bail rural)'),
+      dans: z.enum(['tout', 'sites', 'operations', 'actes']).default('tout'),
+      limite: z.number().int().min(1).max(500).default(50),
+    },
+  }, async ({ terme, dans, limite }) => {
+    const sources = {
+      sites: `
+        SELECT 'description du site' AS source, s.code, e.nom AS site, s.uuid_site, NULL::text AS annee, NULL::text AS detail, s.description_site AS texte
+        FROM sitcenca.sites s JOIN esp.espaces e ON e.uuid_espace = s.espace
+        WHERE s.validite IS NOT FALSE AND ${contientTexte('s.description_site', '$1')}
+        UNION ALL
+        SELECT 'remarque de sensibilité du site' AS source, s.code, e.nom AS site, s.uuid_site, NULL::text AS annee, NULL::text AS detail, s.remq_sensibilite AS texte
+        FROM sitcenca.sites s JOIN esp.espaces e ON e.uuid_espace = s.espace
+        WHERE s.validite IS NOT FALSE AND ${contientTexte('s.remq_sensibilite', '$1')}`,
+      operations: `
+        SELECT CASE WHEN t.champ = 'description' THEN 'description d''opération' ELSE 'remarque d''opération' END AS source,
+               s.code, e.nom AS site, s.uuid_site, l.annee::text AS annee,
+               concat_ws(' – ', nullif(ope.get_action_libelle(op.action_2), 'Non déterminé'), l.titre) AS detail, t.texte
+        FROM opegerer.operations op
+        CROSS JOIN LATERAL (VALUES ('description', op.description), ('remarque', op.remarque)) t(champ, texte)
+        -- Les opérations anciennes n'ont pas de ref_uuid_proj : leur projet est celui de leur objectif
+        LEFT JOIN opegerer.objectifs o ON o.uuid_objectif = op.objectif
+        LEFT JOIN opegerer.projets p ON p.uuid_proj = coalesce(op.ref_uuid_proj, o.projet)
+        LEFT JOIN ope.listeprojets l ON l.uuid_proj = p.uuid_proj
+        LEFT JOIN sitcenca.sites s ON s.uuid_site = p.site
+        LEFT JOIN esp.espaces e ON e.uuid_espace = s.espace
+        WHERE op.validite IS NOT FALSE AND ${contientTexte('t.texte', '$1')}`,
+      actes: `
+        SELECT 'remarque d''acte foncier' AS source, s.code, e.nom AS site, s.uuid_site, left(a.debut::text, 4) AS annee,
+               concat_ws(' – ', COALESCE(tm.libelle, a.typ_mfu), CASE WHEN a.actuel THEN 'acte actuel' END) AS detail, a.remarque AS texte
+        FROM sitcenca.actes_mfu a
+        LEFT JOIN sitcenca.typ_mfu tm ON tm.cd_type = a.typ_mfu
+        LEFT JOIN sitcenca.sites s ON s.uuid_site = a.site
+        LEFT JOIN esp.espaces e ON e.uuid_espace = s.espace
+        WHERE a.validite IS NOT FALSE AND ${contientTexte('a.remarque', '$1')}`,
+    };
+    const choisies = dans === 'tout' ? Object.values(sources) : [sources[dans]];
+    const lignes = await lire(`
+      SELECT * FROM (${choisies.join('\n UNION ALL \n')}) r
+      ORDER BY annee DESC NULLS LAST, code
+      LIMIT $2`, [terme.trim(), limite]);
+    const trouves = lignes.map(({ texte, ...l }) => ({
+      ...Object.fromEntries(Object.entries(l).filter(([, v]) => v !== null && v !== '')),
+      extrait: extrait(texte, terme),
+    }));
+    const parSource = {};
+    for (const l of trouves) parSource[l.source] = (parSource[l.source] || 0) + 1;
+    return resultat(trouves, { terme, dans, par_source: parSource });
   });
 
   outil(server, 'synthese_sites', {

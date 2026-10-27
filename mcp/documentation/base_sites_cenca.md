@@ -67,7 +67,8 @@ docplan.unites_gestion.document     -> docplan.documents.uuid_doc
 
 ```
 opegerer.projets.site               -> sitcenca.sites.uuid_site
-opegerer.operations.ref_uuid_proj   -> opegerer.projets.uuid_proj
+opegerer.operations.ref_uuid_proj   -> opegerer.projets.uuid_proj      (projets de la webapp)
+opegerer.operations.objectif        -> opegerer.objectifs.uuid_objectif (projets anciens : ref_uuid_proj vide, projet = celui de l'objectif)
 opegerer.localisations              (ref_uuid_ope, ref_uuid_proj ; loc_poly / loc_line / loc_point en 2154)
 opegerer.operation_financeurs       (uuid_ope, checkbox_id -> opegerer.libelles.lib_id)
 opegerer.operation_animaux          (uuid_ope, checkbox_id -> opegerer.libelles.lib_id)
@@ -77,7 +78,7 @@ opegerer.operations.ref_uuid_ann    -> ann.annuaire.uuid_ann        (maître d'�
 opegerer.projets.responsable        -> admin.salaries.cd_salarie
 ```
 
-- **Projets** : `typ_projet = 'TRV'` pour les travaux ; `pro_webapp = true` = projet saisi dans l'application web. Les projets plus anciens viennent de l'application MS Access : ils n'ont pas d'opérations détaillées dans `opegerer.operations` (voir `ope.synthesesites` pour leur résumé).
+- **Projets** : `typ_projet = 'TRV'` pour les travaux ; `pro_webapp = true` = projet saisi dans l'application web. Les projets plus anciens viennent de l'application MS Access : leurs opérations (~720, 546 projets, jusqu'en 2025) sont bien dans `opegerer.operations`, mais rattachées par l'objectif (`ref_uuid_proj` vide, `objectif` → `opegerer.objectifs.projet`) ; elles n'ont pas d'`action_2`, seulement `action`, un titre, une description et souvent des dates. Pour toutes les opérations d'un projet : `JOIN opegerer.projets p ON p.uuid_proj = coalesce(op.ref_uuid_proj, o.projet)` avec `LEFT JOIN opegerer.objectifs o ON o.uuid_objectif = op.objectif`. L'application, comme `travaux_site`, `operations_projet` et `bilan_operations`, ne suit que `ref_uuid_proj` (voir aussi `ope.synthesesites`).
 - Vue **`ope.listeprojets`** : liste des projets avec `annee`, `responsable`, `loc`, `titre`, `nb_ope`, `statut`, `typ_projet`.
 - `ope.actions` est une **arborescence** (`cd_action`, `niveau`, `cd_sup` = parent, `libelle`).
 - **Type d'opération affiché** : l'application montre `ope.get_action_libelle(action_2)` (la deuxième moitié de « action / action_2 »).
@@ -103,7 +104,9 @@ Outils `indicateurs_sites`, `indicateurs_activite`, `controle_donnees_sites` : m
 ## Territoire et référentiels
 
 - `terr.listecommunes` : `insee_com`, `nom`, `insee_dep`, `insee_reg`, `siren_epci`.
-- Contours IGN (2154) : `terr.ign_commune`, `terr.ign_departement`, `terr.ign_epci`, `terr.ign_region`, `terr.territoires`, `terr.bassins_agences`, Corine Land Cover `terr."LANDCOVER.CLC18_FR:clc18_fr"`, mares `terr.mares`.
+- `terr.bassins_agences` (2154) : bassins des agences de l'eau, `niveau` 1 = AERM, AERMC, AESN ; niveau 2 = sous-bassins Seine-Normandie AESN-SA (Seine Amont), AESN-VM (Vallée de la Marne), AESN-VO (Vallée de l'Oise) ; `cd_supra` = bassin parent. Le champ `bassin_agence` des espaces et de `listesitescenca` est vide pour près de la moitié des sites : préférer le croisement spatial (outils `infos_commune`, `rechercher_sites` avec `bassin_agence`).
+- Types d'espace (`esp.typ_espaces`) : AUT = sites du CENCA (« autre espace d'intérêt écologique »), N2000-ZSC / N2000-ZPS, ZNIEFF-1 / ZNIEFF-2, APB, RNN, RNR, PNR, PNN, RAMSAR, ZICO, RB, TMIL (terrain militaire), MC (mesure compensatoire), ENS, ATE… Contours de tous les zonages : `esp.geom_espaces` (`typ_espace`, `espace`, `nom`) ; `esp.localisations` (espace ↔ commune) ne couvre pas les ZNIEFF : croiser les contours avec `terr.ign_commune`.
+- Contours IGN (2154) : `terr.ign_commune` (colonnes en majuscules entre guillemets : `"NOM"`, `"INSEE_COM"`, `"INSEE_DEP"`, `"POPULATION"`), `terr.ign_departement`, `terr.ign_epci`, `terr.ign_region`, `terr.territoires`, `terr.bassins_agences`, Corine Land Cover `terr."LANDCOVER.CLC18_FR:clc18_fr"`, mares `terr.mares`.
 - Zonages : `n2000.espaces_n2000` (Natura 2000), `esp.apb` (arrêtés de protection de biotope).
 - `inpn`, `bd_topo` : référentiels nationaux.
 
