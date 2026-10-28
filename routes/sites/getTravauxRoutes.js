@@ -69,9 +69,12 @@ router.get("/projets/uuid=:uuid/:mode", (req, res) => {
     // Liste liste pour les projets à l'ancienne (application MS Access)
     if (mode == "lite") {
         if (webappNum === 1) {
+            // La vue donne le libellé du type de projet dans typ_projet : on renvoie le code (comme /sites/autres)
+            // et le libellé dans typ_projet_libelle
             selectFields +=
-                "uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, generation, statut, webapp, uuid_site ";
-            fromTable = "FROM ope.synthesesites ";
+                "uuid_ope, uuid_proj, responsable, annee, date_deb, projet, action, generation, statut, webapp, uuid_site, ";
+            selectFields += "tp.cd_type AS typ_projet, s.typ_projet AS typ_projet_libelle ";
+            fromTable = "FROM ope.synthesesites s LEFT JOIN ope.typ_projets tp ON tp.libelle = s.typ_projet ";
             where += "cd_localisation = $1";
             // where += " and generation = '1_TVX'";
             where += " order by annee desc;";
