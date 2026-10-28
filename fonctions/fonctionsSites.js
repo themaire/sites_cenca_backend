@@ -103,8 +103,13 @@ function selectQuery(params) {
 
     if (params.type != "*") whereFilters.push({ typ_site: params.type });
     if (params.code != "*") whereFilters.push({ code: params.code });
-    if (params.nom != "*")
-        whereFilters.push({ nom: decodeURIComponent(params.nom) });
+    // Nom : recherche partielle sans casse ni accents (ILIKE, voir la boucle plus bas). Express a déjà décodé
+    // le paramètre : un second décodage échoue sur un « % » saisi, on garde alors le texte tel quel
+    if (params.nom != "*") {
+        let nom = params.nom;
+        try { nom = decodeURIComponent(nom); } catch { /* « % » littéral */ }
+        whereFilters.push({ nom: nom.trim() });
+    }
     if (params.commune != "*") whereFilters.push({ communes: params.commune });
     if (params.milnat != "*")
         whereFilters.push({
@@ -127,7 +132,13 @@ function selectQuery(params) {
             if (reqKey == Object.keys(whereFilters).length) andOrEnd = ";";
 
             // Completer la variable where (l'allonger)
-            where += Object.keys(value)[0] + " = $" + reqKey + andOrEnd;
+            const champ = Object.keys(value)[0];
+            if (champ === "nom") {
+                // « etang » trouve « Étangs du Marais » ; % et _ saisis restent des jokers ILIKE
+                where += "unaccent(nom) ILIKE unaccent('%' || $" + reqKey + " || '%')" + andOrEnd;
+            } else {
+                where += champ + " = $" + reqKey + andOrEnd;
+            }
 
             // Ajouter les valeurs de la liste des valeurs
             query.values.push(Object.values(value)[0]);
