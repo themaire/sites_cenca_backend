@@ -242,9 +242,12 @@ router.get("/selectors_sites", (req, res) => {
         "milieux_naturels",
         "Milieux naturels",
         (selectors) => {
+            // Responsable affiché « Prénom Nom » (et non le code salarié) ; /criteria accepte les deux
             distinctSiteResearch(
                 pool,
-                'sitcenca.listesitescenca',
+                `(SELECT concat(s.prenom, ' ', s.nom) AS responsable
+                    FROM sitcenca.listesitescenca l
+                    JOIN admin.salaries s ON s.cd_salarie = l.responsable) AS responsables`,
                 selectors,
                 "responsable",
                 "Responsable",
