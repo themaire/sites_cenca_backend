@@ -129,7 +129,7 @@ router.get("/selectors", async (req, res) => {
 
 // ─── GET /sites/autres/projets ────────────────────────────────────────────────
 // Recherche de projets. Paramètres (tous facultatifs) : annee, typ_projet, responsable, statut,
-// uuid_site (projets dont une opération est localisée sur le site), cd_localisation, texte
+// uuid_site (projets dont une opération est localisée sur le site ; uuid du site ou de son espace), cd_localisation, texte
 // (nom du projet ou détail d'une opération, sans accents), limite (500 par défaut, 2000 maxi)
 router.get("/projets", async (req, res) => {
     const p = req.query;
@@ -150,7 +150,8 @@ router.get("/projets", async (req, res) => {
                    -- Semi-jointures IN (...) plutôt que EXISTS corrélés : pas d'index sur operations.projet
                    AND ($5::text IS NULL OR p.uuid_proj IN (
                         SELECT o.projet FROM opeautres.operations o JOIN opeautres.localisations l ON l.uuid_ope = o.uuid_ope
-                         WHERE l.cd_localisation = (SELECT espace FROM sitcenca.sites WHERE uuid_site = $5)))
+                         -- uuid_site accepte l'uuid du site ou celui de son espace (valeur stockée dans cd_localisation)
+                         WHERE l.cd_localisation IN (SELECT espace FROM sitcenca.sites WHERE uuid_site = $5 UNION SELECT $5)))
                    AND ($6::text IS NULL OR p.uuid_proj IN (
                         SELECT o.projet FROM opeautres.operations o JOIN opeautres.localisations l ON l.uuid_ope = o.uuid_ope
                          WHERE l.cd_localisation = $6))

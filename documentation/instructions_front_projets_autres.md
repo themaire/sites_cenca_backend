@@ -89,7 +89,7 @@ Valeurs de `cat` : `SITE CENCA`, `AUTRE CENCA`, `N2000`, `RN`, `AP`, `ZIE`, `PN`
 
 **`GET selectors`** : `{ annees: [2026, 2025…], responsables: [{ cd_type, libelle }], typ_projets: [...], statuts: [...] }` pour la barre de recherche (le type NR, « Non renseigné », y figure pour retrouver les anciens projets saisis sans type).
 
-**`GET projets?annee=2026&typ_projet=SEN&responsable=VGS&statut=Terminé&texte=armoise&uuid_site=…&cd_localisation=…&limite=500`** : tous les paramètres sont facultatifs. `texte` cherche dans le nom du projet et le détail des opérations, sans accents. `uuid_site` sert pour l'onglet « autres actions » de la fiche site. Le tri se fait par année puis par date de création, en ordre décroissant ; limite par défaut 500, maximum 2000.
+**`GET projets?annee=2026&typ_projet=SEN&responsable=VGS&statut=Terminé&texte=armoise&uuid_site=…&cd_localisation=…&limite=500`** : tous les paramètres sont facultatifs. `texte` cherche dans le nom du projet et le détail des opérations, sans accents. `uuid_site` sert pour l'onglet « autres actions » de la fiche site : il accepte l'`uuid_site` **ou** l'`uuid_espace` du site (c'est l'`uuid_espace` qui est stocké comme localisation des opérations). Le tri se fait par année puis par date de création, en ordre décroissant ; limite par défaut 500, maximum 2000.
 
 ```json
 [{ "uuid_proj": "…", "code": "SENVGS15/10/2026", "nom": "Animation nature - Retour d'expérience", "annee": 2026,
