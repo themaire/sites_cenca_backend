@@ -10,7 +10,7 @@
 //                                              ─< eval_indicateurs (indicateur chiffré, ex. NBPER = 12)
 //                                              ─< intervenants     (contact de l'annuaire + rôle)
 //
-// Les travaux (TRV) sont saisis dans opegerer (routes/sites/getTravauxRoutes.js), jamais ici.
+// Les travaux (TRV) sont saisis dans opegerer (routes/sites/getActionsRoutes.js), jamais ici.
 // Les projets opeautres apparaissent aussi dans la vue ope.listeprojets (pro_webapp = false).
 
 // Types de projets qu'on ne crée pas dans opeautres : TRV vit dans opegerer, NR (« Non renseigné ») = anciens projets sans type

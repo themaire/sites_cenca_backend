@@ -1,4 +1,6 @@
-// Projets travaux (opegerer, typ_projet = 'TRV') : recherche, projets, opérations, objectifs, fiche travaux Word
+// Actions sur les sites : liste de tous les projets d'un site (travaux et autres, vue ope.synthesesites),
+// et projets travaux (opegerer, typ_projet = 'TRV') : recherche, projets, opérations, objectifs, fiche travaux Word.
+// Les projets autres que travaux ont leurs propres routes : routes/projetsAutres/ (/sites/autres)
 // Monté sur /sites dans node_base_sites.js
 const express = require("express");
 const router = express.Router();

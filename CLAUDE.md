@@ -64,7 +64,7 @@ There is no test runner configured. Manual testing is done via `test_backend.sh`
 | `/sites` | `routes/sites/getSitesRoutes.js` | GET sites: search, site sheet, communes, milieux, conservateurs |
 | `/sites` | `routes/sites/getPgestionRoutes.js` | GET management plans (docplan) |
 | `/sites` | `routes/sites/getMfuRoutes.js` | GET land control: MFU acts, parcels, MFU projects (pmfu) |
-| `/sites` | `routes/sites/getTravauxRoutes.js` | GET works projects (`opegerer`, TRV): projects, operations, objectives, Word sheet |
+| `/sites` | `routes/sites/getActionsRoutes.js` | GET actions on sites: every project of a site (works and others, view `ope.synthesesites`, `/projets/uuid=…/lite`), works projects (`opegerer`, TRV): projects, operations, objectives, Word sheet |
 | `/sites` | `routes/sites/getListesRoutes.js` | GET form choice lists (`/selectvalues`) |
 | `/sites` | `routes/sites/getDocsLiesRoutes.js` | GET documents linked to items (`files.docs`) |
 | `/sites/autres` | `routes/projetsAutres/{get,put,delete}ProjetsAutresRoutes.js` | Non-works projects (SEN, ETU, POL, FON, PAR, ACC, ADM, AUT) in the PostgreSQL schema `opeautres` (until now filled through a legacy MS Access front end plugged on the same DB; one generic model for every type, no type-specific columns): search, project + operations with their places, targets, indicators, contributors. GET public, writes JWT. Shared SQL and checks in `fonctions/projetsAutres.js`; front contract in `documentation/instructions_front_projets_autres.md`. Mounted before the `/sites` routers |
