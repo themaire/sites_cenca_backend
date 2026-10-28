@@ -242,16 +242,27 @@ router.get("/selectors_sites", (req, res) => {
         "milieux_naturels",
         "Milieux naturels",
         (selectors) => {
-            // Responsable affiché « Prénom Nom » (et non le code salarié) ; /criteria accepte les deux
             distinctSiteResearch(
                 pool,
-                `(SELECT concat(s.prenom, ' ', s.nom) AS responsable
-                    FROM sitcenca.listesitescenca l
-                    JOIN admin.salaries s ON s.cd_salarie = l.responsable) AS responsables`,
+                'sitcenca.listesitescenca',
                 selectors,
                 "responsable",
                 "Responsable",
-                (selectors) => {
+                async (selectors) => {
+                    // values garde les codes salariés (envoyés à /criteria) ; libelles donne le nom complet de
+                    // chaque code pour l'affichage : { "RL": "Romaric Leconte", ... }
+                    const responsable = selectors.find((s) => s.name === "responsable");
+                    if (responsable) {
+                        try {
+                            const noms = await pool.query(
+                                "SELECT cd_salarie, concat(prenom, ' ', nom) AS nom FROM admin.salaries WHERE cd_salarie = ANY($1::text[])",
+                                [responsable.values]
+                            );
+                            responsable.libelles = Object.fromEntries(noms.rows.map((r) => [r.cd_salarie, r.nom]));
+                        } catch (err) {
+                            console.error("Erreur lecture des noms des responsables (selectors_sites) :", err.message);
+                        }
+                    }
                     distinctSiteResearch(
                         pool,
                         'sitcenca.listesitescenca',

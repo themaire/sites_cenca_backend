@@ -136,9 +136,6 @@ function selectQuery(params) {
             if (champ === "nom") {
                 // « etang » trouve « Étangs du Marais » ; % et _ saisis restent des jokers ILIKE
                 where += "unaccent(nom) ILIKE unaccent('%' || $" + reqKey + " || '%')" + andOrEnd;
-            } else if (champ === "responsable") {
-                // Code salarié (ex. RL) ou « Prénom Nom » tel que renvoyé par /selectors_sites
-                where += "(responsable = $" + reqKey + " OR responsable IN (SELECT cd_salarie FROM admin.salaries WHERE concat(prenom, ' ', nom) = $" + reqKey + "))" + andOrEnd;
             } else {
                 where += champ + " = $" + reqKey + andOrEnd;
             }
