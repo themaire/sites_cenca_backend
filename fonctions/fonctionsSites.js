@@ -111,6 +111,8 @@ function selectQuery(params) {
             milieux_naturels: decodeURIComponent(params.milnat),
         });
     if (params.resp != "*") whereFilters.push({ responsable: params.resp });
+    // Année de création du site (prem_ctr, entier) : paramètre facultatif, vérifié par la route (4 chiffres)
+    if (params.annee !== undefined && params.annee != "*") whereFilters.push({ prem_ctr: parseInt(params.annee, 10) });
 
     // if(params.uuid_site != undefined) whereFilters.push({"uuid_site": params.uuid_site});
 

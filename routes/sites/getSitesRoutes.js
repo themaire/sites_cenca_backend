@@ -51,7 +51,11 @@ router.get("/sites_diffusables", async (req, res) => {
     }
 });
 
-router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp", (req, res) => {
+// :annee (facultatif) = année de création du site (prem_ctr) ; absent ou "*" = toutes les années
+router.get("/criteria/:type/:code/:nom/:commune/:milnat/:resp/:annee?", (req, res) => {
+    if (req.params.annee !== undefined && req.params.annee !== "*" && !/^\d{4}$/.test(req.params.annee)) {
+        return res.status(400).json({ success: false, message: "Année invalide : " + req.params.annee });
+    }
     // A FAIRE POUR PLUS TARD : adapter la fonction executeQueryAndRespond() (utilisée de partout sur toutes le routes) pour qu'elle puisse prendre en compte les paramètres de la requête
 
     const queryObject = selectQuery(req.params); // Fabrique la requete avec son where en fonction des req.params
@@ -251,36 +255,37 @@ router.get("/selectors_sites", (req, res) => {
                         selectors,
                         "bassin_agence",
                         "Bassin agence",
-                        // (selectors) => {
-                        // distinctSiteResearch(
-                        // pool,
-                        // 'sitcenca.listesitescenca',
-                        // selectors,
-                        // "prem_ctr",
-                        // "Premier contrat",
-                        // (selectors) => {
-                        //     distinctSiteResearch(
-                        // pool,
-                        // 'sitcenca.listesitescenca',
-                        // selectors,
-                        // "fin",
-                        // "Fin acte",
                         (selectors) => {
-                            const json =
-                                JSON.stringify(selectors);
-                            res.setHeader(
-                                "Access-Control-Allow-Origin",
-                                "*"
+                            // Année de création du site (année du premier contrat, sitcenca.sites.prem_ctr)
+                            distinctSiteResearch(
+                                pool,
+                                'sitcenca.listesitescenca',
+                                selectors,
+                                "prem_ctr",
+                                "Année de création",
+                                // (selectors) => {
+                                //     distinctSiteResearch(
+                                // pool,
+                                // 'sitcenca.listesitescenca',
+                                // selectors,
+                                // "fin",
+                                // "Fin acte",
+                                (selectors) => {
+                                    const json =
+                                        JSON.stringify(selectors);
+                                    res.setHeader(
+                                        "Access-Control-Allow-Origin",
+                                        "*"
+                                    );
+                                    res.setHeader(
+                                        "Content-type",
+                                        "application/json; charset=UTF-8"
+                                    );
+                                    res.end(json);
+                                    // }
+                                    // );
+                                }
                             );
-                            res.setHeader(
-                                "Content-type",
-                                "application/json; charset=UTF-8"
-                            );
-                            res.end(json);
-                            // }
-                            // );
-                            //}
-                            // );
                         }
                     );
                 }
