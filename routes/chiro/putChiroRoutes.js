@@ -22,7 +22,7 @@ function sendError(res, message, err) {
 // Créer un nouveau site (+ commune + localisation optionnelle)
 router.post("/site", async (req, res) => {
     const {
-        code, nom, nature, definition, configuration, habitat, periode,
+        code, code_site, nom, nature, definition, configuration, habitat, periode,
         localisation, contact, proprietaire, type_proprietaire, description, interet,
         accessibilite, protection, date_protection, suivi_prc, priorisation,
         insee, lat, lng, x_lambert, y_lambert
@@ -41,8 +41,8 @@ router.post("/site", async (req, res) => {
             INSERT INTO chiro.sites
                 (id_site, code, nom, nature, definition, configuration, habitat, periode,
                  localisation, contact, proprietaire, type_proprietaire, description, interet,
-                 accessibilite, protection, date_protection, suivi_prc, priorisation, date_creation)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NOW())
+                 accessibilite, protection, date_protection, suivi_prc, priorisation, code_site, date_creation)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
         `, [
             id_site, code, nom,
             nature || null, definition || null, configuration || null,
@@ -50,7 +50,8 @@ router.post("/site", async (req, res) => {
             localisation || null, contact || null, proprietaire || null, type_proprietaire || null,
             description || null, interet || null,
             accessibilite ?? false, protection ?? false, date_protection || null,
-            suivi_prc ?? false, priorisation ?? false
+            suivi_prc ?? false, priorisation ?? false,
+            code_site || null
         ]);
 
         await client.query(
@@ -88,7 +89,7 @@ router.post("/site", async (req, res) => {
 router.put("/site/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     const {
-        code, nom, nature, definition, configuration, habitat, periode,
+        code, code_site, nom, nature, definition, configuration, habitat, periode,
         localisation, contact, proprietaire, type_proprietaire, description, interet,
         accessibilite, protection, date_protection, suivi_prc, priorisation,
         insee, lat, lng, x_lambert, y_lambert
@@ -117,14 +118,15 @@ router.put("/site/:id", async (req, res) => {
                 protection        = $15,
                 date_protection   = $16,
                 suivi_prc         = $17,
-                priorisation      = $18
-            WHERE id_site = $19
+                priorisation      = $18,
+                code_site         = $19
+            WHERE id_site = $20
         `, [
             code, nom, nature || null, definition || null, configuration || null, habitat || null,
             periode || null, localisation || null, contact || null, proprietaire || null,
             type_proprietaire || null, description || null, interet || null,
             accessibilite || false, protection || false, date_protection || null,
-            suivi_prc || false, priorisation || false, id
+            suivi_prc || false, priorisation || false, code_site || null, id
         ]);
 
         if ((lat && lng) || (x_lambert && y_lambert)) {
